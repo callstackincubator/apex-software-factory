@@ -37,10 +37,13 @@ reviewers in particular get nothing but the paths the review skill names:
 their blindness is the only independence a one-model factory has.
 
 A report without its block, or with narration or garbled text in place of
-it, is not a result: run the same subagent again, once, with the same prompt
-plus "the last run ended without its report block; report on the work
-already done". A second report without its block parks the issue (step 6),
-Blocked on: "<stage> returned no report twice".
+it, is not a result. It is usually the model endpoint, not the work: a
+dropped stream, a 503, or a reply that loops on one word until the output
+limit. Run the same subagent again with the same prompt plus "the last run
+ended without its report block; report on the work already done". If that
+fails too, run it a third time with the original prompt alone. A third report
+without its block parks the issue (step 6), Blocked on: "<stage> returned no
+report three times".
 
 **A person present or not.** If a person is in this session, show any text
 you are about to post and ask before a simulator build. Unattended, post
