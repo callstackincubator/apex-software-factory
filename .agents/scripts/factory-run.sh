@@ -17,6 +17,9 @@
 # this script leaves the issue's `## Handoff` (delivery rule 2), releases the claim and moves it
 # to <kind>:blocked, or says why it could not.
 #
+# An attempt whose agent turn ended on a provider error (OpenCode exits 0 then) counts as
+# stopped too, and is restarted the same way after a short backoff.
+#
 # Exit: 0 the run ended on its own (merged, parked or reported — read the issue); 1 gave up
 # after the restart; 64 usage; 69 opencode or sqlite3 missing.
 # Logs: <checkout>/.worktrees/factory-runs/<issue>-<attempt>-<time>.log
@@ -109,6 +112,24 @@ run_attempt() {
   wait "$pid"
   echo "factory-run: #$issue attempt $n ended (opencode exit $?) after $(($(date +%s) - started))s" >&2
   tail -n 15 "$log" >&2
+  # `opencode run` exits 0 even when the agent's turn ended on an error (a 503 from the
+  # provider, "no upstreams available"): the run stopped, it did not finish. OpenCode records
+  # it as the top session's last event, `idle` with outcome "failed".
+  outcome=$(sqlite3 -readonly "$db" "
+    select json_extract(m.data, '\$.outcome') from session_message m
+      where m.session_id = (select id from session_v2 where parent_id is null and agent = '$agent'
+                              and time_created >= $since and (directory = '$root' or directory like '$root/%')
+                              order by time_created desc limit 1)
+        and m.type = 'idle'
+      order by m.seq desc limit 1;" 2>/dev/null || true)
+  if [ "$outcome" = failed ]; then
+    error=$(grep -oE 'ServiceUnavailable[A-Za-z]*|no upstreams available|"status":5[0-9][0-9]' "$log" | tail -n 1)
+    reason="the agent's turn ended on an error${error:+ ($error)}"
+    echo "factory-run: #$issue attempt $n stopped: $reason" >&2
+    echo "$reason" >"$log.stopped"
+    sleep "${FACTORY_ERROR_BACKOFF_S:-60}" # a provider outage is usually short
+    return 126
+  fi
   return 0
 }
 
