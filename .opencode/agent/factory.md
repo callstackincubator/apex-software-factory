@@ -9,6 +9,8 @@ mode: primary
 model: callstack.ai/callstack/Apex
 # ADR 0008: the orchestrator reasons over report blocks, not code; low effort is enough.
 variant: low
+# Hard cap on agentic iterations (ADR 0015); at the cap OpenCode forces a text-only answer.
+steps: 60
 color: primary
 # Allowed by default (ADR 0012): opencode.json's short deny list applies. Unattended, a
 # question would wait for a person who is not there.

@@ -10,6 +10,8 @@ mode: subagent
 model: callstack.ai/callstack/Apex
 # ADR 0008: reproducing a cited line or command is narrow work; low effort is enough.
 variant: low
+# Hard cap on agentic iterations (ADR 0015); at the cap OpenCode forces a text-only answer.
+steps: 30
 color: warning
 # Blind-review isolation (delivery rule 14, ADR 0012): no PR body, no commit messages, no
 # `gh`, no web; edits only in the review worktree. Everything else is allowed by default.

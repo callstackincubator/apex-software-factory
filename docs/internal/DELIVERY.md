@@ -144,8 +144,7 @@ their report blocks.
    the device is always released. Two tasks can be at this stage at once:
    simlock queues, and a build slot keeps Xcode builds apart. No device within
    30 minutes, or a machine that cannot run it → `needs-simulator`. The
-   implementer may already have checked its own UI on a leased device; this
-   run is still the gate. See [ADR 0007](adr/0007-device-lane-simlock-agent-device.md).
+   implementer never leases a device; this run is the only simulator check. See [ADR 0007](adr/0007-device-lane-simlock-agent-device.md).
 6. **Native.** A native change gets `needs-native-build` and is parked for the
    maintainer.
 7. **Merge.** The factory fills the PR's `## Review` section, marks it ready,

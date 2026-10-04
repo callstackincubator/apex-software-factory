@@ -10,6 +10,8 @@ description: >-
 mode: subagent
 model: callstack.ai/callstack/Apex
 variant: medium
+# Hard cap on agentic iterations (ADR 0015); at the cap OpenCode forces a text-only answer.
+steps: 25
 color: warning
 # Read-only (ADR 0011): it reports, the developer fixes. Everything else is allowed by default.
 permission:
