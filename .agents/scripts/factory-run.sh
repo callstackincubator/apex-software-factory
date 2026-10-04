@@ -116,13 +116,19 @@ run_attempt 1 "$first"
 code=$?
 [ "$code" -eq 0 ] && exit 0
 first_reason=$(cat "$logs"/"$issue"-1-*.log.stopped 2>/dev/null | tail -n 1)
+second_reason=
 
 if [ "$(date +%s)" -lt "$deadline" ]; then
   run_attempt 2 "$first. An earlier run on this issue was stopped by the watchdog ($first_reason) before it finished. The claim, if any, is yours: continue from the branch, the PR's Status line and the latest handoff instead of starting over."
   code=$?
   [ "$code" -eq 0 ] && exit 0
+  second_reason=$(cat "$logs"/"$issue"-2-*.log.stopped 2>/dev/null | tail -n 1)
 fi
-second_reason=$(cat "$logs"/"$issue"-2-*.log.stopped 2>/dev/null | tail -n 1)
+if [ -n "$second_reason" ]; then
+  stopped="The factory watchdog stopped it twice: ${first_reason:-unknown}; then $second_reason."
+else
+  stopped="The factory watchdog stopped it (${first_reason:-unknown}) with no time left in the run for a restart."
+fi
 
 # Gave up: leave the handoff the deliver skill would have left (delivery rule 2).
 kind=$(gh issue view "$issue" --json labels -q '[.labels[].name | select(test("^(bug|feature|task):"))][0] // ""' 2>/dev/null | cut -d: -f1)
@@ -141,7 +147,7 @@ body=$(cat <<EOF
 
 **Done:** what is on $branch_line; the PR's Status line, if any, says how far it got.
 
-**Not done:** the $mode run did not finish. The factory watchdog stopped it twice: ${first_reason:-unknown}; then ${second_reason:-the hard timeout}.
+**Not done:** the $mode run did not finish. $stopped
 
 **Findings:** run logs on the booth laptop under \`.worktrees/factory-runs/$issue-*\` in the runner's checkout.
 

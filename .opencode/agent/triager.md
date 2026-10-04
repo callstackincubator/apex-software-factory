@@ -3,6 +3,8 @@ description: Triages one bug:triage issue — claims it, reproduces the bug as a
 mode: subagent
 model: callstack.ai/callstack/Apex
 variant: medium
+# Hard cap on agentic iterations (ADR 0015); at the cap OpenCode forces a text-only answer.
+steps: 60
 color: accent
 permission:
   # A question waits for a person, and nobody answers a subagent.

@@ -9,6 +9,8 @@ description: >-
 mode: subagent
 model: callstack.ai/callstack/Apex
 variant: medium
+# Hard cap on agentic iterations (ADR 0015); at the cap OpenCode forces a text-only answer.
+steps: 20
 color: info
 # Blind-review isolation (delivery rule 14, ADR 0012): nothing but reading its inputs
 # directory. The catch-all deny comes after opencode.json's allow, so it wins.

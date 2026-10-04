@@ -36,9 +36,11 @@ thread, or one stage's narration into another; pass report lines only. The
 reviewers in particular get nothing but the paths the review skill names:
 their blindness is the only independence a one-model factory has.
 
-A report without its block, or with narration in place of it, is not a
-result: run the same subagent again with the same prompt plus "the last run
-ended without its report block; report on the work already done".
+A report without its block, or with narration or garbled text in place of
+it, is not a result: run the same subagent again, once, with the same prompt
+plus "the last run ended without its report block; report on the work
+already done". A second report without its block parks the issue (step 6),
+Blocked on: "<stage> returned no report twice".
 
 **A person present or not.** If a person is in this session, show any text
 you are about to post and ask before a simulator build. Unattended, post

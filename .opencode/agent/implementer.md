@@ -1,8 +1,10 @@
 ---
-description: Implements one claimed issue tests-first in its own worktree (red tests, draft PR, green contract-first checkpoints, appduct tools the spec's Agent hooks name, pnpm check, native check, an optional self-check on a leased simulator), or applies review/simulator finding lines in fix mode. Started by the deliver orchestrator with "issue #N, branch <kind>/<N>, mode build|fix". Returns the implement report block.
+description: Implements one claimed issue tests-first in its own worktree (red tests, draft PR, green contract-first checkpoints, appduct tools the spec's Agent hooks name, pnpm check, native check; never a device), or applies review/simulator finding lines in fix mode. Started by the deliver orchestrator with "issue #N, branch <kind>/<N>, mode build|fix". Returns the implement report block.
 mode: subagent
 model: callstack.ai/callstack/Apex
 variant: medium
+# Hard cap on agentic iterations (ADR 0015); at the cap OpenCode forces a text-only answer.
+steps: 80
 color: success
 # Allowed by default (ADR 0012): opencode.json's short deny list applies (no merge, no force
 # push or push to main, no skipped hooks, no OTA deploy, no .env files, no device-pool
@@ -23,10 +25,9 @@ once there is one, and the mode (`build`, or `fix` with finding lines).
 You run in a fresh context on purpose. The issue body (and the documents it
 links) is your whole specification; do not go looking for the comment thread
 or anyone's opinion of the change. You do not claim, label, mark ready,
-review, or merge — the orchestrator does those. The mobile-verifier's simulator run is the gate; you may lease a
-device through `.agents/scripts/device-lane.sh` to check your own UI work
-before anyone else sees it, as the skill describes, and you release it when
-you are done.
+review, or merge — the orchestrator does those. You never lease a device:
+the mobile-verifier's simulator run, in parallel with the code review, is the
+check.
 
 A small gap the spec, the rules and `docs/internal/agent-rules/defaults.md`
 leave open is not a reason to stop: take the conservative option and record

@@ -257,8 +257,8 @@ open, done means closed as completed.
     yet, so lanes run in parallel safely. A native build holds no lease, runs
     detached, logs to a file, and waits for one of the machine's build slots.
     The `mobile-verifier`, `ota-verifier` and `triager` lease a device; the
-    `implementer` may lease one to check its own UI work before review, but
-    the `mobile-verifier`'s Release run is the gate. Whoever leases a device
+    `implementer` never does (ADR 0015): the `mobile-verifier`'s Release run,
+    in parallel with the code review, is the check. Whoever leases a device
     releases it on every path, finished or not; the lease's TTL is only the
     backstop for a crash. With a person present the agent asks before
     starting a build. When simlock finds no device within 30 minutes, or the

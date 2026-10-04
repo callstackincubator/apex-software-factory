@@ -10,6 +10,8 @@ description: >-
 mode: subagent
 model: callstack.ai/callstack/Apex
 variant: medium
+# Hard cap on agentic iterations (ADR 0015); at the cap OpenCode forces a text-only answer.
+steps: 40
 color: error
 # Blind-review isolation (delivery rule 14, ADR 0012): everything else is allowed by default.
 # No issue or spec inputs, no `gh`, no commit messages, no web; edits only in the review
