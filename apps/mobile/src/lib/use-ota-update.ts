@@ -15,6 +15,9 @@ export type { ReadyUpdate } from "@/lib/ota-control";
 /** How often a foregrounded app asks the OTA server for a newer bundle. */
 export const CHECK_INTERVAL_MS = 30_000;
 
+/** How long a forced update or rollback waits before reloading. */
+export const FORCED_RELOAD_DELAY_MS = 250;
+
 /**
  * Checks for a new OTA bundle on mount, whenever the app comes back to the
  * foreground, and every `intervalMs` while it is in the foreground. A bundle
@@ -46,7 +49,9 @@ export function useOtaUpdate(intervalMs = CHECK_INTERVAL_MS) {
         if (!(await update.updateBundle())) return { status: "download_failed", id: update.id };
         stagedId.current = update.id;
         if (update.shouldForceUpdate) {
-          await HotUpdater.reload();
+          // Reload a moment later, so a caller of checkForUpdateNow (the
+          // ota_check_now agent tool) gets its answer before the JS restarts.
+          setTimeout(() => void HotUpdater.reload(), FORCED_RELOAD_DELAY_MS);
           return { status: "reloading", id: update.id };
         }
         const staged: ReadyUpdate = {

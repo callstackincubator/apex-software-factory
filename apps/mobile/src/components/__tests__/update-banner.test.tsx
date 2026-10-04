@@ -4,7 +4,7 @@ import { AppState, type AppStateStatus } from "react-native";
 
 import { UpdateBanner } from "@/components/update-banner";
 import { checkForUpdateNow, previewUpdateBanner } from "@/lib/ota-control";
-import { CHECK_INTERVAL_MS } from "@/lib/use-ota-update";
+import { CHECK_INTERVAL_MS, FORCED_RELOAD_DELAY_MS } from "@/lib/use-ota-update";
 
 jest.mock(
   "react-native-safe-area-context",
@@ -102,6 +102,9 @@ describe("UpdateBanner", () => {
     checkForUpdate.mockResolvedValue(update({ shouldForceUpdate: true }));
     await render(<UpdateBanner />);
     await flush();
+    await act(async () => {
+      jest.advanceTimersByTime(FORCED_RELOAD_DELAY_MS);
+    });
 
     expect(reload).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button")).toBeNull();
@@ -235,5 +238,23 @@ describe("UpdateBanner", () => {
 
     expect(reload).not.toHaveBeenCalled();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("answers an on-demand check before it reloads into a forced update", async () => {
+    await render(<UpdateBanner />);
+    await flush();
+    checkForUpdate.mockResolvedValue(update({ status: "ROLLBACK", shouldForceUpdate: true }));
+
+    let outcome: Awaited<ReturnType<typeof checkForUpdateNow>> | undefined;
+    await act(async () => {
+      outcome = await checkForUpdateNow();
+    });
+
+    expect(outcome).toEqual({ status: "reloading", id: "0199b111-2222-7333-8444-555566667777" });
+    expect(reload).not.toHaveBeenCalled();
+    await act(async () => {
+      jest.advanceTimersByTime(FORCED_RELOAD_DELAY_MS);
+    });
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });
