@@ -1,94 +1,165 @@
 ---
 name: verify-mobile
-description: Prove a PR's mobile Done when lines on the iOS simulator — a Release build of the PR's app, then its Maestro flows or a screenshot check — through .agents/scripts/sim-lane.sh, one lane per machine, detached and logged, and hand back pass, fail, busy or unavailable. Loaded by the mobile-verifier subagent. Use when the deliver orchestrator delegates simulator verification, or when someone says "verify #N on the simulator".
+description: >-
+  Prove a PR's simulator Done when lines and e2e: replay scripts on a leased
+  iOS simulator — a Release build of the PR's worktree installed through
+  .agents/scripts/device-lane.sh, checked with agent-device (open, snapshot,
+  wait, is, replay), shortcut with appduct, with Rozenite evidence on a
+  failure — and hand back pass, fail, busy or unavailable. Always releases the
+  device. Loaded by the mobile-verifier subagent. Use when the deliver
+  orchestrator delegates simulator verification, or when someone says "verify
+  #N on the simulator".
 ---
 
-# Verify on the iOS simulator
+# Verify on a leased simulator
 
-Rule 16 in `docs/internal/agent-rules/delivery.md` and rule 2 in
-`docs/internal/agent-rules/safety.md` govern this skill. You build, run,
-look, and report. You do not fix anything, and you do not edit the app.
+Rule 16 in `docs/internal/agent-rules/delivery.md`, rule 2 in
+`docs/internal/agent-rules/safety.md` and ADR 0007 govern this skill. You build, run, look,
+and report. You do not fix anything, and you do not edit the app.
 
-Arguments: the PR number, its branch, the Done when lines to check, and the
-`flow:` test files if the orchestrator knows them.
+Arguments: the PR number, its branch, the Done when lines to check, the `e2e:` scripts if the
+orchestrator knows them, and the spec's Agent hooks if it has any.
 
-A Release build is the only honest proof: hot-updater does not run in Expo Go
-or in a dev build, and a Release build embeds the branch's JS bundle exactly
-as an OTA update would deliver it.
+Load the `agent-device` skill now; load `appduct` when the Agent hooks name a tool, and
+`rozenite` only for a failure (step 6).
 
-## 1. Can this machine run it?
+**Why Release.** A Release build embeds the branch's JS bundle exactly as an OTA update would
+deliver it, with appduct linked as in the booth binary (`APPDUCT_ENABLED=1` everywhere). A
+debug build loads JS from Metro, so it proves less; it is for explaining a failure.
 
-```bash
-.agents/scripts/sim-lane.sh status
-xcrun simctl list devices booted
-command -v maestro
-```
+**Every command** in this skill runs in the PR's worktree (step 1) through
+`.agents/scripts/device-lane.sh`. You never call `xcodebuild`, `expo`, `simctl`, `adb` or
+`simlock` directly, and never install anything: a missing tool is `unavailable`.
 
-`sim-lane.sh` exits 69 with the reason when the machine cannot run a step
-(not macOS, no Xcode tools, no Maestro for a flow). Report `unavailable` with
-that reason and stop. Never install anything to make it possible — no
-Maestro, no simulator runtime, no Xcode component.
-
-No Maestro but Xcode works: lines that a screenshot can prove still run
-(step 4); lines that need a tap sequence are `not covered`.
-
-## 2. The PR's worktree
+## 1. The PR's worktree, and can this machine run it?
 
 ```bash
-.agents/scripts/worktree.sh <branch>    # or reuse it: git worktree list
+.agents/scripts/worktree.sh <branch>        # or reuse it: git worktree list
+cd <worktree> && .agents/scripts/device-lane.sh status
 ```
 
-Run every lane step with that worktree as the working directory, so the lane
-builds the PR's code and not someone else's.
+Exit 69 names what is missing (no simlock CLI, no Xcode): report `unavailable` with that line
+and stop. `status` also shows whether this lane already holds a lease from an earlier run; if
+it does, `release` it before you start.
 
-## 3. Build
+## 2. Build, then lease
+
+The build holds no device, so start it first and lease while it runs:
 
 ```bash
-.agents/scripts/sim-lane.sh build      # prints the log path at once
+.agents/scripts/device-lane.sh build ios release     # prints <log> at once
+.agents/scripts/device-lane.sh lease ios             # give the bash tool a ten-minute timeout
 ```
 
-Exit 75 means another worktree holds the lane; the message names the holder.
-Wait in steps of at most nine minutes, for 30 minutes in all, then try once
-more; still busy, report `busy` with the holder.
+`lease` exits:
 
-The build runs detached, so no tool time limit can kill it. Poll until
-`<log>.exit` exists, one short call at a time (a build takes 5 to 20
-minutes):
+- 0: leased. It prints the lease id, model, OS and UDID: keep them for the report.
+- 2: still queued in simlock. Run the same command again, up to four times.
+- 75: `busy` — simlock had no device within 30 minutes. Report `busy` with its line.
+- 69: `unavailable` — this machine cannot provide that device. Report it.
+
+From the moment `lease` returns 0 until your report, every path out of this skill — pass,
+fail, an error, a step you cannot finish — goes through step 7 first.
+
+Then wait for the build, one short call at a time (a cold build takes 10 to 20 minutes, later
+ones a few):
 
 ```bash
 sleep 90; cat "<log>.exit" 2>/dev/null || echo running
 ```
 
-A non-zero exit is `fail`: read the last error lines of the log, not the
-whole log. The first build of a worktree takes longest (prebuild and
-CocoaPods); later ones are incremental.
+The build may first wait for a build slot another lane holds; the log says so. A non-zero exit
+is `fail`: read the last 30 lines of the log, not the whole log, and quote the first error.
 
-## 4. Check the lines
+## 3. Install and open
 
-- **Flows.** `.agents/scripts/sim-lane.sh flow <flow files>`, then wait for
-  `<log>.exit` the same way. Each flow's pass or fail is in the log summary.
-- **Screens.** For a line that says what a screen shows, take a screenshot
-  once the app has launched and look at it:
+```bash
+.agents/scripts/device-lane.sh install
+.agents/scripts/device-lane.sh ad open com.callstack.apexfactory --foreground
+```
+
+The initial snapshot is your first evidence. A red screen, a crash or an empty snapshot is
+`fail`.
+
+## 4. Check each line
+
+- **`e2e:` scripts.** One at a time, in the lane's session (do not `close` first):
 
   ```bash
-  .agents/scripts/sim-lane.sh screenshot pr<PR>-<n>   # saved under .worktrees/sim-shots/ of the main checkout
+  .agents/scripts/device-lane.sh ad replay apps/mobile/e2e/<name>.ad
   ```
 
-  Wait for `<log>.exit`, read the image, and say whether it shows what the
-  line claims, quoting the visible text. A blank, error or red screen is
-  `fail`. Screenshots stay local and are never committed; describe them, do
-  not attach them.
+  Exit 0 passes. On a failure the output names the step that diverged; quote it. A script
+  ending in `close` ends the session: `ad open` again before the next check.
 
-Every line ends as `pass`, `fail`, or `not covered` (no flow and nothing a
-screenshot can show).
+- **Screen lines** ("on the simulator: …"). Reach the screen the line names the cheapest way
+  the spec allows: a deep link (`ad open com.callstack.apexfactory "apexfactory:///<route>"`),
+  an appduct tool from the Agent hooks (`appduct link`, then `appduct call open_route
+'{"path":"/<route>"}'` or a seed tool), or taps from the snapshot. Then prove the line with
+  `ad wait text "…"`, `ad wait '<selector>'`, `ad is visible '<selector>'` or `ad get text
+'<selector>'` — never with a screenshot alone.
+- **Evidence.** One screenshot per line, after the check:
+
+  ```bash
+  .agents/scripts/device-lane.sh screenshot pr<PR>-<n>    # <main>/.worktrees/sim-shots/pr<PR>-<n>.png
+  ```
+
+  Read the image and say whether it shows what the line claims, quoting the visible text.
+  Screenshots stay local and are never committed.
+
+Every line ends `pass`, `fail`, or `not covered` (nothing on a device can show it, or the
+selector the line needs does not exist — say which).
+
+## 5. appduct, when the Agent hooks use it
+
+```bash
+.agents/scripts/device-lane.sh appduct link
+.agents/scripts/device-lane.sh appduct ls
+.agents/scripts/device-lane.sh appduct call <tool> '<json>'
+```
+
+A tool the hooks name but `appduct ls` does not list is a `fail` for the lines that rely on
+it. `policy_denied` means the operator's policy refuses it (a destructive tool): use the UI
+path instead and note it.
+
+## 6. A failure: collect evidence once
+
+For a `fail` that is not obvious from the snapshot (a request that fails, a value that never
+arrives), collect one round of debug evidence on the same lease, then stop:
+
+```bash
+.agents/scripts/device-lane.sh build ios debug       # wait for its .exit as in step 2
+.agents/scripts/device-lane.sh install
+.agents/scripts/device-lane.sh metro start
+.agents/scripts/device-lane.sh ad open com.callstack.apexfactory --foreground
+.agents/scripts/device-lane.sh rozenite network call --tool startRecording
+# reproduce the failing step with device-lane.sh ad …
+.agents/scripts/device-lane.sh rozenite network call --tool listRequests
+.agents/scripts/device-lane.sh rozenite console call --tool getMessages
+```
+
+Put what explains the failure under Evidence (a status code, an error message, a missing
+request), one line each. Skip this step when the snapshot already explains it, or when the
+debug build fails; the Release result stands either way.
+
+## 7. Release — always
+
+```bash
+.agents/scripts/device-lane.sh release
+```
+
+It stops Metro, closes the agent-device session, and gives the device back to simlock (which
+erases it for the next lane). Run it before the report on every path, including `fail` and an
+error midway. If you cannot run it, say so under Evidence: the lease then expires on its TTL.
 
 ## Report
 
 End with exactly this block, nothing after it:
 
 ```
-PR: #M  Simulator: pass | fail | busy (<holder>) | unavailable (<reason>)
-Ran: build <minutes> min, flows <files or "none">, screenshots <n>; logs <paths>
+PR: #M  Simulator: pass | fail | busy (<simlock line>) | unavailable (<reason>)
+Device: <model> <os> <udid first 8> lease <lease id> | none
+Ran: build <minutes> min, e2e <files or "none">, screenshots <n>; logs <paths>
 Lines: <each Done when line, then pass | fail | not covered>
-Evidence: <failing flow step or what the screenshot shows instead, one per line, or "none">
+Evidence: <the failing step, request or text that differs, one per line, or "none">
 ```
