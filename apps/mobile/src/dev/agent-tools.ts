@@ -2,7 +2,8 @@
  * Agent tools: shortcuts an agent calls through appduct
  * (`appduct tools call <session> <name>`) to test the app without tapping
  * through it — read the build's state, jump to a screen, run an OTA check now,
- * emulate the "new feature landed" moment. They ship in every build, the booth
+ * emulate the "new feature landed" moment, list the native libraries in the
+ * binary. They ship in every build, the booth
  * binary and OTA bundles included (a deliberate choice: one build profile,
  * `APPDUCT_ENABLED=1`, keeps the fingerprint stable), so none of them may
  * expose a secret, and anything that destroys state carries
@@ -30,6 +31,11 @@ import { type Href, router } from "expo-router";
 import { Platform } from "react-native";
 import { z } from "zod";
 
+import {
+  defaultProbeDeps,
+  type NativeCapabilityReport,
+  probeNativeCapabilities,
+} from "@/dev/native-capabilities";
 import {
   getNavigationState,
   matchRoute,
@@ -71,6 +77,8 @@ export type AgentToolDeps = {
   };
   /** Runs `task` after the tool's reply has gone out (for tools that restart the app). */
   defer(task: () => void): void;
+  /** Which native libraries the binary carries and whether each loads. */
+  nativeCapabilities(): NativeCapabilityReport;
 };
 
 /** How long `open_route` waits for the router to land. */
@@ -273,6 +281,31 @@ export function createAgentTools(deps: AgentToolDeps): AnyRegistration[] {
       annotations: { readOnlyHint: true, idempotentHint: true },
       handler: async () => ({ ...(await checkApiHealth(deps.api)), apiUrl: deps.apiUrl }),
     }),
+
+    tool({
+      name: "native_capabilities",
+      group: "native",
+      description:
+        "List the native libraries in this binary and whether each one's native module loads (linked, missing, or not-on-platform), checked cheaply with no permission prompts. Use it before planning a feature: OTA updates cannot add native code, so a feature that needs a library not linked here needs a native build. docs/internal/NATIVE-CAPABILITIES.md has permissions and limits. Read-only.",
+      inputSchema: z.object({}),
+      outputSchema: z.object({
+        platform: z.string(),
+        allLinked: z.boolean().describe("True when every library with a native side here loaded"),
+        missing: z.array(z.string()).describe("Ids of libraries whose native module did not load"),
+        libraries: z.array(
+          z.object({
+            id: z.string().describe("Stable id, e.g. skia or vision-camera"),
+            package: z.string().describe("npm package name"),
+            version: z.string().nullable().describe("Version range in package.json"),
+            status: z.enum(["linked", "missing", "not-on-platform"]),
+            missingModules: z.array(z.string()).describe("kind:name of modules that did not load"),
+            enables: z.string().describe("What a feature can do with it"),
+          }),
+        ),
+      }),
+      annotations: { readOnlyHint: true, idempotentHint: true },
+      handler: () => deps.nativeCapabilities(),
+    }),
   ];
 }
 
@@ -315,6 +348,7 @@ export function defaultAgentToolDeps(): AgentToolDeps {
     },
     ota: { checkNow: checkForUpdateNow, preview: previewUpdateBanner },
     defer: (task) => setTimeout(task, 250),
+    nativeCapabilities: () => probeNativeCapabilities(defaultProbeDeps()),
   };
 }
 
