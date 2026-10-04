@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -115,3 +116,46 @@ test("pruning keeps the most recently used fingerprints of a platform", () =>
     assert.deepEqual(lib.prune("ios", root, 2), [fps[0]]);
     assert.deepEqual(fs.readdirSync(base).sort(), [fps[1], fps[2]]);
   }));
+
+test(
+  "dating an iOS app writes its OTA baseline to Info.plist as HOT_UPDATER_BUILD_TIMESTAMP",
+  { skip: process.platform !== "darwin" && "plutil is macOS-only" },
+  () =>
+    withCache((root) => {
+      const app = fakeApp(root, "x");
+      const plist = path.join(app, "Info.plist");
+      execFileSync("plutil", ["-create", "xml1", plist]);
+      lib.stampIos(app, 1791130000000);
+      const out = execFileSync(
+        "plutil",
+        ["-extract", "HOT_UPDATER_BUILD_TIMESTAMP", "raw", plist],
+        {
+          encoding: "utf8",
+        },
+      );
+      assert.equal(out.trim(), "1791130000000");
+    }),
+);
+
+test("a checkout's baseline is its HEAD commit time in milliseconds", () => {
+  const head = execFileSync("git", ["log", "-1", "--format=%ct"], {
+    cwd: __dirname,
+    encoding: "utf8",
+  }).trim();
+  assert.equal(lib.commitTimeMs(__dirname), Number(head) * 1000);
+});
+
+test("a lane binary's baseline is now, or its commit time with APEX_LANE_OTA=on", () => {
+  const before = Date.now();
+  const now = lib.baselineMs(__dirname, {});
+  assert.ok(now >= before && now <= Date.now());
+  assert.equal(lib.baselineMs(__dirname, { APEX_LANE_OTA: "on" }), lib.commitTimeMs(__dirname));
+});
+
+test("a lane bundle talks to no OTA server unless APEX_LANE_OTA=on", () => {
+  assert.deepEqual(lib.laneBundleEnv({}), { EXPO_PUBLIC_OTA_URL: lib.OTA_OFF_URL });
+  assert.deepEqual(lib.laneBundleEnv({ APEX_LANE_OTA: "off" }), {
+    EXPO_PUBLIC_OTA_URL: lib.OTA_OFF_URL,
+  });
+  assert.deepEqual(lib.laneBundleEnv({ APEX_LANE_OTA: "on" }), {});
+});

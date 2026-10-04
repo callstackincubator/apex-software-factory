@@ -71,7 +71,9 @@ not admit (rule 17).
 
 ## 3. Red tests first (`build` mode)
 
-Write one test per line under Tests, in the package its prefix names
+For `apps/mobile`, start from `apps/mobile/TESTING.md`: component, hook,
+contract-client stub, fake-timer and `.ad` recipes; do not learn the Jest setup
+from `node_modules`. Write one test per line under Tests, in the package its prefix names
 (`contract:` → `packages/contract`, `api:` → `apps/api`, `mobile:` →
 `apps/mobile`, `e2e:` → an agent-device replay script
 `apps/mobile/e2e/<name>.ad`; load the `agent-device` skill for its form). For
@@ -171,10 +173,10 @@ and move on. Otherwise apply testing rule 5: run it on the base commit; if it
 fails there too, open a `bug:new` issue labelled `flaky-test` naming the
 test, and list it. Never skip, disable or loosen a test.
 
-For each new code path, delete it and run its test file (testing rule 3):
-`pnpm --filter <package> exec vitest run <file>`, or `exec jest <file>` for
-`@apex/mobile`. If nothing goes red, write the test that does, then restore
-the code. `pnpm check` runs once, at the end; CI runs it again on every push.
+Your proof is red-first: each spec test failed for the right reason before the
+code existed (step 3). Do not run break-and-rerun probes yourself — deleting
+code paths to see what goes red is the code reviewer's job (testing rule 3),
+and it runs in parallel with the simulator check.
 
 If `native-check.sh` exits 3, tick the native box in the PR body, paste its
 reasons under OTA, and report them under Native. The orchestrator labels the
@@ -184,26 +186,27 @@ Note every Done when line that needs the app running ("on the simulator:
 ...") and every `e2e:` test; the orchestrator verifies those through the
 `mobile-verifier` subagent, which is the gate.
 
-**Self-check (optional, UI work).** Every session checks its own work before
-a person sees it. When your change alters what a screen shows or adds an
-`e2e:` script, you may lease one device and look, once per run, through the
-lane script (load the `agent-device` skill):
+**Self-check: one quick look, or none.** The `mobile-verifier` runs the full
+simulator check in parallel with the code review; your look only catches a
+screen that is obviously broken before anyone else sees it. Skip it for small
+changes (a label, a value in an existing row, logic with Jest coverage) and
+say so. When the change adds or reshapes a screen, look once:
 
 ```bash
-.agents/scripts/device-lane.sh build ios release    # detached: prints <log>; wait for <log>.exit
-.agents/scripts/device-lane.sh lease ios            # 0 leased; 2 queued (run again); 75 busy; 69 unavailable
+.agents/scripts/device-lane.sh build ios release    # prints <log>; `sleep 20; cat "<log>.exit"` until it exists
+.agents/scripts/device-lane.sh lease ios            # 0 leased; anything else: skip the look
 .agents/scripts/device-lane.sh install
-.agents/scripts/device-lane.sh ad open com.callstack.apexfactory --foreground
-.agents/scripts/device-lane.sh ad replay apps/mobile/e2e/<name>.ad
-.agents/scripts/device-lane.sh release              # always, whatever happened
+.agents/scripts/device-lane.sh ad open com.callstack.apexfactory --relaunch
+.agents/scripts/device-lane.sh screenshot pr<PR>-self
+.agents/scripts/device-lane.sh release              # always
 ```
 
-Poll the build with `sleep 20; cat "<log>.exit" 2>/dev/null || echo running`: a JS-only
-change reuses the cached binary and is ready in well under a minute; a native
-change compiles for several minutes.
-What you find is yours to fix before you report. Busy or unavailable: skip
-it and say so; never wait more than one `lease` retry for it. A lease you
-took is released before you report, on every path.
+Read the snapshot and the screenshot, then release. That is the whole look:
+no replays, no retries, no waiting loops, no debugging on the device. If any
+step fails, or the screen is not what you expected and the cause is not
+obvious from the snapshot, release and report `Self-check: fail (<what you
+saw>)` or `skipped (<why>)` — the verifier's run decides. A lane build takes
+no OTA update, so what you see is your JS.
 
 ## 6. Fix mode
 

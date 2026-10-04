@@ -9,6 +9,9 @@
 //       exit 3 on a miss
 //   cli.js store <ios|android> <release|debug> <fingerprint> <buildPath> [commit]
 //       stores a fresh build; prints the cache entry
+//   cli.js stamp <ios-app> <projectRoot>
+//       dates a simulator app's OTA baseline: now, or HEAD's commit time with
+//       APEX_LANE_OTA=on (see lib.laneOta)
 //   cli.js list
 //       every cache entry
 "use strict";
@@ -19,7 +22,7 @@ const lib = require("./lib.js");
 
 const [cmd, ...args] = process.argv.slice(2);
 const usage = () => {
-  console.error(fs.readFileSync(__filename, "utf8").split("\n").slice(1, 15).join("\n"));
+  console.error(fs.readFileSync(__filename, "utf8").split("\n").slice(1, 17).join("\n"));
   process.exit(64);
 };
 
@@ -57,6 +60,12 @@ try {
           meta: { by: "device-lane", commit },
         }),
       );
+      break;
+    }
+    case "stamp": {
+      const [app, projectRoot] = args;
+      if (!projectRoot) usage();
+      lib.stampIos(path.resolve(app), lib.baselineMs(path.resolve(projectRoot)));
       break;
     }
     case "list": {

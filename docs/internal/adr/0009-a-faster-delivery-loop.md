@@ -40,10 +40,19 @@ other.
      phone paired with the laptop's appduct daemon. Best effort: no daemon or
      no phone is a log line, never a failure.
 
+5. **The implementer does not probe.** Its proof is red-first; break-and-rerun
+   probes belong to the code reviewer. Its simulator self-check is one quick
+   look (build, open, screenshot, release) when a screen changes, skipped for
+   small changes, never a debugging session; the `mobile-verifier` runs the
+   full check. Added after the first timed run, where the implementer's
+   self-check turned into a 30-minute device session. `apps/mobile/TESTING.md`
+   gives the app's test recipes, so nobody learns the Jest setup from
+   `node_modules`.
+
 ## Consequences
 
 - A test the reviewer did not probe can still be wired to nothing; the
-  implementer's own red-first and deletion checks (testing rules 2 and 3)
+  implementer's red-first tests (testing rule 2)
   remain the first line, and three probes go where a defect would hurt most.
 - Fewer rounds, but nits accumulate as follow-up comments and issues the
   maintainer triages.

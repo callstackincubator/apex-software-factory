@@ -13,7 +13,9 @@
 #                                               when it ends. Needs no lease. A cached binary with
 #                                               the same native fingerprint is reused (JS swapped
 #                                               in for release) instead of compiling: seconds,
-#                                               not minutes (tools/expo-build-cache).
+#                                               not minutes (tools/expo-build-cache). A lane
+#                                               binary takes no OTA update unless
+#                                               APEX_LANE_OTA=on (the OTA check sets it).
 #   device-lane.sh install [path]               install the last successful build on the device
 #   device-lane.sh metro <start|stop>           Metro for a debug build (WITH_ROZENITE=true,
 #                                               APPDUCT_ENABLED=1) on this lane's own port
@@ -33,7 +35,8 @@
 # Exit codes: 0 done; 1 failed; 2 still queued for a device (run `lease` again to keep
 # waiting); 64 usage; 69 unavailable (this machine cannot do it: no simlock, no Xcode, no
 # runtime for that model; nothing is ever installed to make it possible); 75 busy (simlock
-# found no device within APEX_LEASE_TIMEOUT, default 30m).
+# found no device within APEX_LEASE_TIMEOUT, default 30m); 76 an `ad` command failed twice on the
+# device side (CoreSimulator or the XCUITest runner, not the app: retried once already).
 #
 # Lane identity: the worktree's branch. simlock requester `apex:<branch>` (one lease per lane),
 # agent-device session `apex-<branch>`. State lives in <worktree>/.apex/ (gitignored):
@@ -426,6 +429,12 @@ build_job() {
   # Precompiled Expo Modules (on by default since SDK 56) keep a cold iOS build short; nothing
   # in a lane may turn them off.
   unset WITH_ROZENITE EXPO_USE_PRECOMPILED_MODULES
+  # A lane binary takes no OTA update unless APEX_LANE_OTA=on (the OTA check): its embedded JS
+  # talks to an OTA URL nothing listens on, so a check always runs the JS under test.
+  if [ "${APEX_LANE_OTA:-off}" != on ] && [ "$profile" = release ]; then
+    EXPO_PUBLIC_OTA_URL=$(node -p 'require(process.argv[1]).OTA_OFF_URL' "$cache_cli")
+    export EXPO_PUBLIC_OTA_URL
+  fi
   case $platform in
     ios)
       pnpm exec expo prebuild --platform ios --no-install
@@ -452,6 +461,10 @@ build_job() {
     echo "build finished but $artifact is missing"
     exit 1
   }
+  # Date the binary's OTA baseline, as a cache hit does (tools/expo-build-cache, laneOta).
+  if [ "$platform" = ios ] && [ "$profile" = release ] && [ -f "$cache_cli" ]; then
+    node "$cache_cli" stamp "$artifact" "$mobile" || echo "could not date the binary's OTA baseline"
+  fi
   # Fill the cache under the hash the binary embeds (prebuild just wrote it to fingerprint.json).
   if [ -n "$native_fp" ]; then
     embedded=$(node -e 'try { console.log(require(process.argv[1])[process.argv[2]].hash) } catch {}' "$mobile/fingerprint.json" "$platform")
@@ -614,7 +627,28 @@ cmd_ad() {
     fi
     case " $* " in *" --metro-port"*) ;; *) set -- "$@" --metro-host 127.0.0.1 --metro-port "$port" ;; esac
   fi
-  agent_device "$@"
+  ad_with_retry "$@"
+}
+
+# Runs an agent-device command once more when it failed in a way that is about the host, not
+# the app: CoreSimulator answering late, the XCUITest runner lost or restarted (another lane's
+# client timeout can make agent-device recycle runners), the daemon connection dropped. A
+# check that fails on the app's state fails the same way twice, so a retry never hides it.
+# Exit 76 after the retry: the device side is unhealthy, which is not the app's failure.
+ad_with_retry() {
+  out="$state_dir/logs/ad-last.out"
+  mkdir -p "$state_dir/logs"
+  if agent_device "$@" >"$out" 2>&1; then rc=0; else rc=$?; fi
+  cat "$out"
+  [ "$rc" -ne 0 ] || return 0
+  if grep -qiE 'did not answer within|runner (exited|crashed|disconnected|not running|lost)|xctest|ECONNRESET|ECONNREFUSED|socket hang up|daemon (restarted|unavailable)|session .*(closed|not found)|SESSION_NOT_FOUND|DEVICE_NOT_READY' "$out"; then
+    echo "device-lane: agent-device $1 hit a device-side failure; retrying once" >&2
+    renew_if_due
+    if agent_device "$@"; then return 0; fi
+    echo "device-lane: agent-device $1 failed twice on the device side (see above); the device or its runner is unhealthy — release, lease again, and retry once; report unavailable if it repeats" >&2
+    exit 76
+  fi
+  exit "$rc"
 }
 
 cmd_screenshot() {

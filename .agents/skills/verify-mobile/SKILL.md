@@ -111,6 +111,12 @@ The initial snapshot is your first evidence. A red screen, a crash or an empty s
   Read the image and say whether it shows what the line claims, quoting the visible text.
   Screenshots stay local and are never committed.
 
+A lane `ad` command that exits 76 failed twice on the device side (CoreSimulator or the
+XCUITest runner, not the app; the lane already retried once): `release`, `lease ios` again,
+`install`, and repeat that line once. A second 76 is `unavailable` with the error line — never
+loop, never sleep and retry by hand. The lane binary takes no OTA update, so the screen always
+shows the PR's JS.
+
 Every line ends `pass`, `fail`, or `not covered` (nothing on a device can show it, or the
 selector the line needs does not exist — say which).
 

@@ -43,7 +43,7 @@ the merge commit's parent, in a detached worktree of its own:
 ```bash
 git worktree add --detach <main checkout>/.worktrees/ota-<sha first 7> <sha>^
 .agents/scripts/worktree.sh --prepare <main checkout>/.worktrees/ota-<sha first 7>
-cd <that worktree> && .agents/scripts/device-lane.sh build ios release
+cd <that worktree> && APEX_LANE_OTA=on .agents/scripts/device-lane.sh build ios release
 cd <that worktree> && .agents/scripts/device-lane.sh lease ios
 ```
 
@@ -53,7 +53,10 @@ again, up to four times; give the bash tool a ten-minute timeout), 75 `busy`, 69
 `<log>.exit` as `verify-mobile` does (`sleep 20; cat "<log>.exit"`): the parent of a JS-only
 merge has the same native fingerprint, so the build reuses the cached binary (ADR 0010).
 
-The lane's Release build uses `APPDUCT_ENABLED=1` like the booth binary, so its fingerprint
+`APEX_LANE_OTA=on` keeps the booth's OTA URL in the binary and dates it to the parent commit,
+so the server offers it the bundles published after that commit — the merge's among them.
+Without it a lane binary takes no OTA update at all, which is what every other check needs. The lane's Release build uses
+`APPDUCT_ENABLED=1` like the booth binary, so its fingerprint
 matches what the publish run deployed against, and its default OTA URL
 (`http://localhost:3002/hot-updater`) reaches the OTA server on this machine.
 
