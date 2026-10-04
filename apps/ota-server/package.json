@@ -1,0 +1,35 @@
+{
+  "name": "@apex/ota-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Self-hosted hot-updater server: update checks for devices, bundle management for the CLI.",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/main.ts",
+    "start": "node src/main.ts",
+    "db:migrate": "hot-updater db migrate src/hot-updater.cli.ts --yes",
+    "db:generate": "hot-updater db generate src/hot-updater.cli.ts data/migrations --yes",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.3",
+    "@hot-updater/aws": "^0.36.17",
+    "@hot-updater/server": "^0.36.17",
+    "better-sqlite3": "^13.0.3",
+    "hono": "^4.13.12",
+    "kysely": "^0.29.6",
+    "pino": "^10.4.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.20.5",
+    "hot-updater": "^0.36.17",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}
