@@ -5,10 +5,14 @@ import { SmokeCard, useRenderSmoke } from "../smoke-card";
 
 const PAGE = `<!doctype html><meta name="viewport" content="width=device-width">
 <body style="margin:0;font:600 15px -apple-system,sans-serif;background:#141417;color:#C6F432;display:flex;align-items:center;justify-content:center;height:100vh">
-<span>WebView: data URL loaded</span>
+<span>WebView: page loaded</span>
 <script>window.ReactNativeWebView.postMessage("ready")</script></body>`;
 
-/** Loads a data: URL whose script posts a message back. */
+/**
+ * Loads an HTML string whose script posts a message back. Not a `data:` URL:
+ * react-native-webview 13.16 on iOS hands any URL without a host to
+ * `loadFileURL`, which throws and crashes the app.
+ */
 export function WebViewSmoke() {
   const [result, setResult] = useRenderSmoke("WebView");
   return (
@@ -17,11 +21,11 @@ export function WebViewSmoke() {
         testID="webview-view"
         style={{ height: 64, backgroundColor: "transparent" }}
         originWhitelist={["*"]}
-        source={{ uri: `data:text/html;charset=utf-8,${encodeURIComponent(PAGE)}` }}
+        source={{ html: PAGE, baseUrl: "about:blank" }}
         scrollEnabled={false}
         onMessage={(event) => {
           if (event.nativeEvent.data === "ready") {
-            setResult({ status: "ok", detail: "data: URL loaded, its script posted back" });
+            setResult({ status: "ok", detail: "HTML loaded, its script posted back" });
           }
         }}
         onError={(event) =>

@@ -10,7 +10,7 @@ import {
 
 import { useKeyboardProviderMounted } from "@/lib/keyboard";
 
-import { SmokeCard, useSmoke } from "../smoke-card";
+import { SmokeCard, useSmoke, withTimeout } from "../smoke-card";
 
 const SENSORS = { Accelerometer, Gyroscope, Magnetometer, Barometer, DeviceMotion, Pedometer };
 
@@ -32,8 +32,8 @@ export function SensorsSmoke() {
 export function ClipboardSmoke() {
   const result = useSmoke(async () => {
     const marker = `apex-capabilities-${Date.now()}`;
-    await Clipboard.setStringAsync(marker);
-    const pasted = await Clipboard.getStringAsync();
+    await withTimeout(Clipboard.setStringAsync(marker), "setStringAsync");
+    const pasted = await withTimeout(Clipboard.getStringAsync(), "getStringAsync");
     if (pasted !== marker) throw new Error(`copied ${marker}, pasted ${pasted}`);
     return "setString/getString round-trip";
   });

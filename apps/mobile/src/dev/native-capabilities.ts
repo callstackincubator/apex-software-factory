@@ -96,7 +96,10 @@ export const NATIVE_LIBRARIES: readonly NativeLibrary[] = [
     id: "calendar",
     package: "expo-calendar",
     enables: "read and add calendar events",
-    modules: [["expo", "ExpoCalendar"]],
+    modules: [
+      ["expo", "CalendarNext"],
+      ["expo", "ExpoCalendar"],
+    ],
   },
   {
     id: "image-picker",
@@ -114,7 +117,10 @@ export const NATIVE_LIBRARIES: readonly NativeLibrary[] = [
     id: "media-library",
     package: "expo-media-library",
     enables: "save images to the photo library",
-    modules: [["expo", "ExpoMediaLibrary"]],
+    modules: [
+      ["expo", "ExpoMediaLibraryNext"],
+      ["expo", "ExpoMediaLibrary"],
+    ],
   },
   {
     id: "maps",

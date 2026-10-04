@@ -139,6 +139,25 @@ export function useRenderSmoke(what: string) {
   return [result, setResult] as const;
 }
 
+/** How long one native call gets to answer before a smoke reports it. */
+export const ANSWER_TIMEOUT_MS = 5000;
+
+/**
+ * Rejects when `promise` has not settled within ANSWER_TIMEOUT_MS, so a
+ * native call that never answers turns its smoke red instead of leaving it
+ * pending forever.
+ */
+export function withTimeout<T>(promise: Promise<T>, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${what} did not answer in ${ANSWER_TIMEOUT_MS / 1000} s`)),
+      ANSWER_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 export function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

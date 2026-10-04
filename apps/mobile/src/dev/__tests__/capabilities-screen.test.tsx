@@ -1,7 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import * as Speech from "expo-speech";
 
 import { CapabilitiesScreen } from "@/dev/capabilities/capabilities-screen";
-import { SmokeBoundary } from "@/dev/capabilities/smoke-card";
+import { ANSWER_TIMEOUT_MS, SmokeBoundary } from "@/dev/capabilities/smoke-card";
+import { PermissionsSmoke } from "@/dev/capabilities/smokes/permissions";
 import type { NativeCapabilityReport } from "@/dev/native-capabilities";
 import { AppKeyboardProvider } from "@/lib/keyboard";
 
@@ -41,20 +43,24 @@ jest.mock("expo-sensors", () => {
     Pedometer: sensor(false),
   };
 });
-const undetermined = {
+const mockUndetermined = {
   status: "undetermined",
   granted: false,
   canAskAgain: true,
   expires: "never",
 };
-jest.mock("expo-notifications", () => ({ getPermissionsAsync: jest.fn(async () => undetermined) }));
+jest.mock("expo-notifications", () => ({
+  getPermissionsAsync: jest.fn(async () => mockUndetermined),
+}));
 jest.mock("expo-calendar", () => ({
-  getCalendarPermissionsAsync: jest.fn(async () => undetermined),
+  getCalendarPermissions: jest.fn(async () => mockUndetermined),
 }));
 jest.mock("expo-location", () => ({
-  getForegroundPermissionsAsync: jest.fn(async () => undetermined),
+  getForegroundPermissionsAsync: jest.fn(async () => mockUndetermined),
 }));
-jest.mock("expo-media-library", () => ({ getPermissionsAsync: jest.fn(async () => undetermined) }));
+jest.mock("expo-media-library", () => ({
+  getPermissionsAsync: jest.fn(async () => mockUndetermined),
+}));
 jest.mock("expo-sharing", () => ({ isAvailableAsync: jest.fn(async () => true) }));
 jest.mock("expo-speech", () => ({
   getAvailableVoicesAsync: jest.fn(async () => [{ identifier: "a" }, { identifier: "b" }]),
@@ -113,7 +119,7 @@ describe("CapabilitiesScreen", () => {
     ).toBeTruthy();
     expect(
       await screen.findByLabelText(
-        "Permissions and services: info. notifications undetermined · calendar undetermined · location undetermined · photos undetermined · share sheet yes · 2 voices",
+        "Permissions and services: info. notifications undetermined · calendar undetermined · location undetermined · photos undetermined · share sheet yes · voices 2",
       ),
     ).toBeTruthy();
     expect(smoke("keyboard-controller")).toHaveAccessibleName(
@@ -139,7 +145,7 @@ describe("CapabilitiesScreen", () => {
     );
     expect(smoke("maps")).toHaveAccessibleName("Maps: ok. Apple Maps ready");
     expect(smoke("webview")).toHaveAccessibleName(
-      "WebView: ok. data: URL loaded, its script posted back",
+      "WebView: ok. HTML loaded, its script posted back",
     );
   });
 
@@ -163,6 +169,23 @@ describe("CapabilitiesScreen", () => {
       "Keyboard controller: failed. no KeyboardProvider above this screen",
     );
     await screen.findByLabelText(/^MMKV: ok/); // let the async smokes settle
+  });
+});
+
+describe("PermissionsSmoke", () => {
+  it("names a module that never answers instead of staying pending", async () => {
+    jest.useFakeTimers();
+    jest.mocked(Speech.getAvailableVoicesAsync).mockReturnValueOnce(new Promise(() => {}));
+
+    await render(<PermissionsSmoke />);
+    await act(async () => {
+      jest.advanceTimersByTime(ANSWER_TIMEOUT_MS);
+    });
+
+    expect(smoke("permissions")).toHaveAccessibleName(
+      "Permissions and services: failed. notifications undetermined · calendar undetermined · location undetermined · photos undetermined · share sheet yes · voices failed: voices did not answer in 5 s",
+    );
+    jest.useRealTimers();
   });
 });
 
