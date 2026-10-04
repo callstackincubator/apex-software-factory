@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": [
+    "docs/**",
+    "pnpm-lock.yaml",
+    "apps/mobile/ios/**",
+    "apps/mobile/android/**",
+    "**/.expo/**"
+  ]
+}
