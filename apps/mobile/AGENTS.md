@@ -30,7 +30,7 @@ https://docs.expo.dev/llms.txt.
 
 ## Agent tooling rules
 
-How agents drive the app is in [README.md](README.md#agent-tooling).
+How agents drive the app is in [README.md](README.md#agent-tooling). How tests are written here — components, hooks, the contract-client stub, fake timers, `.ad` scripts — is in [TESTING.md](TESTING.md).
 
 - Every interactive or key element gets a `testID` (kebab-case, unique on its
   screen, e.g. `status-api`) and an `accessibilityLabel` that states what it

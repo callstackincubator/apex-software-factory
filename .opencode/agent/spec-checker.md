@@ -25,16 +25,21 @@ session that wrote it.
 
 Your task names an issue. Read its body
 (`gh issue view <N> --json title,body,labels`), its parent's body if it has
-one, and nothing in the comment thread. Then read what it must agree with:
+one, and nothing in the comment thread. Then read only what it must agree
+with, and nothing else — no crawling the codebase, no `node_modules`:
 
-- every file in `docs/internal/agent-rules/` (including `defaults.md`, the
+- the files in `docs/internal/agent-rules/` (including `defaults.md`, the
   house answers that fill whatever a spec leaves unsaid);
-- `docs/internal/adr/README.md` and every ADR the spec names;
+- `docs/internal/adr/README.md` and the ADRs the spec names;
+- `docs/internal/templates/booth-feature.md` (or `feature.md` / `task.md`,
+  whichever the body follows);
 - `docs/internal/NATIVE-CAPABILITIES.md`, the native modules, permissions and
   config the installed booth binary has;
-- the code the Technical spec names (the files, the contract schemas, the
-  screens, `apps/mobile/src/features/registry.ts`, the appduct tools in
-  `apps/mobile/src/dev/agent-tools.ts`).
+- the files the Technical spec names, only to confirm that a selector, tool
+  or route it says exists does exist (`grep` for it; do not read around).
+
+Budget: about fifteen file reads. A question you cannot settle within that is
+a finding, not a reason to read more.
 
 Report a finding for each of these, and nothing else:
 

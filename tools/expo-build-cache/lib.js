@@ -193,7 +193,16 @@ function bundleJs(projectRoot, platform, bundle, assetsDest) {
     {
       cwd: projectRoot,
       // The booth binary's profile (ADR 0007): appduct on, Rozenite off.
-      env: { ...process.env, APPDUCT_ENABLED: "1", WITH_ROZENITE: "", NODE_ENV: "production" },
+      env: {
+        ...process.env,
+        APPDUCT_ENABLED: "1",
+        WITH_ROZENITE: "",
+        NODE_ENV: "production",
+        ...laneBundleEnv(),
+        // Babel inlines EXPO_PUBLIC_* at transform time and Metro caches transforms without
+        // them in the key: one Metro cache per OTA mode (Metro keeps it under os.tmpdir()).
+        TMPDIR: metroCacheDir(),
+      },
     },
   );
   run(hermesc(projectRoot), [
@@ -215,8 +224,71 @@ function listFiles(dir, prefix = "") {
   });
 }
 
+/** The checkout's HEAD commit time in ms (now, outside a git checkout). */
+function commitTimeMs(projectRoot) {
+  try {
+    const out = execFileSync("git", ["log", "-1", "--format=%ct"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+    });
+    const s = Number(out.trim());
+    return Number.isFinite(s) && s > 0 ? s * 1000 : Date.now();
+  } catch {
+    return Date.now();
+  }
+}
+
+/**
+ * Lane binaries never take an OTA update unless asked (APEX_LANE_OTA=on): a verification
+ * must run the JS under test, and the booth's production channel would otherwise replace it
+ * with the latest published bundle. "off" (the default) points the bundle's OTA client at a
+ * port nothing listens on, so every check fails fast and quietly, and dates the binary to
+ * now; "on" keeps the booth's OTA URL and dates the binary to HEAD's commit, so an OTA check's
+ * binary of the parent commit receives the bundles published after it.
+ */
+const OTA_OFF_URL = "http://127.0.0.1:9/hot-updater-off-in-lanes";
+
+function laneOta(env = process.env) {
+  return env.APEX_LANE_OTA === "on" ? "on" : "off";
+}
+
+/** EXPO_PUBLIC_* overrides for a lane bundle: none with OTA on, an unreachable OTA URL off. */
+function laneBundleEnv(env = process.env) {
+  return laneOta(env) === "on" ? {} : { EXPO_PUBLIC_OTA_URL: OTA_OFF_URL };
+}
+
+/** A temp dir per OTA mode, so Metro's transform cache never mixes the two OTA URLs. */
+function metroCacheDir(env = process.env) {
+  const dir = path.join(os.tmpdir(), `apex-lane-ota-${laneOta(env)}`);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** The OTA baseline a lane binary gets (see laneOta). */
+function baselineMs(projectRoot, env = process.env) {
+  return laneOta(env) === "on" ? commitTimeMs(projectRoot) : Date.now();
+}
+
+/**
+ * Dates an iOS simulator app's OTA baseline to `ms`: hot-updater reads
+ * `HOT_UPDATER_BUILD_TIMESTAMP` from Info.plist as the binary's MIN_BUNDLE_ID. Without it a
+ * Release binary defaults to its compile time minus 26 hours — and a cached binary to the day
+ * it was first built — so a production bundle deployed since would be offered, staged and
+ * applied on the next relaunch, and a check would run that bundle's JS instead of its own.
+ */
+function stampIos(app, ms) {
+  run("plutil", [
+    "-replace",
+    "HOT_UPDATER_BUILD_TIMESTAMP",
+    "-string",
+    String(ms),
+    path.join(app, "Info.plist"),
+  ]);
+}
+
 /** iOS: a copy of the cached .app with this checkout's JS, assets and app config in it. */
 function swapIos(projectRoot, app) {
+  stampIos(app, baselineMs(projectRoot));
   fs.rmSync(path.join(app, "assets"), { recursive: true, force: true });
   bundleJs(projectRoot, "ios", path.join(app, "main.jsbundle"), app);
   // The embedded Expo config (name, version and other fields the fingerprint skips).
@@ -338,8 +410,14 @@ function resolve({ projectRoot, platform, fingerprint: fp, profile, outDir }) {
 }
 
 module.exports = {
+  OTA_OFF_URL,
+  baselineMs,
+  laneBundleEnv,
+  laneOta,
   cacheRoot,
   cachedBinary,
+  commitTimeMs,
+  stampIos,
   entryDir,
   fingerprint,
   parseFingerprintOutput,

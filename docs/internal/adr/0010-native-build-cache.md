@@ -43,6 +43,21 @@ so they build with `xcodebuild` for a generic destination (ADR 0007).
    APK is zipaligned and signed with the debug key it was built with. A
    change that adds a JS image the cached APK lacks needs compiled resources,
    so it is a miss. A Debug hit needs no swap: it loads JS from Metro.
+
+   Callstack's Rock CLI has a similar command (`rock sign:ios <app> --app
+   --jsbundle <file>` / `--build-jsbundle`, `rock sign:android`). Rock 0.15.2
+   does not fit this app as is, read from its source
+   (`@rock-js/platform-apple-helpers`, `commands/sign/modifyApp.js` and
+   `bundle.js`): `--jsbundle` copies the one bundle file and leaves the assets
+   and the embedded Expo config stale; `--build-jsbundle` hard-codes
+   `--entry-file index.js` and builds through `rock bundle`, while this Expo
+   Router app's entry is `expo-router/entry` and needs Expo's Metro
+   serializer (`expo export:embed`); and the `sign:*` commands exist only
+   through platform plugins in a `rock.config` the project does not have.
+   Our swap also dates the binary and turns its OTA client off (below), which
+   no signing tool would. Revisit when Rock can take an Expo entry and swap
+   assets; `rock sign:android` would then replace our zip/zipalign/apksigner
+   steps.
 4. **The lanes use it.** `device-lane.sh build` computes the fingerprint,
    resolves from the cache, and only on a miss takes a build slot, compiles,
    and stores the binary under the hash it embeds. `APEX_BUILD_CACHE=0`
@@ -65,6 +80,16 @@ so they build with `xcodebuild` for a generic destination (ADR 0007).
   then built in 15–17 s (export, Hermes, swap) and installed in 4–18 s, and
   the app ran the new JS from its embedded bundle (`app_info`:
   `embedded: true`).
+- **Lane binaries take no OTA update.** Found in the first timed run: a
+  cached binary, dated to its first build, was offered production's latest
+  bundle, staged it, and applied it on relaunch, so the check ran production's
+  JS instead of the PR's. Now a lane's Release bundle is built with
+  `EXPO_PUBLIC_OTA_URL` pointing at a port nothing listens on (the OTA client
+  fails fast and quietly), and its iOS binary is dated to now
+  (`HOT_UPDATER_BUILD_TIMESTAMP`, which hot-updater reads as MIN_BUNDLE_ID).
+  The OTA check alone sets `APEX_LANE_OTA=on`: the booth's OTA URL, and a
+  binary dated to the parent commit, so the merge's bundle arrives. Android
+  carries MIN_BUNDLE_ID in compiled code; the unreachable URL covers it.
 - A cache entry is trusted: a binary built from a dirty tree with the same
   fingerprint would be reused. Lane builds come from committed worktrees, and
   the lane stores under the hash the binary embeds, not the one it expected.

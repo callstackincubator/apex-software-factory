@@ -30,9 +30,10 @@ though the suite is green — being green is exactly the failure mode.
    because the test exercises an internal callback rather than the observable
    output: the HTTP response, the parsed contract value, the text on screen.
    Write the test that goes red, then restore the code. Run the affected
-   test file, not the suite. The code reviewer does this to at most three
+   test file, not the suite. The code reviewer does this, to at most three
    changed paths per review — the ones where a wrong answer would hurt a user
-   most — and reads the rest (ADR 0009).
+   most — and reads the rest (ADR 0009). The implementer's proof is red-first
+   (rule 2); it does not probe.
 
 4. **A test that enforces a rule must see everything the rule covers.** A
    boundary or invariant test enforces its rule only where it looks. One that
