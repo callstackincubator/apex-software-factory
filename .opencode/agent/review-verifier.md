@@ -32,13 +32,30 @@ permission:
     grep *: allow
     rg *: allow
     wc *: allow
+    pwd: allow
+    echo *: allow
+    test *: allow
+    find *: allow
+    sort *: allow
+    uniq *: allow
+    diff *: allow
+    sed *: allow
+    jq *: allow
+    sleep *: allow
+    command -v *: allow
     pnpm *: allow
     node *: allow
     git diff*: allow
     git status*: allow
+    git rev-parse*: allow
+    git ls-files*: allow
     git checkout .: allow
+    git checkout -- *: allow
     git restore *: allow
     .agents/scripts/native-check.sh*: allow
+    git log*: deny
+    git show*: deny
+    gh *: deny
     pnpm publish*: deny
     pnpm * publish*: deny
     pnpm dlx *: deny
@@ -60,6 +77,12 @@ findings, the round (1 or 2), the spec inputs directory (`issue.md`,
 (`diff.patch`, `rules/`), and the review worktree checked out at the reviewed
 commit. Read nothing about the change beyond those: not the PR body, not the
 commit messages, not the issue's comments.
+
+Your shell runs an allow list: file reading and searching, `pnpm`, `node`,
+`git diff`/`status`/`checkout`/`restore`, and the native check. `git log`,
+`git show` and `gh` are denied on purpose. A compound command (`a && b`) is
+refused whole when any part is denied, so run commands one at a time; a denial
+never means the shell is unavailable.
 
 For each finding, reproduce its evidence yourself: read the cited lines in the
 worktree, or run the cited command there (restore anything you change with

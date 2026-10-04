@@ -73,6 +73,7 @@ permission:
     git ls-files*: allow
     git ls-tree *: allow
     git worktree list*: allow
+    git push: allow
     git push origin *: allow
     git push -u origin *: allow
     gh issue view *: allow
