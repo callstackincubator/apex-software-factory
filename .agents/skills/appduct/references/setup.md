@@ -1,0 +1,119 @@
+<!-- Vendored verbatim from callstackincubator/appduct v0.14.0, skills/appduct/references/setup.md (see ../SOURCE.md). In this repo: appduct is already a pinned workspace devDependency (never npm i, npx or a global install); run it through .agents/scripts/device-lane.sh appduct ..., or as pnpm exec appduct from apps/mobile in a person's session. -->
+
+# Appduct setup
+
+Use this file when the task is to add Appduct to a new React Native project.
+
+The development path needs **no keys, no pins and no config file**. The daemon generates
+its own host key on first start, the deep-link scheme is discovered from the project's own
+files (`app.json`, or the Android/iOS project files — see below), and any build with no
+embedded pins trusts the pin carried in the link itself — in every build type, not just a
+debug one. Everything under **Hardening** below is for builds that leave your machine — do
+not do it as part of a first-time setup.
+
+## Shared requirements
+
+1. Install `appduct` where the operator or agent will run the CLI (or configure it as
+   an MCP server — see [cli.md](./cli.md)). Its daemon auto-spawns on first use; there
+   is no separate host process to start.
+2. Install `@appduct/react-native` in the app.
+3. Register the app tools you want Appduct to expose (`registerTool` /
+   `useAppductTool`), following [writing-tools.md](./writing-tools.md) so the agent that
+   calls them can use them.
+4. Import `@appduct/react-native/auto` once near the app's entry point to install the
+   deep-link bootstrap listener automatically — or `require()` it at the point you want
+   it installed (e.g. behind `__DEV__`). (If you'd rather drive bootstrap yourself —
+   custom deep-link handling, QR scanning, tests — skip that entry, use the
+   side-effect-free root entry, and call `restoreSession()` at startup before your own
+   bootstrap handling so a Metro reload still recovers the session.)
+5. Optional, for pinned trust: generate a TLS private key for the daemon with
+   `appduct keygen` (non-interactive with `--out <path>`; writes `~/.appduct/key.pem`
+   by default). Skipping this is fine — the daemon generates its own key on first start and
+   `appduct sessions link` carries the fingerprint on the deep link.
+6. If you generated a key in step 5, add its `sha256/...` SPKI pin to the app
+   configuration, in a `cliPins` array (plural — the native clients accept a pin _set_,
+   which is what makes future rotation non-breaking). Configuring `cliPins` switches the
+   build to `trust: "pin"`, so the link-carried pin is ignored from then on
+   (`docs/SECURITY.md`, "Trust modes").
+7. Optional: use `addAppductListener("error", ...)` to observe bootstrap parse
+   failures, connect failures, or socket errors — one unified channel for all of them.
+8. Advanced: use `getAppductState()` / `addAppductListener("stateChange", ...)` for
+   manual connection-state UI.
+9. Production builds that shouldn't ship Appduct at all should be built with
+   `APPDUCT_ENABLED=0` rather than gated by a runtime flag. That variable drops the
+   native module on its own.
+10. To strip Appduct's JS as well, wrap the app's Metro config in the
+    `withAppduct` helper from `@appduct/react-native/metro` (call it last, after
+    anything else that sets `resolver.resolveRequest`). Without that wiring the real JS
+    entry is still bundled; it just finds no native module and goes inert. See
+    `docs/BUILD-VARIANTS.md`.
+
+## Expo
+
+1. Add `@appduct/react-native` to the app dependencies.
+2. Optional: add the Appduct Expo config plugin to the Expo config. `cliPins` is
+   required only when `trust: "pin"` is set or implied; `trust` and `allowPrivateLanOnly`
+   (defaults to `true`, fail-closed) are optional, and `deepLinkScheme` is only
+   _validated_ against `expo.scheme` — it is not what the CLI reads. A zero-config app can
+   skip the plugin entry entirely (`docs/SECURITY.md`, "Configuring trust").
+3. Make sure `expo.scheme` is set — it is both what registers the app for deep links and
+   what `appduct sessions link` discovers automatically from `app.json`.
+4. Run `appduct init` in the app root. It records the scheme in
+   `.appduct/config.json` and prints the MCP server entry to paste into an agent's
+   config. Re-running it is always safe: it keeps the scheme already recorded, and only
+   notes it if `app.json` has since come to declare a different one. Use
+   `appduct init --force` to adopt the new `app.json` value. Add
+   `--android-app-id <package> --ios-app-id <bundle-id>` (`expo.android.package` and
+   `expo.ios.bundleIdentifier`) so `--open android` and `appduct_connect` can deliver links
+   without an `--app-id` on every call.
+5. Run prebuild or rebuild the native project so the native config is applied.
+6. Use a development build. Expo Go is not enough — this library ships native code.
+
+If the project uses a dynamic `app.config.js` / `app.config.ts`, discovery does not apply
+(Appduct never executes project code to read a scheme). Use
+`appduct init --scheme <scheme>` once, or pass `--scheme` / set `APPDUCT_SCHEME`.
+
+## Bare React Native
+
+1. Add `@appduct/react-native` to the app dependencies.
+2. Run the normal native dependency installation steps for the project.
+3. Configure URL schemes / intent filters so bootstrap links (`{scheme}:///?appduct=…`)
+   open your app.
+4. Run `appduct init` in the project root. With no `app.json` `expo.scheme`, discovery
+   falls back to static native project files, all relative to the directory you run it in
+   (never a walk-up): `app/build.gradle(.kts)`'s `appductScheme` manifest placeholder, then
+   `app/src/main/AndroidManifest.xml`'s first `<data android:scheme>` in a `VIEW` intent
+   filter, then any `Info.plist` up to two levels down for the first `CFBundleURLSchemes`
+   entry, then xcodegen's `project.yml`. From a bare React Native root the iOS plist probe
+   reaches `ios/<App>/Info.plist`, but the Android ones expect an Android project root
+   (`android/`), so pass `appduct init --scheme <scheme>` with the scheme you configured in
+   step 3 whenever discovery comes up empty. It also refuses to guess when two probes
+   resolve different schemes — `--scheme` is the answer there too. Add
+   `--android-app-id <applicationId> --ios-app-id <bundle-id>` so device delivery works
+   without an `--app-id` on every call.
+5. Add the optional private-LAN-only setting only if the project wants that restriction.
+6. Rebuild the native app after the configuration changes.
+
+## Hardening (not needed for a dev loop)
+
+For builds that leave your machine, replace link-carried trust with embedded pins:
+
+1. Run `appduct keygen` (non-interactive with `--out <path>`; writes
+   `~/.appduct/key.pem` by default, which is also where the daemon auto-generates one).
+2. Add the printed `sha256/...` SPKI pin to the app configuration in a `cliPins` array
+   (plural — the native clients accept a pin _set_, which is what makes future rotation
+   non-breaking). Providing `cliPins` switches `trust` to `"pin"` by default.
+3. Rebuild: this is native configuration, so it is not a fast in-session action.
+
+## Final check
+
+- The app trusts the daemon's current pin — via `cliPins` for a pinned build, or via the
+  link-carried pin when no `cliPins` are configured.
+- The app has at least one registered tool.
+- The app's deep-link scheme matches what `appduct sessions link` resolves — run
+  `appduct sessions link --json` in the app root and read the scheme off the deep link; the
+  error names every location it looked in if it cannot find one.
+- `appduct sessions ls` (or `appduct_connect` + `appduct_wait_for_session` over MCP)
+  reaches `state: "active"` once the app opens the link.
+- Hardened builds only: the daemon's key is present and `0600`, and the app trusts its
+  current pin in `cliPins`.
