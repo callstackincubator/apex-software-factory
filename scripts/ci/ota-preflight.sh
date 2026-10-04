@@ -5,6 +5,7 @@
 #
 #   scripts/ci/ota-preflight.sh       env: HOT_UPDATER_SERVER_URL HOT_UPDATER_AUTH_TOKEN
 #                                          S3_ENDPOINT S3_REGION S3_BUCKET
+#                                          EXPO_PUBLIC_OTA_URL EXPO_PUBLIC_API_URL
 #                                          S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY
 #
 # Never prints a secret: the bearer token reaches curl through its config on
@@ -27,7 +28,7 @@ fail() {
 }
 
 missing=()
-for name in HOT_UPDATER_SERVER_URL HOT_UPDATER_AUTH_TOKEN S3_ENDPOINT S3_REGION S3_BUCKET S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY; do
+for name in HOT_UPDATER_SERVER_URL HOT_UPDATER_AUTH_TOKEN S3_ENDPOINT S3_REGION S3_BUCKET S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY EXPO_PUBLIC_OTA_URL EXPO_PUBLIC_API_URL; do
   [ -n "${!name:-}" ] || missing+=("$name")
 done
 [ ${#missing[@]} -eq 0 ] \

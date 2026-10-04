@@ -21,6 +21,7 @@ classify() {
   case $1 in
     "$mobile"/ios/* | "$mobile"/android/*) echo "native: $1 (generated native project)" ;;
     "$mobile"/app.json | "$mobile"/app.config.*) echo "native: $1 (app config: plugins, ids, permissions, runtime)" ;;
+    "$mobile"/fingerprint.json) echo "native: $1 (native fingerprint regenerated: the booth binary must be rebuilt)" ;;
     "$mobile"/plugins/* | "$mobile"/modules/*) echo "native: $1 (config plugin or local native module)" ;;
     patches/* | "$mobile"/patches/*) echo "native: $1 (patched dependency)" ;;
     *.podspec | *.gradle | *.gradle.kts | */Podfile | */Podfile.lock) echo "native: $1 (native build file)" ;;

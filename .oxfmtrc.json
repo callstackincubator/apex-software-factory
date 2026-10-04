@@ -3,6 +3,7 @@
   "ignorePatterns": [
     "docs/**",
     "pnpm-lock.yaml",
+    "apps/mobile/fingerprint.json",
     "apps/mobile/ios/**",
     "apps/mobile/android/**",
     "**/.expo/**"
