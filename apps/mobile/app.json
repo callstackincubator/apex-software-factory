@@ -10,7 +10,14 @@
     "backgroundColor": "#0A0A0C",
     "ios": {
       "bundleIdentifier": "com.callstack.apexfactory",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "Apex Factory downloads new features from the Callstack booth laptop on this Wi-Fi network."
+      }
     },
     "android": {
       "package": "com.callstack.apexfactory",
@@ -30,6 +37,20 @@
           "backgroundColor": "#0A0A0C",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 96
+        }
+      ],
+      [
+        "@hot-updater/react-native",
+        {
+          "channel": "production"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
         }
       ]
     ],

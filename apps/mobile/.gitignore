@@ -18,3 +18,7 @@ expo-env.d.ts
 *.key
 *.pem
 *.mobileprovision
+
+# hot-updater deploy output (bundles, build artefacts). The exact line keeps
+# `hot-updater deploy` from appending it here on every machine.
+.hot-updater/output
