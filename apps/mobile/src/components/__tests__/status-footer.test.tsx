@@ -1,5 +1,6 @@
 import { createApiClient } from "@apex/contract";
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { Platform } from "react-native";
 
 import { StatusFooter } from "@/components/status-footer";
 
@@ -14,6 +15,13 @@ function clientReturning(response: () => Promise<Response>) {
 }
 
 describe("StatusFooter", () => {
+  // The footer names the platform it runs on, read from Platform.OS at render.
+  const platform = Platform as { OS: string };
+  const realOS = platform.OS;
+  afterEach(() => {
+    platform.OS = realOS;
+  });
+
   it("reports the API as offline when the request fails", async () => {
     const client = clientReturning(() => Promise.reject(new TypeError("Network request failed")));
     await render(<StatusFooter client={client} />);
@@ -51,5 +59,23 @@ describe("StatusFooter", () => {
     expect(screen.getByText("v1.0.0")).toBeOnTheScreen();
     expect(screen.getByText("embedded · production")).toBeOnTheScreen();
     await screen.findByText("offline");
+  });
+
+  it('the footer shows the app version and "iOS" on iOS, with the label "App version 1.0.0 on iOS"', async () => {
+    platform.OS = "ios";
+    const client = clientReturning(() => Promise.reject(new Error("down")));
+    await render(<StatusFooter client={client} />);
+
+    expect(screen.getByText("v1.0.0 · iOS")).toBeOnTheScreen();
+    expect(screen.getByTestId("status-app")).toHaveAccessibleName("App version 1.0.0 on iOS");
+  });
+
+  it('the footer shows the app version and "Android" on Android', async () => {
+    platform.OS = "android";
+    const client = clientReturning(() => Promise.reject(new Error("down")));
+    await render(<StatusFooter client={client} />);
+
+    expect(screen.getByText("v1.0.0 · Android")).toBeOnTheScreen();
+    expect(screen.getByTestId("status-app")).toHaveAccessibleName("App version 1.0.0 on Android");
   });
 });
