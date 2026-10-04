@@ -1,0 +1,14 @@
+# the footer names the platform next to the app version: the App row's label is
+# "App version <version> on iOS" on an iPhone. The version pinned below must
+# match app.json; the Jest footer tests fail on drift (see status-footer.test).
+# Passes on a debug (Metro) or release build, API up or down.
+#
+#   .agents/scripts/device-lane.sh ad replay apps/mobile/e2e/app-platform.ad
+context platform=ios timeout=120000
+env APP_ID=com.callstack.apexfactory
+open ${APP_ID} --relaunch
+wait id="home-headline" 60000
+scroll bottom
+is visible id="status-app"
+is exists "id=\"status-app\" label=\"App version 1.0.0 on iOS\""
+close
