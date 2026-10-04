@@ -1,12 +1,17 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { createApiClient } from "@apex/contract";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 import { Platform } from "react-native";
 
 import { StatusFooter } from "@/components/status-footer";
 
-// jest-expo's expo-constants mock carries no app config. "1.0.0" is the exact
-// version e2e/app-platform.ad pins on the device; the tie test below keeps the
-// two in step so a version bump fails here, not on a simulator run.
+// jest-expo's expo-constants mock carries no app config; the render tests
+// below assert against this fixed version. The real app version lives in
+// app.json, and the tie test at the bottom keeps app.json and the version
+// pinned in e2e/app-platform.ad in step, so a bump fails here, not on a
+// simulator run.
 jest.mock("expo-constants", () => ({
   __esModule: true,
   default: { expoConfig: { version: "1.0.0" } },
@@ -94,8 +99,15 @@ describe("StatusFooter", () => {
   });
 
   it("pins the same app version the e2e script checks on the device", () => {
-    // e2e/app-platform.ad asserts the label "App version 1.0.0 on iOS" against
-    // the real app.json version. If they drift, fail here, not on the device lane.
-    expect(appJsonVersion).toBe("1.0.0");
+    // e2e/app-platform.ad asserts the label "App version <version> on iOS" on
+    // the real app. Read the version pinned in that file and compare it to
+    // app.json: drift on either side fails here, not on the device lane.
+    const adSource = readFileSync(join(__dirname, "../../../e2e/app-platform.ad"), "utf8");
+    const pinned = [...adSource.matchAll(/App version ([0-9][^\s"]*) on iOS/g)].map(
+      (match) => match[1],
+    );
+    // The .ad must pin a version at all, and every pin must be app.json's.
+    expect(pinned.length).toBeGreaterThan(0);
+    expect([...new Set(pinned)]).toEqual([appJsonVersion]);
   });
 });
