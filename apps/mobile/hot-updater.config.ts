@@ -50,8 +50,32 @@ function readEnv(): Env {
   return Object.fromEntries(REQUIRED.map((name) => [name, process.env[name]])) as Env;
 }
 
+/**
+ * `EXPO_PUBLIC_*` values are inlined into the JS bundle, and an OTA bundle
+ * replaces the binary's JS — so a bundle built without them would point the
+ * phone at the localhost defaults and it would never hear from the laptop
+ * again. Deploys must pass the same values the installed binary was built with.
+ */
+const BUNDLE_ENV = ["EXPO_PUBLIC_OTA_URL", "EXPO_PUBLIC_API_URL"] as const;
+
+function requireBundleEnv(): void {
+  const missing = BUNDLE_ENV.filter((name) => !process.env[name]);
+  if (missing.length > 0) {
+    throw new Error(
+      `hot-updater: missing environment variable(s): ${missing.join(", ")}.\n` +
+        "Set them to the values the installed binary was built with " +
+        "(e.g. http://<laptop-lan-ip>:3002/hot-updater and http://<laptop-lan-ip>:3001); " +
+        "see docs/internal/OTA.md.",
+    );
+  }
+}
+
 export default defineConfig({
-  build: expo({ sourcemap: false }),
+  // Only `deploy` builds, so only `deploy` needs the bundle's public env.
+  build: (args) => {
+    requireBundleEnv();
+    return expo({ sourcemap: false })(args);
+  },
 
   // Same bucket as apps/ota-server. The CLI uploads from the laptop, so this
   // is the internal endpoint; devices get URLs presigned by the server.
@@ -81,4 +105,10 @@ export default defineConfig({
   // A bundle only reaches binaries whose native fingerprint matches; deploy
   // refuses when the project no longer matches fingerprint.json.
   updateStrategy: "fingerprint",
+  fingerprint: {
+    // hot-updater hashes native sources of autolinked modules but skips the
+    // Expo config entirely. With CNG, app.json (plugins, Info.plist keys,
+    // permissions, cleartext) *is* native configuration, so hash it too.
+    extraSources: ["app.json"],
+  },
 });
