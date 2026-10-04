@@ -48,35 +48,41 @@ function parseErrorBody(text: string): ErrorResponse | undefined {
  * The error response's body as UTF-8 text, bounded at the read itself (safety
  * rule 3): refuse on a content-length over the cap, otherwise read the stream
  * and cancel it as soon as more than the cap has arrived. Returns undefined
- * when the body is too large, so it is never parsed.
+ * when the body is too large, so it is never parsed. A body that errors or
+ * fails to decode while it is read has no usable body: also undefined, so the
+ * caller falls back. The caller never sees a stream or decoding error.
  */
 async function readErrorBody(response: Response): Promise<string | undefined> {
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_ERROR_BODY_BYTES) {
-    await response.body?.cancel();
-    return undefined;
-  }
-  if (!response.body) return "";
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > MAX_ERROR_BODY_BYTES) {
-      await reader.cancel();
+  try {
+    const declared = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > MAX_ERROR_BODY_BYTES) {
+      await response.body?.cancel();
       return undefined;
     }
-    chunks.push(value);
+    if (!response.body) return "";
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_ERROR_BODY_BYTES) {
+        await reader.cancel();
+        return undefined;
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return undefined;
   }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
 }
 
 /** A typed client for the API. Every response is parsed with its contract schema. */
