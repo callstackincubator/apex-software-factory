@@ -4,11 +4,13 @@ import "@appduct/react-native/auto";
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import type { ReactNode } from "react";
-import { useColorScheme, View } from "react-native";
+import { useColorScheme } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { UpdateBanner } from "@/components/update-banner";
 import { installAgentTools } from "@/dev/agent-tools";
 import { useTrackNavigation } from "@/dev/navigation-state";
+import { AppKeyboardProvider } from "@/lib/keyboard";
 import { initOta } from "@/lib/ota";
 import { useTheme } from "@/theme";
 
@@ -27,21 +29,26 @@ export default function RootLayout() {
   const base = scheme === "light" ? DefaultTheme : DarkTheme;
   useTrackNavigation();
 
+  // Root providers for the native libraries in the binary: gestures
+  // (react-native-gesture-handler) and keyboard handling
+  // (react-native-keyboard-controller). Screens need not add them again.
   return (
-    <ThemeProvider
-      value={{
-        ...base,
-        colors: { ...base.colors, background: theme.background, primary: theme.accentText },
-      }}
-    >
-      <StatusBar style={scheme === "light" ? "dark" : "light"} />
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <Stack screenOptions={{ contentStyle: { backgroundColor: theme.background } }}>
-          <Stack.Screen name="index" options={{ headerShown: false, title: "Apex Factory" }} />
-        </Stack>
-        <UpdateBanner />
-      </View>
-      <DevTools />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.background }}>
+      <AppKeyboardProvider>
+        <ThemeProvider
+          value={{
+            ...base,
+            colors: { ...base.colors, background: theme.background, primary: theme.accentText },
+          }}
+        >
+          <StatusBar style={scheme === "light" ? "dark" : "light"} />
+          <Stack screenOptions={{ contentStyle: { backgroundColor: theme.background } }}>
+            <Stack.Screen name="index" options={{ headerShown: false, title: "Apex Factory" }} />
+          </Stack>
+          <UpdateBanner />
+          <DevTools />
+        </ThemeProvider>
+      </AppKeyboardProvider>
+    </GestureHandlerRootView>
   );
 }
