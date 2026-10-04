@@ -409,7 +409,7 @@ the ready label, as above). Check the pool on the booth Mac:
 ```
 
 The factory runners need `SIMLOCK_BIN` and `SIMLOCK_HOME` in their `.env`
-files ([BOOTSTRAP.md](BOOTSTRAP.md#9-self-hosted-runners)).
+files ([BOOTSTRAP.md](BOOTSTRAP.md#8-self-hosted-runners)).
 
 ### A change needs a native build
 

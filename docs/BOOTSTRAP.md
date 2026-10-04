@@ -17,11 +17,11 @@ home directory (`~/.appduct`, `~/.cache/apex-software-factory`, simlock's
 state) are the ones every job uses. Never paste a secret into a command line,
 an issue or a log; the commands below read secrets from files.
 
-**Order matters when you move machines.** Sections 1–7 only touch the new Mac.
-Section 8 points GitHub at the new Mac: before it, stop the temporary Mac's
-runners ([14.1](#141-pause-the-temporary-mac)). Remove the temporary Mac's
-runners only after the new Mac passed the smoke test
-([14.3](#143-remove-the-old-runners)).
+**Order matters when you move machines.** Set up the new Mac through section
+8 (its runners registered and started), then stop the temporary Mac's runners
+at once. Only then point GitHub at the new Mac (section 9), and remove the
+temporary Mac's runners only after the smoke test passes. The full order and
+the rollback are in [14.1](#141-the-order).
 
 ## Ports
 
@@ -276,7 +276,7 @@ Open a new terminal, then, from the main checkout:
 ```
 
 The factory runners get the same two variables from their `.env` files
-([section 9](#9-self-hosted-runners)).
+([section 8](#8-self-hosted-runners)).
 
 > `/tmp/apex-slk` is what the temporary Mac uses. macOS clears `/tmp` on a
 > restart, so simlock then starts with no simulators and creates them again
@@ -380,7 +380,7 @@ curl http://127.0.0.1:3002/hot-updater/version
 
 Then, from a booth phone on the booth Wi-Fi, open
 `http://<lan-ip>:3002/hot-updater/version` in the browser (the LAN IP is in
-[section 8](#8-point-github-at-this-mac)). If that does not load, no update
+[section 9](#9-point-github-at-this-mac)). If that does not load, no update
 will reach the phone either.
 
 ## 7. The product API
@@ -397,91 +397,22 @@ pnpm --filter @apex/api start
 > hand (Ctrl-C, `git pull`, start) after such a merge. The app works without
 > the API; the footer then says "offline".
 
-## 8. Point GitHub at this Mac
-
-> If the temporary Mac's runners are still running, stop them first
-> ([14.1](#141-pause-the-temporary-mac)). The values below change what every
-> OTA deploy builds; an old runner deploying with them would ship bundles the
-> old phones cannot use.
-
-Find the Mac's LAN IP (Wi-Fi is `en0` on most Macs; try `en1` if it is empty):
-
-```bash
-ipconfig getifaddr en0
-```
-
-Give this IP a DHCP reservation on the booth router. **The IP is compiled into
-the booth binary and into every OTA bundle**: a new IP means a new binary on
-every phone ([section 11](#11-the-booth-binary)).
-
-Set the repository variables. Run these from the main checkout, so `gh` knows
-the repository. The two `EXPO_PUBLIC_*` values use the LAN IP; the others
-point at this Mac's own loopback, because the OTA runner runs here:
-
-```bash
-LAN_IP=$(ipconfig getifaddr en0)
-```
-
-```bash
-gh variable set EXPO_PUBLIC_OTA_URL --body "http://$LAN_IP:3002/hot-updater"
-```
-
-```bash
-gh variable set EXPO_PUBLIC_API_URL --body "http://$LAN_IP:3001"
-```
-
-```bash
-gh variable set HOT_UPDATER_SERVER_URL --body "http://127.0.0.1:3002/hot-updater"
-```
-
-```bash
-gh variable set S3_ENDPOINT --body "http://127.0.0.1:9000"
-```
-
-```bash
-gh variable set S3_REGION --body "$(grep '^S3_REGION=' apps/ota-server/.env | cut -d= -f2-)"
-```
-
-```bash
-gh variable set S3_BUCKET --body "$(grep '^S3_BUCKET=' infra/.env | cut -d= -f2-)"
-```
-
-Set the secrets from this Mac's env files. `gh secret set NAME` reads the value
-from standard input, so it never appears in the terminal or the shell history:
-
-```bash
-grep '^HOT_UPDATER_AUTH_TOKEN=' apps/ota-server/.env | cut -d= -f2- | tr -d '\n' | gh secret set HOT_UPDATER_AUTH_TOKEN
-```
-
-```bash
-grep '^S3_ACCESS_KEY_ID=' infra/.env | cut -d= -f2- | tr -d '\n' | gh secret set S3_ACCESS_KEY_ID
-```
-
-```bash
-grep '^S3_SECRET_ACCESS_KEY=' infra/.env | cut -d= -f2- | tr -d '\n' | gh secret set S3_SECRET_ACCESS_KEY
-```
-
-Check the names (values are never shown):
-
-```bash
-gh variable list && gh secret list
-```
-
-`OTA_MISMATCH_PATTERN` is an optional variable; leave it unset.
-
-## 9. Self-hosted runners
+## 8. Self-hosted runners
 
 Three runners, all on this Mac, all as the maintainer's user, all launchd
-services. Workflows pick runners by label only; the names are for people.
+services. Workflows pick runners by label only. Each Mac names its runners
+after its own host name, so two Macs never collide and the old one can stay
+registered until the new one is proven.
 
-| Directory                    | Name              | Label     | Runs                |
-| ---------------------------- | ----------------- | --------- | ------------------- |
-| `~/actions-runner`           | `booth-ota`       | `ota`     | `ota-publish.yml`   |
-| `~/actions-runner-factory-1` | `booth-factory-1` | `factory` | `factory.yml`       |
-| `~/actions-runner-factory-2` | `booth-factory-2` | `factory` | `factory.yml`       |
+| Directory                    | Name                       | Label     | Runs              |
+| ---------------------------- | -------------------------- | --------- | ----------------- |
+| `~/actions-runner`           | `<host name>-ota`          | `ota`     | `ota-publish.yml` |
+| `~/actions-runner-factory-1` | `<host name>-factory-1`    | `factory` | `factory.yml`     |
+| `~/actions-runner-factory-2` | `<host name>-factory-2`    | `factory` | `factory.yml`     |
 
-GitHub adds the labels `self-hosted`, `macOS` and `ARM64` by itself. On the
-temporary Mac the OTA runner is named `booth-laptop`.
+GitHub adds the labels `self-hosted`, `macOS` and `ARM64` by itself. The
+temporary Mac's runners are named `booth-laptop`, `booth-factory-1` and
+`booth-factory-2`.
 
 **Download the runner.** Find the current macOS ARM64 package:
 
@@ -499,7 +430,12 @@ for d in ~/actions-runner ~/actions-runner-factory-1 ~/actions-runner-factory-2;
 **Register each runner.** Run `config.sh` from a normal login shell where
 `node`, `gh` and `opencode` are on the `PATH`: the runner keeps a snapshot of
 that `PATH` in its `.path` file. A registration token lasts an hour; get a
-fresh one per runner.
+fresh one per runner. Keep the same terminal for all three, so the name prefix
+is set:
+
+```bash
+name_prefix=$(scutil --get LocalHostName)
+```
 
 The OTA runner:
 
@@ -508,19 +444,17 @@ cd ~/actions-runner
 ```
 
 ```bash
-./config.sh --unattended --url https://github.com/callstackincubator/apex-software-factory --name booth-ota --labels ota --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/registration-token -q .token)"
+./config.sh --unattended --url https://github.com/callstackincubator/apex-software-factory --name "${name_prefix}-ota" --labels ota --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/registration-token -q .token)"
 ```
 
-The two factory runners. The temporary Mac already uses these names, so
-`--replace` moves each name to this Mac. Do this only after the temporary
-Mac's runners are stopped ([14.1](#141-pause-the-temporary-mac)):
+The two factory runners:
 
 ```bash
 cd ~/actions-runner-factory-1
 ```
 
 ```bash
-./config.sh --unattended --replace --url https://github.com/callstackincubator/apex-software-factory --name booth-factory-1 --labels factory --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/registration-token -q .token)"
+./config.sh --unattended --url https://github.com/callstackincubator/apex-software-factory --name "${name_prefix}-factory-1" --labels factory --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/registration-token -q .token)"
 ```
 
 ```bash
@@ -528,7 +462,7 @@ cd ~/actions-runner-factory-2
 ```
 
 ```bash
-./config.sh --unattended --replace --url https://github.com/callstackincubator/apex-software-factory --name booth-factory-2 --labels factory --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/registration-token -q .token)"
+./config.sh --unattended --url https://github.com/callstackincubator/apex-software-factory --name "${name_prefix}-factory-2" --labels factory --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/registration-token -q .token)"
 ```
 
 **Give the factory runners simlock.** Each runner's `.env` holds `KEY=value`
@@ -575,8 +509,88 @@ After any change to a runner's `.env`, restart its service
 gh api repos/callstackincubator/apex-software-factory/actions/runners -q '.runners[] | "\(.name) \(.status) \([.labels[].name] | join(","))"'
 ```
 
-Then run the OTA publish in preflight mode. It checks the runner, the settings
-from section 8, the OTA server and MinIO, prints the fingerprints, and deploys
+> If another Mac's runners are still online (the temporary Mac), a job can now
+> land on either Mac. Stop the other Mac's runners straight away
+> ([14.2](#142-stop-the-old-runners)), before anything else.
+
+What each runner needs, and why: [DELIVERY.md, CI and OTA publishing and The
+factory dispatcher](internal/DELIVERY.md#the-factory-dispatcher).
+
+## 9. Point GitHub at this Mac
+
+> Do this only when no other Mac's runners are online
+> ([14.2](#142-stop-the-old-runners)). The values below change what every OTA
+> deploy builds and which server it talks to.
+
+Find the Mac's LAN IP (Wi-Fi is `en0` on most Macs; try `en1` if it is empty):
+
+```bash
+ipconfig getifaddr en0
+```
+
+Give this IP a DHCP reservation on the booth router. **The IP is compiled into
+the booth binary and into every OTA bundle**: a new IP means a new binary on
+every phone ([section 11](#11-the-booth-binary)).
+
+Set the repository variables. Run these from the main checkout, so `gh` knows
+the repository. The two `EXPO_PUBLIC_*` values use the LAN IP; the others
+point at this Mac's own loopback, because the OTA runner runs here (they are
+the same on every Mac):
+
+```bash
+LAN_IP=$(ipconfig getifaddr en0)
+```
+
+```bash
+gh variable set EXPO_PUBLIC_OTA_URL --body "http://$LAN_IP:3002/hot-updater"
+```
+
+```bash
+gh variable set EXPO_PUBLIC_API_URL --body "http://$LAN_IP:3001"
+```
+
+```bash
+gh variable set HOT_UPDATER_SERVER_URL --body "http://127.0.0.1:3002/hot-updater"
+```
+
+```bash
+gh variable set S3_ENDPOINT --body "http://127.0.0.1:9000"
+```
+
+```bash
+gh variable set S3_REGION --body "$(grep '^S3_REGION=' apps/ota-server/.env | cut -d= -f2-)"
+```
+
+```bash
+gh variable set S3_BUCKET --body "$(grep '^S3_BUCKET=' infra/.env | cut -d= -f2-)"
+```
+
+Set the secrets from this Mac's env files: the OTA server and MinIO here only
+accept this Mac's values. `gh secret set NAME` reads the value from standard
+input, so it never appears in the terminal or the shell history:
+
+```bash
+grep '^HOT_UPDATER_AUTH_TOKEN=' apps/ota-server/.env | cut -d= -f2- | tr -d '\n' | gh secret set HOT_UPDATER_AUTH_TOKEN
+```
+
+```bash
+grep '^S3_ACCESS_KEY_ID=' infra/.env | cut -d= -f2- | tr -d '\n' | gh secret set S3_ACCESS_KEY_ID
+```
+
+```bash
+grep '^S3_SECRET_ACCESS_KEY=' infra/.env | cut -d= -f2- | tr -d '\n' | gh secret set S3_SECRET_ACCESS_KEY
+```
+
+Check the names (values are never shown):
+
+```bash
+gh variable list && gh secret list
+```
+
+`OTA_MISMATCH_PATTERN` is an optional variable; leave it unset.
+
+Then run the OTA publish in preflight mode. It checks the OTA runner, the
+settings above, the OTA server and MinIO, prints the fingerprints, and deploys
 nothing:
 
 ```bash
@@ -586,9 +600,6 @@ gh workflow run ota-publish.yml -f preflight_only=true
 ```bash
 gh run watch "$(gh run list --workflow ota-publish.yml --limit 1 --json databaseId -q '.[0].databaseId')"
 ```
-
-What each runner needs, and why: [DELIVERY.md, CI and OTA publishing and The
-factory dispatcher](internal/DELIVERY.md#the-factory-dispatcher).
 
 ## 10. Every morning
 
@@ -632,7 +643,7 @@ Every build of it must have:
 - `APPDUCT_ENABLED=1`. It links appduct and changes the iOS fingerprint;
   `hot-updater.config.ts` refuses any other value.
 - `EXPO_PUBLIC_OTA_URL` and `EXPO_PUBLIC_API_URL` set to exactly the repository
-  variables from section 8. Every OTA bundle is built with those values and
+  variables from section 9. Every OTA bundle is built with those values and
   replaces the binary's JavaScript; a mismatch strands the phone after its
   first update.
 - A clean `main` checkout. Building rewrites `apps/mobile/fingerprint.json`.
@@ -796,25 +807,50 @@ To take a test feature off the phones, a maintainer disables its bundle
 
 ## 14. Move off the temporary Mac
 
-The temporary Mac (user `aitwar`) runs the three runners (`booth-laptop` with
-label `ota`, `booth-factory-1` and `booth-factory-2` with label `factory`),
-MinIO and the OTA server from `/Users/aitwar/Projects/apex-software-factory`,
+The temporary Mac (user `aitwar`) runs the three runners named in
+[section 8](#8-self-hosted-runners), in `~/actions-runner` and
+`~/actions-runner-factory-{1,2}`, MinIO and the OTA server from `/Users/aitwar/Projects/apex-software-factory`,
 simlock with `SIMLOCK_HOME=/tmp/apex-slk`, and the native build cache. The
 repository variables point at its LAN IP, `192.168.1.61`.
 
-Do these steps in order.
+### 14.1 The order
 
-### 14.1 Pause the temporary Mac
+1. **Set up the new Mac fully**: sections 1–8. Its runners are registered and
+   their services started, the OTA stack is up, and the repository variables
+   still point at the old IP.
+2. **Stop the old Mac's runners** ([14.2](#142-stop-the-old-runners)), right
+   after step 1. Do not uninstall or deregister them yet. Two Macs online with
+   the same labels could run an `ota` job on the old Mac, publishing to the
+   wrong OTA server, or a factory job there.
+3. **Switch and prove the new Mac**: point GitHub at it
+   ([section 9](#9-point-github-at-this-mac)), build and install the booth
+   binary ([section 11](#11-the-booth-binary)), run the smoke test
+   ([section 13](#13-smoke-test)).
+4. **Only after the smoke test passes**, remove the old runners
+   ([14.3](#143-remove-the-old-runners)) and clean up the old Mac
+   ([14.4](#144-clean-up-the-temporary-mac)).
 
-Before [section 8](#8-point-github-at-this-mac) on the new Mac. Stopping a
-service is reversible (`./svc.sh start` brings it back), and it keeps jobs
-from landing on the old Mac. First make sure no factory run is in progress:
+**Rollback, before step 4:** stop the new Mac's three runner services
+(`./svc.sh stop` in each directory), start the old Mac's again
+(`./svc.sh start`), and set the repository variables and secrets back to the
+old Mac's values. The old values are still in its env files; the
+`EXPO_PUBLIC_*` variables were `http://192.168.1.61:3002/hot-updater` and
+`http://192.168.1.61:3001`.
+
+### 14.2 Stop the old runners
+
+First make sure no run is in progress on the old Mac:
 
 ```bash
 gh run list --workflow factory.yml --limit 5
 ```
 
-Then, on the temporary Mac:
+```bash
+gh run list --workflow ota-publish.yml --limit 3
+```
+
+Then, on the temporary Mac, stop the three services. This is reversible
+(`./svc.sh start` brings each back):
 
 ```bash
 cd ~/actions-runner && ./svc.sh stop
@@ -828,46 +864,29 @@ cd ~/actions-runner-factory-1 && ./svc.sh stop
 cd ~/actions-runner-factory-2 && ./svc.sh stop
 ```
 
-### 14.2 Set up and verify the new Mac
+Check that only the new Mac's runners are `online`:
 
-Sections 8–13 on the new Mac. Go on only when:
-
-- the three new runners are `online` and the old ones `offline`,
-- the OTA preflight passed,
-- the smoke test merged and the update reached a phone running the new binary.
-
-Until 14.3, you can go back: start the old services again and set the
-variables and secrets back to the temporary Mac's values (its env files still
-hold them). The two factory names now belong to the new Mac (`--replace`), so
-going back also means registering the old factory runners again.
+```bash
+gh api repos/callstackincubator/apex-software-factory/actions/runners -q '.runners[] | "\(.name) \(.status)"'
+```
 
 ### 14.3 Remove the old runners
 
-On the temporary Mac. The OTA runner, `booth-laptop`, is still registered:
-uninstall the service, then remove the registration with a removal token:
+Only after the smoke test passed on the new Mac. On the temporary Mac,
+uninstall each service, then remove its registration with a removal token
+(a token lasts an hour; get a fresh one per runner):
 
 ```bash
-cd ~/actions-runner && ./svc.sh uninstall
+cd ~/actions-runner && ./svc.sh uninstall && ./config.sh remove --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/remove-token -q .token)"
 ```
 
 ```bash
-cd ~/actions-runner && ./config.sh remove --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/remove-token -q .token)"
-```
-
-The factory runners' registrations moved to the new Mac in section 9, so only
-the local service and configuration go. `--local` removes the local files
-without asking GitHub:
-
-```bash
-cd ~/actions-runner-factory-1 && ./svc.sh uninstall && ./config.sh remove --local
+cd ~/actions-runner-factory-1 && ./svc.sh uninstall && ./config.sh remove --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/remove-token -q .token)"
 ```
 
 ```bash
-cd ~/actions-runner-factory-2 && ./svc.sh uninstall && ./config.sh remove --local
+cd ~/actions-runner-factory-2 && ./svc.sh uninstall && ./config.sh remove --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/remove-token -q .token)"
 ```
-
-If you registered the new factory runners under other names instead of
-`--replace`, use the `remove --token` form for these two as well.
 
 Check that only the new Mac's runners are left:
 
@@ -881,7 +900,7 @@ Then delete the three runner directories:
 rm -rf ~/actions-runner ~/actions-runner-factory-1 ~/actions-runner-factory-2
 ```
 
-### 14.4 Stop the services and delete their state
+### 14.4 Clean up the temporary Mac
 
 On the temporary Mac, from `/Users/aitwar/Projects/apex-software-factory`.
 
@@ -970,7 +989,7 @@ rm -f ~/.local/share/opencode/auth.json
 Remove the `SIMLOCK_BIN` and `SIMLOCK_HOME` lines from `~/.zshrc` if you added
 them there.
 
-The repository variables already point at the new Mac (section 8). Check them
+The repository variables already point at the new Mac (section 9). Check them
 one last time:
 
 ```bash

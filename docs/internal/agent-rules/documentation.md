@@ -10,7 +10,10 @@ for rejecting a change even if the prose reads well.
    agent docs — ADRs, agent rules, delivery, templates, OTA internals — live
    under `docs/internal/`, plus `AGENTS.md` at the root. Before adding a doc
    file, decide which reader it is for and put it in the matching place; do
-   not add a third category.
+   not add a third category. One exception: `docs/FACTORY.md` and
+   `docs/BOOTSTRAP.md` are written for the developers and maintainers who run
+   the factory, so they may cite ADRs and link into `docs/internal/`. Every
+   other file directly under `docs/` stays end-user only.
 
 2. **An end-user doc never cites an ADR and never links into
    `docs/internal/`.** A reader using the app does not need to know a decision
@@ -33,7 +36,8 @@ for rejecting a change even if the prose reads well.
 
 6. **Links between the two run in one direction only**: from `docs/internal/`
    out to `docs/` (e.g. `../API.md`) is fine; from `docs/` into
-   `docs/internal/` never is (rule 2).
+   `docs/internal/` never is (rule 2) — except from `docs/FACTORY.md` and
+   `docs/BOOTSTRAP.md`, the two maintainer docs rule 1 names.
 
 7. **A claim in a doc is part of the change.** If a change makes a doc
    paragraph, a comment, a screen's copy or a test title false, the same PR
