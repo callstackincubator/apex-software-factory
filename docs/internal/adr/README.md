@@ -19,3 +19,4 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0011](0011-fewer-stopped-runs.md) | Fewer stopped runs: a spec check before ready, house defaults, assumptions instead of parking | Accepted |
 | [0012](0012-allow-by-default-watchdog-dispatcher.md) | Allow by default with a short deny list, a watchdog per run, and a GitHub Actions dispatcher | Accepted |
 | [0013](0013-booth-binary-bundles-native-capabilities.md) | The booth binary carries the native libraries booth features are likely to need | Accepted |
+| [0014](0014-keep-the-models-reasoning-between-steps.md) | Keep the model's reasoning between steps | Accepted |
