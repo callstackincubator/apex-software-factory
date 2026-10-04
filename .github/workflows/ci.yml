@@ -1,0 +1,126 @@
+name: CI
+
+# The checks every pull request and every push to main must pass.
+# - `check` runs `pnpm check` (typecheck, lint, format check, every package's
+#   tests). Its name is the status `.agents/scripts/merge-pr.sh` requires and
+#   the OTA publish waits for on main; renaming it breaks both.
+# - `native-check` runs `.agents/scripts/native-check.sh` on a PR and keeps the
+#   `needs-native-build` label in step with it (delivery rule 17). It never
+#   fails on a native change: the label parks the PR, the merge gate refuses it.
+# Runs on GitHub-hosted runners only. The self-hosted booth runner never runs
+# CI: it would execute unreviewed pull request code on the booth laptop.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  # A new push to a PR supersedes the run in flight. Each commit on main gets
+  # its own group: a shared group would cancel a queued run, and the OTA
+  # publish waits for `check` on every merged commit.
+  group: ci-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Reads the version from package.json's packageManager pin.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: pnpm check
+        run: pnpm check
+
+  native-check:
+    name: native-check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The script diffs base...head, so it needs the merge base.
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Run native-check.sh against the PR base
+        id: native
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set +e
+          out=$(.agents/scripts/native-check.sh "origin/$BASE_REF" "$HEAD_SHA")
+          code=$?
+          set -e
+          printf '%s\n' "$out"
+          case $code in
+            0) native=no ;;
+            3) native=yes ;;
+            *) echo "::error::native-check.sh failed with exit code $code"; exit "$code" ;;
+          esac
+          echo "native=$native" >>"$GITHUB_OUTPUT"
+          {
+            echo "### Native check"
+            echo
+            if [ "$native" = yes ]; then
+              echo "Native change: cannot ship over the air. Labelled \`needs-native-build\`; a maintainer merges it and ships a binary."
+            else
+              echo "Nothing native changed: ships over the air when merged."
+            fi
+            echo
+            echo '```'
+            printf '%s\n' "$out"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+      # A PR from a fork gets a read-only token; the summary above still says it.
+      - name: Sync the needs-native-build label
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          NATIVE: ${{ steps.native.outputs.native }}
+        with:
+          script: |
+            const label = "needs-native-build";
+            const issue_number = context.payload.pull_request.number;
+            const { data: current } = await github.rest.issues.listLabelsOnIssue({
+              ...context.repo, issue_number, per_page: 100,
+            });
+            const has = current.some((l) => l.name === label);
+            if (process.env.NATIVE === "yes") {
+              if (!has) await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: [label] });
+              core.info(`#${issue_number}: native change, ${label} ${has ? "kept" : "added"}`);
+              return;
+            }
+            if (!has) return;
+            // Only take back a label this job put on. One a person (or an agent
+            // under a maintainer's account) added stays until a person removes it.
+            const events = await github.paginate(github.rest.issues.listEvents, {
+              ...context.repo, issue_number, per_page: 100,
+            });
+            const last = events.filter((e) => e.event === "labeled" && e.label?.name === label).pop();
+            if (last?.actor?.login === "github-actions[bot]") {
+              await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: label });
+              core.info(`#${issue_number}: nothing native any more, ${label} removed`);
+            } else {
+              core.notice(`${label} was added by ${last?.actor?.login ?? "someone"}, not by CI; left in place for a person to remove.`);
+            }

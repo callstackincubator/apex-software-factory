@@ -175,6 +175,77 @@ Manual on purpose: `bug:new` → `bug:triage`, `bug:triage` → `bug:ready`,
 `feature:spec` → `feature:ready`, merging a parked PR, and shipping a native
 build.
 
+## CI and OTA publishing
+
+**CI** (`.github/workflows/ci.yml`) runs on every pull request and every push
+to `main`, on GitHub-hosted Ubuntu only:
+
+- `check` — `pnpm install --frozen-lockfile` and `pnpm check`. This is the
+  required check: `merge-pr.sh` waits until `CI/check` has reported and passed
+  on the PR head, and refuses the merge otherwise. Do not rename the job.
+- `native-check` (PRs only) — runs `.agents/scripts/native-check.sh` against
+  the base branch and adds `needs-native-build` when the diff is native. It
+  removes the label again only if CI added it; a label a person added stays.
+  It does not fail on a native change; the label parks the PR.
+
+A newer push to a PR cancels the run in flight. Branch protection and rulesets
+are not available for this private repo on the organisation's current plan,
+so `merge-pr.sh` is the enforcement. If the plan changes, add a ruleset on
+`main`: require a pull request and the `check` status, with repository admins
+allowed to bypass.
+
+**OTA publish** (`.github/workflows/ota-publish.yml`) runs on the booth
+laptop's self-hosted runner (`runs-on: [self-hosted, ota]`) after each push to
+`main` that touches `apps/mobile/**`, `packages/**` or `pnpm-lock.yaml`, and
+on manual dispatch. It never runs for pull requests: the runner holds the OTA
+credentials and must only run reviewed code. One publish runs at a time, and a
+running one is never cancelled. Steps:
+
+1. Put Node, the pinned pnpm and `gh` on `PATH` (`scripts/ci/runner-env.sh`).
+2. Preflight (`scripts/ci/ota-preflight.sh`): every setting below is present,
+   the OTA server answers `/version` and accepts the token, MinIO is up and
+   the bucket exists. A failure names what to fix, usually "start the OTA
+   stack" from [OTA.md](OTA.md).
+3. `pnpm install --frozen-lockfile`, then print the fingerprints.
+4. Wait for CI's `check` on the same commit (up to 25 minutes). The merge gate
+   checked the PR head, but the squash commit on `main` is a new tree, and a
+   maintainer may push directly. It runs after install, so it rarely adds time.
+5. Deploy iOS, then Android, to `production`, with the merge commit subject
+   and short sha as the message (`scripts/ci/ota-deploy.sh`).
+
+The job summary lists each platform's result and bundle id, the channel, the
+commit and the PR. If the fingerprint does not match the installed binary, the
+job fails with "Needs a native build — not shipped over the air", labels the
+merged PR `needs-native-build` and comments on it. Phones keep the last
+bundle until a maintainer ships a new binary.
+
+Dispatching with `preflight_only` checks the runner and the stack and prints
+the fingerprints without deploying. A dispatch from any branch other than
+`main` never deploys.
+
+Configuration (repository settings → Secrets and variables → Actions). The
+values must match `infra/.env` and `apps/ota-server/.env` on the booth laptop:
+
+| Name                     | Kind     | Value                                          |
+| ------------------------ | -------- | ---------------------------------------------- |
+| `HOT_UPDATER_SERVER_URL` | variable | `http://127.0.0.1:3002/hot-updater`            |
+| `S3_ENDPOINT`            | variable | `http://127.0.0.1:9000`                        |
+| `S3_REGION`              | variable | `S3_REGION` from `apps/ota-server/.env`        |
+| `S3_BUCKET`              | variable | `S3_BUCKET` from `infra/.env`                  |
+| `HOT_UPDATER_AUTH_TOKEN` | secret   | `HOT_UPDATER_AUTH_TOKEN` from `apps/ota-server/.env` |
+| `S3_ACCESS_KEY_ID`       | secret   | `S3_ACCESS_KEY_ID` from `infra/.env`           |
+| `S3_SECRET_ACCESS_KEY`   | secret   | `S3_SECRET_ACCESS_KEY` from `infra/.env`       |
+| `OTA_MISMATCH_PATTERN`   | variable | optional: regex for the fingerprint-mismatch message |
+
+The runner is a launchd service, and its `PATH` is the snapshot in
+`~/actions-runner/.path`, taken when it was installed. That snapshot can point
+at directories that no longer exist (an fnm shell directory, for example), so
+`runner-env.sh` does not rely on it. It looks for Node 22.18 or newer in the
+fnm default alias, Volta, Homebrew and `/usr/local/bin`. It gets the pinned
+pnpm through `.agents/scripts/ensure-pnpm.sh`, and finds `gh` in Homebrew. To
+force a Node, set `APEX_NODE_BIN=<dir>` in `~/actions-runner/.env` and restart
+the service (`cd ~/actions-runner && ./svc.sh stop && ./svc.sh start`).
+
 ## Pointers
 
 - Rules: [agent-rules/](agent-rules/) — delivery, architecture, testing,
@@ -186,4 +257,6 @@ build.
   `opencode.json`
 - Scripts: `.agents/scripts/` — `worktree.sh`, `review-inputs.sh`,
   `native-check.sh`, `sim-lane.sh`, `merge-pr.sh`, `ensure-pnpm.sh`
+- Workflows: `.github/workflows/` — `ci.yml`, `ota-publish.yml`,
+  `issue-state.yml`, `labels.yml`; their helpers are in `scripts/ci/`
 - OTA: [OTA.md](OTA.md)
