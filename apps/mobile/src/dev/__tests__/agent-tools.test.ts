@@ -50,6 +50,7 @@ function makeDeps(overrides: Partial<AgentToolDeps> = {}) {
     api: {
       health: jest.fn(async () => ({ status: "ok" as const, version: "0.1.0", uptimeSeconds: 3 })),
     },
+    clock: jest.fn(() => 0),
     navigation: {
       get: jest.fn(() => ({ pathname: "/", routes: ["/", "/features/[id]", "/settings"] })),
       navigate: jest.fn(),

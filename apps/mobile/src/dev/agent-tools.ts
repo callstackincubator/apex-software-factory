@@ -47,7 +47,7 @@ import {
   previewUpdateBanner,
   type ReadyUpdate,
 } from "@/lib/ota-control";
-import { checkApiHealth } from "@/lib/use-api-health";
+import { checkApiHealth, defaultClock } from "@/lib/use-api-health";
 
 /** Everything the handlers touch, injectable for tests. */
 export type AgentToolDeps = {
@@ -60,6 +60,8 @@ export type AgentToolDeps = {
     "getBundleId" | "getMinBundleId" | "getChannel" | "getFingerprintHash" | "reload"
   >;
   api: Pick<ApiClient, "health">;
+  /** Monotonic clock the API health round trip is measured on. */
+  clock: () => number;
   navigation: {
     get(): NavigationState;
     navigate(path: string): void;
@@ -262,16 +264,24 @@ export function createAgentTools(deps: AgentToolDeps): AnyRegistration[] {
       name: "api_health",
       group: "api",
       description:
-        "Call the product API's /health through the contract client and return what the status footer would show. Read-only.",
+        "Call the product API's /health through the contract client and return what the status footer would show, including the round trip in whole milliseconds when the API answers. Read-only.",
       inputSchema: z.object({}),
       outputSchema: z.object({
         state: z.enum(["ok", "offline"]).describe("offline = unreachable, error, or bad response"),
         version: z.string().optional().describe("API version when ok"),
+        latencyMs: z
+          .number()
+          .int()
+          .optional()
+          .describe("Round trip of the health request in whole ms, when ok"),
         apiUrl: z.string(),
       }),
       timeoutMs: 15_000,
       annotations: { readOnlyHint: true, idempotentHint: true },
-      handler: async () => ({ ...(await checkApiHealth(deps.api)), apiUrl: deps.apiUrl }),
+      handler: async () => ({
+        ...(await checkApiHealth(deps.api, deps.clock)),
+        apiUrl: deps.apiUrl,
+      }),
     }),
   ];
 }
@@ -308,6 +318,7 @@ export function defaultAgentToolDeps(): AgentToolDeps {
     apiUrl: apiBaseUrl,
     hotUpdater: HotUpdater,
     api,
+    clock: defaultClock,
     navigation: {
       get: getNavigationState,
       navigate: (path) => router.navigate(path as Href),
