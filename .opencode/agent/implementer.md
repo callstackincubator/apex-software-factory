@@ -25,14 +25,103 @@ permission:
     "*/.opencode/*": deny
     ".agents/*": deny
     "*/.agents/*": deny
+  # Unattended runs never reach "ask": `opencode run --auto` answers only the
+  # primary agent's asks, so a subagent's ask waits forever. Every action
+  # below ends in allow or deny. A "*" rule overrides the project defaults,
+  # so the safety denies from opencode.json are repeated after the allows.
+  external_directory:
+    "*": deny
+  doom_loop: deny
   bash:
-    gh pr ready*: deny
-    gh pr merge*: deny
-    gh issue edit*: deny
+    "*": deny
+    cd *: allow
+    pwd: allow
+    ls: allow
+    ls *: allow
+    cat *: allow
+    head *: allow
+    tail *: allow
+    wc *: allow
+    grep *: allow
+    rg *: allow
+    find *: allow
+    sed *: allow
+    sort *: allow
+    diff *: allow
+    echo *: allow
+    test *: allow
+    sleep *: allow
+    command -v *: allow
+    mkdir *: allow
+    touch *: allow
+    cp *: allow
+    mv *: allow
+    rm *: allow
+    jq *: allow
+    pnpm *: allow
+    node *: allow
+    git status*: allow
+    git diff*: allow
+    git log*: allow
+    git show*: allow
+    git branch*: allow
+    git fetch*: allow
+    git switch *: allow
+    git checkout *: allow
+    git restore *: allow
+    git add *: allow
+    git rm *: allow
+    git mv *: allow
+    git commit *: allow
+    git merge origin/*: allow
+    git merge-base *: allow
+    git rev-parse *: allow
+    git ls-files*: allow
+    git ls-tree *: allow
+    git worktree list*: allow
+    git push origin *: allow
+    git push -u origin *: allow
+    gh issue view *: allow
+    gh issue list *: allow
+    gh issue create *: allow
+    gh pr view *: allow
+    gh pr list *: allow
+    gh pr diff *: allow
+    gh pr checks *: allow
+    gh pr create *: allow
+    gh pr edit *: allow
+    gh run list *: allow
+    gh run view *: allow
+    gh api graphql *: allow
+    .agents/scripts/ensure-pnpm.sh*: allow
+    .agents/scripts/worktree.sh *: allow
+    .agents/scripts/native-check.sh*: allow
+    git commit --no-verify*: deny
+    git commit -n*: deny
+    git commit * --no-verify*: deny
+    git commit * -n: deny
+    git commit * -n *: deny
+    git push --no-verify*: deny
+    git push * --no-verify*: deny
+    git push --force*: deny
+    git push -f*: deny
+    git push * --force*: deny
+    git push * -f*: deny
+    git push * +*: deny
+    git push * main: deny
+    git push * main *: deny
+    git push * *:main*: deny
+    git push * --delete*: deny
+    git push * -d *: deny
+    git branch -D *: deny
     gh pr edit * --add-label*: deny
-    .agents/scripts/merge-pr.sh*: deny
-    .agents/scripts/sim-lane.sh*: deny
-    .agents/scripts/review-inputs.sh*: deny
+    pnpm publish*: deny
+    pnpm * publish*: deny
+    pnpm release*: deny
+    pnpm run release*: deny
+    pnpm dlx *: deny
+    "*hot-updater deploy*": deny
+    "*hot-updater rollback*": deny
 ---
 
 You are the implementer stage of the Apex Software Factory.

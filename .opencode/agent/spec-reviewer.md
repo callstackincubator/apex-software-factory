@@ -12,6 +12,7 @@ permission:
   edit: deny
   bash: deny
   task: deny
+  doom_loop: deny
   skill: deny
   webfetch: deny
   websearch: deny

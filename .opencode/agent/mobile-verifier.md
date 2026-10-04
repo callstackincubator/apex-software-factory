@@ -5,6 +5,9 @@ color: secondary
 permission:
   edit: deny
   task: deny
+  doom_loop: deny
+  external_directory:
+    "*": deny
   webfetch: deny
   websearch: deny
   skill:
