@@ -2,6 +2,62 @@
   "$schema": "https://opencode.ai/config.json",
   "model": "callstack.ai/callstack/Apex",
   "small_model": "callstack.ai/callstack/Apex",
+  "providers": {
+    "callstack.ai": {
+      "name": "callstack.ai",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://api.callstack.ai/v1"
+      },
+      "models": {
+        "callstack/Apex": {
+          "name": "Apex",
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 262144,
+            "input": 240000,
+            "output": 16384
+          },
+          "settings": {
+            "reasoningEffort": "medium"
+          },
+          "variants": [
+            {
+              "id": "none",
+              "settings": {
+                "reasoningEffort": "none"
+              }
+            },
+            {
+              "id": "low",
+              "settings": {
+                "reasoningEffort": "low"
+              }
+            },
+            {
+              "id": "medium",
+              "settings": {
+                "reasoningEffort": "medium"
+              }
+            },
+            {
+              "id": "xhigh",
+              "settings": {
+                "reasoningEffort": "xhigh"
+              }
+            }
+          ],
+          "compatibility": {
+            "reasoningField": "reasoning"
+          }
+        }
+      }
+    }
+  },
   "default_agent": "build",
   "share": "disabled",
   "mcp": {
