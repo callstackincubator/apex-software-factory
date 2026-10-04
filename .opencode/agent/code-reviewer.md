@@ -48,14 +48,30 @@ permission:
     grep *: allow
     rg *: allow
     wc *: allow
+    pwd: allow
+    echo *: allow
+    test *: allow
+    find *: allow
+    sort *: allow
+    uniq *: allow
+    diff *: allow
+    sed *: allow
+    jq *: allow
+    sleep *: allow
+    command -v *: allow
     pnpm *: allow
     node *: allow
     git diff*: allow
     git status*: allow
+    git rev-parse*: allow
+    git ls-files*: allow
     git checkout .: allow
     git checkout -- *: allow
     git restore *: allow
     .agents/scripts/native-check.sh*: allow
+    git log*: deny
+    git show*: deny
+    gh *: deny
     pnpm publish*: deny
     pnpm * publish*: deny
     pnpm dlx *: deny
@@ -78,6 +94,13 @@ detached worktree checked out at the reviewed commit, with dependencies
 installed. You may run `pnpm check`, `pnpm --filter <package> test`, and any
 command that helps you answer; you may edit code in that worktree to see what
 the suite catches, as long as `git checkout .` restores it before you report.
+
+Your shell runs an allow list: file reading and searching, `pnpm`, `node`,
+`git diff`/`status`/`checkout`/`restore`, and the native check. `git log`,
+`git show` and `gh` are denied on purpose — commit messages and the issue are
+out of bounds for you. A compound command (`a && b`) is refused whole when any
+part is denied, so run commands one at a time; a denial never means the shell
+is unavailable. Answer question 1 by running tests, not by reading them.
 
 Answer two questions, in this order:
 
