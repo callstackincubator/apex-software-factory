@@ -44,12 +44,12 @@ describe("StatusFooter", () => {
     expect(calls).toBe(2);
   });
 
-  it("shows the app version and the embedded bundle placeholder", async () => {
+  it("shows the app version and the running bundle", async () => {
     const client = clientReturning(() => Promise.reject(new Error("down")));
     await render(<StatusFooter client={client} />);
 
     expect(screen.getByText("v1.0.0")).toBeOnTheScreen();
-    expect(screen.getByText("embedded bundle")).toBeOnTheScreen();
+    expect(screen.getByText("embedded · production")).toBeOnTheScreen();
     await screen.findByText("offline");
   });
 });
