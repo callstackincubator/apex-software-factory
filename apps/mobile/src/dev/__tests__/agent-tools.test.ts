@@ -215,14 +215,36 @@ describe("agent tools", () => {
     expect(registration?.annotations?.destructiveHint).toBe(true);
   });
 
-  it("api_health returns the API version through the contract client", async () => {
-    const deps = makeDeps();
+  it("the api_health tool returns latencyMs when the API answers", async () => {
+    // The injected clock advances 42 ms per health call: the tool reports the
+    // round trip in whole milliseconds alongside the version.
+    let t = 0;
+    const deps = makeDeps({
+      clock: () => t,
+      api: {
+        health: async () => {
+          t = 42;
+          return { status: "ok" as const, version: "0.1.0", uptimeSeconds: 3 };
+        },
+      },
+    });
 
     expect(await call(deps, "api_health")).toEqual({
       state: "ok",
       version: "0.1.0",
+      latencyMs: 42,
       apiUrl: "http://192.168.1.20:3001",
     });
+  });
+
+  it("api_health returns the API version through the contract client", async () => {
+    const deps = makeDeps();
+
+    const result = await call(deps, "api_health");
+    expect(result).toMatchObject({ state: "ok", version: "0.1.0" });
+    expect(result.apiUrl).toBe("http://192.168.1.20:3001");
+    // The ok state always carries a measured whole-millisecond round trip.
+    expect(result.latencyMs).toEqual(expect.any(Number));
   });
 
   it("api_health reads any failure as offline, like the status footer", async () => {
