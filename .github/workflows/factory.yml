@@ -1,0 +1,164 @@
+name: Factory
+
+# The dispatcher (ADR 0012): starts one unattended OpenCode run per issue on the booth laptop's
+# self-hosted `factory` runners (booth-factory-1/2), so a label is all it takes.
+#   - feature:ready, task:ready, bug:ready added -> deliver (the factory agent)
+#   - bug:triage added                           -> triage (the triager agent)
+#   - workflow_dispatch with an issue            -> either, by the issue's current label; this is
+#     how issue-state.yml starts a run, because labels set with the workflow token start nothing
+#
+# SECURITY: the runner runs as the maintainer's user, with OpenCode's provider credentials,
+# the maintainer's GitHub login (agents post under it) and the device pool. It runs only code
+# from main (this workflow checks out the default branch, never a PR), only for a label set by
+# someone with write access or by this repository's own automation, and never on
+# pull_request or pull_request_target. Do not add such a trigger.
+#
+# Setup (runners, SIMLOCK_BIN, OpenCode auth): docs/internal/DELIVERY.md, "The factory
+# dispatcher".
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue number to deliver or triage
+        required: true
+        type: string
+
+permissions: {}
+
+# One run per issue at a time; a second trigger for the same issue waits instead of racing the
+# first one for the claim. A running delivery is never cut off.
+concurrency:
+  group: factory-${{ github.event.issue.number || inputs.issue }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  run:
+    name: ${{ github.event.issue.number && format('#{0}', github.event.issue.number) || format('#{0}', inputs.issue) }}
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(fromJSON('["feature:ready","task:ready","bug:ready","bug:triage"]'), github.event.label.name)
+    runs-on: [self-hosted, factory]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      issues: read
+    env:
+      ISSUE: ${{ github.event.issue.number || inputs.issue }}
+      SENDER: ${{ github.event.sender.login || github.actor }}
+      APEX_DISPATCH: "1"
+      AGENT_DEVICE_NO_UPDATE_NOTIFIER: "1"
+    steps:
+      - name: Check who asked
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          case $ISSUE in '' | *[!0-9]*) echo "::error::not an issue number: $ISSUE"; exit 1 ;; esac
+          # The repository's own automation (issue-state.yml) dispatches as github-actions[bot].
+          if [ "$SENDER" = "github-actions[bot]" ]; then
+            echo "Started by this repository's automation."
+            exit 0
+          fi
+          permission=$(gh api "repos/$GH_REPO/collaborators/$SENDER/permission" -q .permission 2>/dev/null || echo none)
+          case $permission in
+            admin | maintain | write) echo "Started by $SENDER ($permission)." ;;
+            *)
+              echo "::error::$SENDER has '$permission' access; only people with write access start the factory."
+              exit 1
+              ;;
+          esac
+
+      - name: Decide what to run
+        id: what
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          labels=$(gh issue view "$ISSUE" --json state,labels -q 'select(.state == "OPEN") | .labels[].name')
+          if printf '%s\n' "$labels" | grep -qxE '(feature|task|bug):ready'; then
+            echo "mode=deliver" >>"$GITHUB_OUTPUT"
+          elif printf '%s\n' "$labels" | grep -qx 'bug:triage'; then
+            echo "mode=triage" >>"$GITHUB_OUTPUT"
+          else
+            echo "#$ISSUE is closed or carries no label agents act on (now: $(echo $labels)); nothing to do."
+            echo "mode=none" >>"$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.what.outputs.mode != 'none'
+        with:
+          ref: ${{ github.event.repository.default_branch || 'main' }}
+          # The agents push and comment as the maintainer through the user's own git and gh
+          # login on this machine. The workflow token must not be left in the git config: a
+          # push made with it would start no CI on the PR.
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Put Node, pnpm, gh and opencode on PATH
+        if: steps.what.outputs.mode != 'none'
+        run: |
+          scripts/ci/runner-env.sh
+          for dir in "$HOME/.opencode/bin" /opt/homebrew/bin; do
+            [ -d "$dir" ] && echo "$dir" >>"$GITHUB_PATH"
+          done
+
+      - name: Install
+        if: steps.what.outputs.mode != 'none'
+        run: |
+          git worktree prune
+          pnpm install --frozen-lockfile
+          # The agents' pushes authenticate as the maintainer through gh's own login (the
+          # checkout above left no token behind); local config only, shared by every worktree.
+          git remote set-url origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git config --local credential.https://github.com.helper ""
+          git config --local --add credential.https://github.com.helper "!$(command -v gh) auth git-credential"
+          (unset GH_TOKEN GITHUB_TOKEN; gh auth status >/dev/null) || { echo "::error::gh is not logged in for the runner's user"; exit 1; }
+          command -v opencode >/dev/null || { echo "::error::opencode not found on the runner"; exit 1; }
+          opencode --version
+          # simlock is not on npm yet: the lanes run the CLI named by SIMLOCK_BIN, set in the
+          # runner's .env file (docs/internal/DELIVERY.md).
+          [ -n "${SIMLOCK_BIN:-}" ] && echo "simlock: SIMLOCK_BIN set${SIMLOCK_HOME:+, SIMLOCK_HOME=$SIMLOCK_HOME}" \
+            || echo "::warning::SIMLOCK_BIN is not set on this runner: simulator checks will report unavailable."
+
+      - name: Run the factory
+        id: factory
+        if: steps.what.outputs.mode != 'none'
+        env:
+          MODE: ${{ steps.what.outputs.mode }}
+        run: |
+          # No GH_TOKEN here: the agents use the maintainer's gh login, like a person at the laptop.
+          unset GH_TOKEN GITHUB_TOKEN
+          if [ "$MODE" = triage ]; then
+            .agents/scripts/factory-run.sh --triage "$ISSUE"
+          else
+            .agents/scripts/factory-run.sh "$ISSUE"
+          fi
+
+      - name: Summary
+        if: always() && steps.what.outputs.mode != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MODE: ${{ steps.what.outputs.mode }}
+          OUTCOME: ${{ steps.factory.outcome }}
+        run: |
+          url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY
+          title=$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null || echo "")
+          labels=$(gh issue view "$ISSUE" --json labels -q '[.labels[].name] | join(", ")' 2>/dev/null || echo "")
+          prs=$(gh pr list --state all --search "$ISSUE in:body" --json number,state,headRefName \
+            -q ".[] | select(.headRefName | test(\"^(task|bug|feature)/$ISSUE$\")) | \"[#\(.number)]($url/pull/\(.number)) (\(.state | ascii_downcase))\"" 2>/dev/null | paste -sd ' ' -)
+          {
+            echo "### Factory $MODE: [#$ISSUE]($url/issues/$ISSUE) $title"
+            echo
+            echo "- Result: $OUTCOME"
+            echo "- PR: ${prs:-none}"
+            echo "- Labels now: ${labels:-none}"
+            echo "- Run logs: \`.worktrees/factory-runs/$ISSUE-*\` in this runner's checkout"
+          } >>"$GITHUB_STEP_SUMMARY"

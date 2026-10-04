@@ -83,43 +83,61 @@ PR and review → deploy record (ADR 0005).
 
 1. A developer runs `/spec <n> technical`. The session reads the code and
    interviews the developer: packages touched (contract first), contract
-   changes, whether anything is native, rules in play, the tests as titles,
-   and — if it is more than one PR — the task slices.
+   changes, whether anything is native (against
+   `docs/internal/NATIVE-CAPABILITIES.md`), rules in play, the tests as
+   titles, and — if it is more than one PR — the task slices. A one-PR booth
+   feature starts from [templates/booth-feature.md](templates/booth-feature.md),
+   pre-filled with the house defaults ([agent-rules/defaults.md](agent-rules/defaults.md)),
+   so only what is specific gets written.
 2. A decision that constrains more than one change becomes an ADR at
    _Proposed_; the feature waits until it is accepted.
-3. When Open questions is empty, every ADR is accepted and the Technical spec
-   is complete, the developer adds `feature:ready`. That label is the
-   developer's signature: everything after it is unattended.
+3. The session ends with a fresh `spec-checker` subagent: contradictions
+   with a rule or ADR, lines nobody could test, failure modes nothing
+   answers, native capabilities the binary lacks. The developer fixes them.
+4. When Open questions is empty, every ADR is accepted, the Technical spec is
+   complete and the spec checker says ready, the developer adds
+   `feature:ready`. That label is the developer's signature: everything after
+   it is unattended, and it starts a run on the booth laptop by itself (see
+   [The factory dispatcher](#the-factory-dispatcher)).
 
 ## Walkthrough 4: unattended delivery
 
-`/deliver <n>` (or `opencode run --agent factory --auto "deliver #<n>"`)
-starts the `factory` agent, which loads the `deliver` skill. It never writes
+A ready label starts `factory.yml`, which runs
+`.agents/scripts/factory-run.sh <n>` (by hand: `/deliver <n>`); it starts the
+`factory` agent, which loads the `deliver` skill. It never writes
 code, reads a diff, or judges a finding; it starts subagents and reasons over
 their report blocks.
 
 1. **Split, if needed.** A Technical spec with Tasks is split into `task:draft`
    sub-issues by the `spec-session` skill in `split` mode. The factory ticks
    each approval box (the developer's `feature:ready` was the approval); the
-   automation promotes each to `task:ready` once its dependencies close.
+   automation promotes each to `task:ready` once its dependencies close, and
+   each promotion starts its own factory run.
 2. **Claim.** The factory assigns itself. The branch is `<kind>/<n>`.
 3. **Implement.** The `implementer` subagent makes a worktree under
    `.worktrees/`, commits the spec's tests red, opens a draft PR (so CI runs
    from the first push), turns them green contract → API → screen, runs
-   `pnpm check`, and runs `native-check.sh`.
+   `pnpm check`, and runs `native-check.sh`. A small gap the spec and the
+   house defaults leave open becomes an `Assumption:` line in the PR body,
+   not a stop.
 4. **Review.** The `review` skill prepares blind inputs with
    `review-inputs.sh` and starts two fresh subagents in parallel. The
    `spec-reviewer` reads only the issue, its parent, linked ADRs and rules,
    and the diff — it cannot read the repository. The `code-reviewer` reads all
    agent rules and the diff, and runs and breaks code in a detached worktree —
-   it cannot see the issue, the PR body, or commit messages. A third fresh
-   subagent, `review-verifier`, reproduces every finding and confirms or
-   rejects it. Confirmed findings go back to the implementer; at most two
-   rounds per run (a run on an issue the maintainer restored to ready starts
-   at round 1 again).
-5. **Simulator.** Lines that need the app running go to `mobile-verifier`. It
+   it cannot see the issue, the PR body, or commit messages; it proves its
+   riskiest claims (three probes at most) with the affected test file, never
+   the whole suite. A third fresh subagent, `review-verifier`, reproduces
+   every blocking finding and confirms or rejects it. Confirmed blocking
+   findings go back to the implementer; nits go into one follow-up comment
+   and never start a round. At most two rounds per run (a run on an issue the
+   maintainer restored to ready starts at round 1 again).
+5. **Simulator, in parallel with the review.** Lines that need the app
+   running go to `mobile-verifier`, started in the same message as the
+   reviewers. It
    leases an iOS simulator from simlock, installs a Release build of the PR's
-   worktree (appduct included, as in the booth binary), checks each line with
+   worktree (appduct included, as in the booth binary; for a JS-only PR the
+   cached binary with the PR's JS swapped in, ADR 0010), checks each line with
    agent-device — snapshots, waits, the PR's `e2e:` replay scripts, appduct
    shortcuts the spec's Agent hooks name — and on a failure adds Rozenite
    evidence from a debug build. Everything goes through `device-lane.sh`, and
@@ -225,11 +243,16 @@ running one is never cancelled. Steps:
    the bucket exists. A failure names what to fix, usually "start the OTA
    stack" from [OTA.md](OTA.md).
 3. `pnpm install --frozen-lockfile`, then print the fingerprints.
-4. Wait for CI's `check` on the same commit (up to 25 minutes). The merge gate
-   checked the PR head, but the squash commit on `main` is a new tree, and a
-   maintainer may push directly. It runs after install, so it rarely adds time.
-5. Deploy iOS, then Android, to `production`, with the merge commit subject
-   and short sha as the message (`scripts/ci/ota-deploy.sh`).
+4. Wait for CI's `check` on the same commit (up to 25 minutes) — unless the
+   merge commit's tree is exactly the tree of the merged PR's head commit and
+   that head's `check` passed, which `scripts/ci/wait-for-check.sh` proves
+   from GitHub's tree ids (a squash merge of an up-to-date branch: the same
+   code, already tested). Anything else waits: a merge that was not up to
+   date makes a new tree, and a maintainer may push directly.
+5. Deploy iOS and Android to `production` at the same time, with the merge
+   commit subject and short sha as the message (`scripts/ci/ota-deploy.sh`).
+6. Nudge paired booth phones with appduct's `ota_check_now`
+   (`scripts/ci/ota-nudge.sh`; best effort, see [OTA.md](OTA.md#booth-phones-appduct-pairing)).
 
 The job summary lists each platform's result and bundle id, the channel, the
 commit and the PR. If the fingerprint does not match the installed binary, the
@@ -264,20 +287,74 @@ pnpm through `.agents/scripts/ensure-pnpm.sh`, and finds `gh` in Homebrew. To
 force a Node, set `APEX_NODE_BIN=<dir>` in `~/actions-runner/.env` and restart
 the service (`cd ~/actions-runner && ./svc.sh stop && ./svc.sh start`).
 
+## The factory dispatcher
+
+`.github/workflows/factory.yml` turns labels into runs (ADR 0012). It runs on
+the booth laptop's self-hosted runners labelled `factory` —
+`booth-factory-1` and `booth-factory-2`, launchd services in
+`~/actions-runner-factory-1` and `-2`, registered to this repository and
+running as the maintainer's user — so two issues are delivered side by side.
+
+| Trigger | Run |
+| --- | --- |
+| `feature:ready`, `task:ready` or `bug:ready` added | `factory-run.sh <n>`: the `factory` agent delivers it |
+| `bug:triage` added | `factory-run.sh --triage <n>`: the `triager` agent |
+| `workflow_dispatch` with `issue` | either, by the issue's current label |
+| `issue-state.yml` promoting a task or a bug | a `workflow_dispatch` (labels set with the workflow token start no workflow) |
+
+A run acts only when the label's sender has write access or is this
+repository's automation, never on a pull request, and checks out `main`.
+Runs for one issue queue behind each other (concurrency group per issue);
+the job times out after 90 minutes, and `factory-run.sh`'s watchdog stops a
+run with no progress for 15 minutes, restarts it once from the branch, and
+otherwise leaves the handoff. The job summary links the issue and the PR;
+the full run logs stay on the laptop under the runner's checkout,
+`.worktrees/factory-runs/`.
+
+Runner setup (once per runner directory, as the maintainer's user):
+
+- **simlock**: until it is on npm, the lanes need the CLI and its state
+  directory. Put them in the runner's `.env` (key=value lines the runner
+  hands to every job) and restart the service:
+
+  ```sh
+  cd ~/actions-runner-factory-1
+  printf 'SIMLOCK_BIN=node /Users/aitwar/Projects/simlock/dist/cli/main.js\nSIMLOCK_HOME=/tmp/apex-slk\n' >> .env
+  ./svc.sh stop && ./svc.sh start
+  ```
+
+  `SIMLOCK_HOME` must be the one the running simlock daemon uses
+  (`/tmp/apex-slk` on the dev Mac). Without `SIMLOCK_BIN` the job warns and
+  simulator checks report `unavailable`.
+- **OpenCode**: `~/.opencode/bin/opencode`, with the provider config in
+  `~/.config/opencode/opencode.json` and the login in
+  `~/.local/share/opencode/auth.json` — the runner runs as the same user, so
+  the maintainer's login applies. The run uses `--standalone`, so it inherits
+  the job's environment.
+- **GitHub**: the agents post, push and open PRs as the maintainer, through
+  `gh`'s own login (`gh auth status` as that user); the workflow points the
+  checkout's git credential helper at `gh auth git-credential`. The workflow
+  token is never used for that: a push made with it would start no CI.
+- **Node, pnpm, gh** come from `scripts/ci/runner-env.sh`, as for the OTA
+  runner.
+
 ## Pointers
 
 - Rules: [agent-rules/](agent-rules/) — delivery, architecture, testing,
   documentation, safety
 - Templates: [templates/feature.md](templates/feature.md),
+  [templates/booth-feature.md](templates/booth-feature.md),
   [templates/task.md](templates/task.md)
 - Forms: `.github/ISSUE_TEMPLATE/`; PR body: `.github/pull_request_template.md`
 - Skills: `.agents/skills/`; agents and commands: `.opencode/`; config:
   `opencode.json`
 - Scripts: `.agents/scripts/` — `worktree.sh`, `review-inputs.sh`,
-  `native-check.sh`, `device-lane.sh`, `merge-pr.sh`,
-  `check-agent-permissions.sh`, `ensure-pnpm.sh`
+  `native-check.sh`, `device-lane.sh`, `merge-pr.sh`, `factory-run.sh`,
+  `prewarm.sh`, `check-agent-permissions.sh`, `ensure-pnpm.sh`; the native
+  build cache in `tools/expo-build-cache/`
 - Workflows: `.github/workflows/` — `ci.yml`, `ota-publish.yml`,
-  `issue-state.yml`, `labels.yml`; their helpers are in `scripts/ci/`
+  `factory.yml`, `issue-state.yml`, `labels.yml`; their helpers are in
+  `scripts/ci/`
 - OTA: [OTA.md](OTA.md)
 - Devices (simlock, agent-device, appduct, Rozenite host setup): [DEVICES.md](DEVICES.md),
   [ADR 0007](adr/0007-device-lane-simlock-agent-device.md)

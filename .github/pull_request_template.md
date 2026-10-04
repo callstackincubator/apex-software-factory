@@ -23,6 +23,13 @@ ticked with how it was checked. -->
 .agents/scripts/native-check.sh. A native change is labelled
 needs-native-build and is never merged by an agent. -->
 
+## Assumptions
+
+<!-- Small gaps the spec, the rules and docs/internal/agent-rules/defaults.md left
+open, each closed the conservative way: "- Assumption: <question> — <choice and
+why>". Visible proposals, not spec changes (delivery rule 3); the spec review
+checks each line. "none" when there are none. -->
+
 ## Review
 
 <!-- Filled in by the review stage after the spec review and the code review:

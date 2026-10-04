@@ -8,7 +8,7 @@ up, check and recover the host side. The tools:
 | agent-device | `0.21.20`, root devDependency | `pnpm install` | every agent interaction with a device |
 | appduct | `0.14.0`, root devDependency (CLI) + `@appduct/react-native` in the app | `pnpm install` | shortcuts into the running app (tools, events) |
 | Rozenite | `2.4.0`, `apps/mobile` devDependencies | `pnpm install` | debugging a debug build through Metro |
-| simlock | not yet | — | simulator leasing; see [Still to come](#still-to-come-simlock) |
+| simlock | 0.3.0, not on npm yet | the maintainer (`SIMLOCK_BIN`) | simulator and emulator leasing; see [simlock](#simlock) |
 
 How an agent uses them, command by command, is in
 [apps/mobile/README.md](../../apps/mobile/README.md#agent-tooling). This file
@@ -126,22 +126,62 @@ again.
 | `rozenite agent session stop` hangs | Seen on 2.4.0; interrupt it — the session ends with Metro or the app. |
 | Two targets with the same name in `rozenite agent targets` | Another app on the laptop uses this Metro. Read `app_info` through `app.app_info` to confirm the target. |
 
-## Still to come: simlock
+## simlock
 
-simlock (simulator leasing) is not wired yet; until it is, one simulator is
-shared and agents serialize on it (delivery rule 16, `sim-lane.sh`). When it
-lands it adds a root devDependency `simlock`, a lease step before any
-agent-device call (`simlock lease --detach --ttl …`, one lease per lane), and
-on simlock 0.3.0 a private device set that every command must name:
-agent-device `--ios-simulator-device-set ~/.simlock/devices/ios` (or
-`iosSimulatorDeviceSet` in `~/.agent-device/config.json`), and appduct pairing
-through `agent-device open <url>` rather than `--open ios-sim`, which only
-sees the default set.
+Every lane leases its device from simlock through
+`.agents/scripts/device-lane.sh` (ADR 0007, delivery rule 16). simlock 0.3.0
+keeps its simulators in a private device set and its emulators behind its
+own adb server; the lane passes both to agent-device on every call, and pairs
+appduct by opening the link with agent-device, because `appduct sessions link
+--open ios-sim` only sees the default set.
+
+simlock is not on npm yet, so the lane runs the CLI named by `SIMLOCK_BIN`, a
+command line, with its state under `SIMLOCK_HOME` (keep it short: it holds
+sockets):
+
+```sh
+export SIMLOCK_BIN="node /Users/aitwar/Projects/simlock/dist/cli/main.js"
+export SIMLOCK_HOME=/tmp/apex-slk
+.agents/scripts/device-lane.sh status       # the daemon, its capacity and queue
+```
+
+The factory runners get both from their `.env` files (see
+[DELIVERY.md](DELIVERY.md#the-factory-dispatcher)). Once simlock is a root
+devDependency, `pnpm exec simlock` wins and the variables can go.
+
+## Native build cache
+
+`device-lane.sh build` reuses a native build when it can (ADR 0010). The key
+is the platform, the profile and the OTA fingerprint
+(`pnpm --filter @apex/mobile run ota:fingerprint` prints it); the entries live
+in `~/.cache/apex-software-factory/native/<platform>/<fingerprint>/<profile>/`.
+
+- **Hit, Release**: a copy of the cached app with this worktree's JS bundle
+  (Hermes bytecode), assets and Expo config swapped in. No Xcode, no build
+  slot; well under a minute.
+- **Hit, Debug**: the cached app as it is (it loads JS from Metro).
+- **Miss**: a full build in a build slot, then the binary is stored under the
+  hash it embeds. Precompiled Expo modules and React Native's prebuilt core
+  keep a warm-machine Release build around 4 minutes; third-party native
+  libraries compile from source.
+
+```sh
+node tools/expo-build-cache/cli.js list                       # what is cached
+node tools/expo-build-cache/cli.js fingerprint ios apps/mobile
+APEX_BUILD_CACHE=0 .agents/scripts/device-lane.sh build ios release   # force a full build
+```
+
+The same cache serves `npx expo run:ios|android` for simulator and emulator
+builds once `apps/mobile/app.json` has
+`"buildCacheProvider": { "plugin": "../../tools/expo-build-cache/provider.plugin.js" }`.
+Delete a bad entry with `rm -rf` on its directory. `.agents/scripts/prewarm.sh`
+fills the cache for the current fingerprint and warms simlock's pool and
+agent-device's runner each morning.
 
 ## Machine setup log
 
 Machine-level steps taken on the **temporary dev Mac** (4 Oct 2026) while
-wiring these tools, in order. The OTA side is in
+wiring these tools, in order (steps 12 on: the factory-speed wave). The OTA side is in
 [OTA.md](OTA.md#machine-setup-log). No secrets here.
 
 1. `pnpm install` in the agent worktree (nothing global). The rozenite CLI
@@ -181,3 +221,11 @@ wiring these tools, in order. The OTA side is in
     `app_info` and `show_update_banner` answered from the Release build.
     The emulator was shut down afterwards (`adb emu kill`). An OTA deploy to
     Android was not exercised.
+12. Native build cache created by the first lane build:
+    `~/.cache/apex-software-factory/native/ios/e69a1971…/release/ApexFactory.app`
+    (a full Release build, 244 s). Nothing else is installed for it.
+13. The factory runners' `~/actions-runner-factory-{1,2}/.env` got
+    `SIMLOCK_BIN=node /Users/aitwar/Projects/simlock/dist/cli/main.js` and
+    `SIMLOCK_HOME=/tmp/apex-slk` (the simlock daemon already running from
+    earlier testing), and both services were restarted
+    (`./svc.sh stop && ./svc.sh start` in each directory).

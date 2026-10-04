@@ -1,6 +1,6 @@
 # 0004 — The factory runs on OpenCode with one model
 
-Status: Accepted
+Status: Accepted (amended by [0008](0008-reasoning-variants-of-the-one-model.md))
 
 ## Context
 
@@ -12,7 +12,9 @@ every stage runs in OpenCode, and exactly one model is available:
 ## Decision
 
 - `opencode.json` sets `model` (and `small_model`) once. No agent, command or
-  skill names a model; every subagent inherits it.
+  skill names another model. An agent may name the same model to pick a
+  reasoning variant: a variant is the same model with a different reasoning
+  effort, not a second model (ADR 0008). Every other agent inherits it.
 - Skills live in `.agents/skills/<name>/SKILL.md` with only `name` and
   `description` in the frontmatter. Stages that must run in a fresh context
   are OpenCode subagents in `.opencode/agent/` (`mode: subagent`), each
@@ -27,6 +29,7 @@ every stage runs in OpenCode, and exactly one model is available:
 
 ## Consequences
 
-Switching the model is a one-line change. Reviews cannot lean on a different
+Switching the model is a one-line change in `opencode.json` plus the same
+search-and-replace in the agent files that pick a variant (ADR 0008). Reviews cannot lean on a different
 model's blind spots, so the blind-input discipline in the review skill is
 load-bearing.

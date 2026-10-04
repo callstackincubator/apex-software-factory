@@ -8,9 +8,12 @@
 #                                               "iPhone 17 Pro" / "Pixel 8"); waits in simlock's
 #                                               queue up to APEX_LEASE_WAIT seconds per call (540)
 #   device-lane.sh build <ios|android> <release|debug>
-#                                               detached native build of this worktree's app,
-#                                               prints the log path; <log>.exit and
-#                                               <log>.artifact appear when it ends. Needs no lease.
+#                                               detached build of this worktree's app, prints the
+#                                               log path; <log>.exit and <log>.artifact appear
+#                                               when it ends. Needs no lease. A cached binary with
+#                                               the same native fingerprint is reused (JS swapped
+#                                               in for release) instead of compiling: seconds,
+#                                               not minutes (tools/expo-build-cache).
 #   device-lane.sh install [path]               install the last successful build on the device
 #   device-lane.sh metro <start|stop>           Metro for a debug build (WITH_ROZENITE=true,
 #                                               APPDUCT_ENABLED=1) on this lane's own port
@@ -385,6 +388,29 @@ build_job() {
   platform=$1
   profile=$2
   log=$3
+  started=$(date +%s)
+  # The native build cache (tools/expo-build-cache, ADR 0010), shared with `expo run`: keyed by
+  # the OTA fingerprint, so a JS-only change installs a cached binary with this checkout's JS
+  # swapped in instead of compiling native code. A miss builds and fills the cache.
+  # APEX_BUILD_CACHE=0 always builds.
+  cache_cli="$root/tools/expo-build-cache/cli.js"
+  native_fp=
+  if [ "${APEX_BUILD_CACHE:-1}" != 0 ] && [ -f "$cache_cli" ]; then
+    if native_fp=$(node "$cache_cli" fingerprint "$platform" "$mobile"); then
+      echo "native fingerprint ($platform): $native_fp"
+      if artifact=$(node "$cache_cli" resolve "$platform" "$profile" "$mobile" "$native_fp" "$state_dir/build-cache/$platform-$profile"); then
+        echo "$artifact" >"$log.artifact"
+        echo "$artifact" >"$state_dir/artifact-$platform"
+        echo "build cache: hit, no native build ($(($(date +%s) - started))s)"
+        echo "built $artifact"
+        return 0
+      fi
+      echo "build cache: miss for $platform $profile $native_fp; building"
+    else
+      native_fp=
+      echo "build cache: no fingerprint; building without the cache"
+    fi
+  fi
   acquire_build_slot "$log"
   # Prebuild rewrites apps/mobile/fingerprint.json for the binary it describes. That file is
   # committed only with a native change (ADR 0003), so a lane build puts a clean one back.
@@ -397,7 +423,9 @@ build_job() {
   cd "$mobile"
   # One build profile for every binary (ADR 0007): appduct is linked in Debug and Release.
   export APPDUCT_ENABLED=1 LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
-  unset WITH_ROZENITE
+  # Precompiled Expo Modules (on by default since SDK 56) keep a cold iOS build short; nothing
+  # in a lane may turn them off.
+  unset WITH_ROZENITE EXPO_USE_PRECOMPILED_MODULES
   case $platform in
     ios)
       pnpm exec expo prebuild --platform ios --no-install
@@ -424,9 +452,16 @@ build_job() {
     echo "build finished but $artifact is missing"
     exit 1
   }
+  # Fill the cache under the hash the binary embeds (prebuild just wrote it to fingerprint.json).
+  if [ -n "$native_fp" ]; then
+    embedded=$(node -e 'try { console.log(require(process.argv[1])[process.argv[2]].hash) } catch {}' "$mobile/fingerprint.json" "$platform")
+    [ -z "$embedded" ] || [ "$embedded" = "$native_fp" ] || echo "build cache: the binary embeds $embedded, not $native_fp; caching it under $embedded"
+    node "$cache_cli" store "$platform" "$profile" "${embedded:-$native_fp}" "$artifact" "$(git rev-parse --short HEAD)" \
+      || echo "build cache: could not store the build (the build itself is fine)"
+  fi
   echo "$artifact" >"$log.artifact"
   echo "$artifact" >"$state_dir/artifact-$platform"
-  echo "built $artifact"
+  echo "built $artifact ($(($(date +%s) - started))s)"
 }
 
 cmd_build() {

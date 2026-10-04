@@ -18,7 +18,9 @@ Rule 16 in `docs/internal/agent-rules/delivery.md`, rule 2 in
 and report. You do not fix anything, and you do not edit the app.
 
 Arguments: the PR number, its branch, the Done when lines to check, the `e2e:` scripts if the
-orchestrator knows them, and the spec's Agent hooks if it has any.
+orchestrator knows them, and the spec's Agent hooks if it has any. You run in parallel with the
+two code reviews of the same commit (delivery rule 14): never wait for them, and never read
+their worktree.
 
 Load the `agent-device` skill now; load `appduct` when the Agent hooks name a tool, and
 `rozenite` only for a failure (step 6).
@@ -61,11 +63,13 @@ The build holds no device, so start it first and lease while it runs:
 From the moment `lease` returns 0 until your report, every path out of this skill — pass,
 fail, an error, a step you cannot finish — goes through step 7 first.
 
-Then wait for the build, one short call at a time (a cold build takes 10 to 20 minutes, later
-ones a few):
+Then wait for the build, one short call at a time. A JS-only PR reuses the cached binary for
+its native fingerprint and swaps the PR's JS bundle in (ADR 0010): ready in under a minute, the
+log says `build cache: hit`. A native change, or a fingerprint nobody built yet, compiles once
+(minutes) and fills the cache:
 
 ```bash
-sleep 90; cat "<log>.exit" 2>/dev/null || echo running
+sleep 20; cat "<log>.exit" 2>/dev/null || echo running
 ```
 
 The build may first wait for a build slot another lane holds; the log says so. A non-zero exit

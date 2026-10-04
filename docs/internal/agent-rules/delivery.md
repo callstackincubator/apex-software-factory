@@ -98,12 +98,20 @@ open, done means closed as completed.
    log. If Blocked on is anything but "nothing", the agent also moves the
    issue to `<kind>:blocked`.
 
-3. **The body is the spec. Comments are discussion.** Whoever implements an
-   issue reads its body, the documents it links, the latest `## Handoff`
-   comment if there is one, and for a bug the triage report — never the rest
-   of the comment thread. A comment changes nothing until a spec session
-   folds it into the body. The body is cumulative: sections are added and
-   amended in place, and GitHub's edit history is the record of what changed.
+3. **The body is the spec. Comments are discussion. Assumptions are
+   proposals.** Whoever implements an issue reads its body, the documents it
+   links, the house defaults (`defaults.md`), the latest `## Handoff` comment
+   if there is one, and for a bug the triage report — never the rest of the
+   comment thread. A comment changes nothing until a spec session folds it
+   into the body. The body is cumulative: sections are added and amended in
+   place, and GitHub's edit history is the record of what changed. A small
+   gap that the body, these rules and the defaults all leave open is closed
+   by the implementer the conservative way and recorded as an `Assumption:`
+   line in the PR body: a visible proposal the reviewers check and a person
+   may reject, never a change to the spec. Delivery stops for a person only
+   when building would contradict the body, a rule or an accepted ADR, or
+   would decide something a user notices that only a person should decide
+   (ADR 0011).
 
 4. **Every spec session starts by reconciling.** Before writing anything, the
    session fetches every comment created after the body's `lastEditedAt`, on
@@ -130,7 +138,11 @@ open, done means closed as completed.
    change in `packages/contract`, the routes and screens, whether the change
    is native (rule 17), the rules in this directory that are in play, and the
    tests to write phrased as claims. A feature or task with an empty Technical
-   spec is not ready no matter what anyone says in a comment.
+   spec is not ready no matter what anyone says in a comment. It writes only
+   what `defaults.md` does not already answer, and the session ends with a
+   fresh `spec-checker` subagent whose findings (contradictions, untestable
+   lines, missing failure modes, native capabilities the binary lacks) the
+   developer resolves before setting the ready label (ADR 0011).
 
 8. **Triage produces a report, not a fix.** An agent working `bug:triage`
    reproduces the bug as a failing test whose title states the claim the test
@@ -195,23 +207,31 @@ open, done means closed as completed.
     allowed to see. `.agents/scripts/review-inputs.sh` prepares those inputs,
     and nothing else may be handed to a reviewer.
     The _spec review_ gets the issue body, its parent feature, the ADRs under
-    Decisions, the files under Rules in play, a bug's triage report, and the
-    diff — never the other rules, the PR body, commit messages or comments. It
+    Decisions, the files under Rules in play, `defaults.md`, the PR body's
+    `Assumption:` lines, a bug's triage report, and the diff — never the
+    other rules, the rest of the PR body, commit messages or comments. It
     answers: is every line of Scope and Done when delivered, does the diff do
-    anything the spec did not ask for, and does every test title state a claim
-    the spec made. It reads; it runs nothing.
+    anything the spec did not ask for, does every test title state a claim
+    the spec made, and is every assumption conservative and consistent with
+    the spec. It reads; it runs nothing.
     The _code review_ gets every file in this directory, the ADR index, the
     diff, and a detached worktree of the PR head — never the issue, the PR
     body or the commit messages. It answers, in this order: for each changed
     function, what input, state, or interleaving makes it wrong; and does the
-    diff break a rule in this directory. It may run the suite, delete a
-    changed path, or break code to see what stays green (testing rules 2 and
-    3), restoring the tree afterwards.
+    diff break a rule in this directory. It proves claims with the affected
+    test file only, never the full `pnpm check` (CI runs that), and makes at
+    most three break-and-rerun probes, on its riskiest claims (testing rules 2
+    and 3), restoring the tree afterwards. The simulator check of the same
+    commit runs in parallel with both reviews.
     Each finding is one defect: a claim, the evidence as `file:line` or a
-    command and its output, and _blocking_ or _note_. A finding is a claim,
-    not a fact: it is verified against the code before anyone acts on it. A
-    confirmed finding is fixed and the review that raised it runs again; a
-    rejected one is listed in the PR body under `## Review` with the reason.
+    command and its output, and a severity. _Blocking_: it breaks behaviour,
+    leaks data, or breaches a rule or the spec. _Nit_: anything else. A
+    blocking finding is a claim, not a fact: it is verified against the code
+    before anyone acts on it. A confirmed blocking finding is fixed and the
+    review that raised it runs again; a rejected one is listed in the PR body
+    under `## Review` with the reason. Nits never start another round: they
+    are posted once, as one follow-up comment on the PR, or as a `bug:new`
+    issue when one is a separate piece of work (ADR 0009).
     Two rounds at most: a blocking finding still confirmed after the second
     round means the agent hands off and leaves the PR in draft. Rounds are
     counted per delivery run: when the maintainer restores a parked issue to
@@ -280,7 +300,7 @@ steps. `deliver` is the orchestrator: it claims, then hands each stage to an
 OpenCode subagent that starts in a fresh context and returns a fixed report —
 `implementer`; `spec-reviewer`, `code-reviewer` and `review-verifier`, started
 by the `review` skill; `mobile-verifier`; and after a merge `ota-verifier`.
-Subagents never start subagents. `intent`, `spec-session` and `triage-bug`
+Subagents never start subagents. `intent`, `spec-session` (which ends a technical session with the `spec-checker` subagent) and `triage-bug`
 cover the rest; `agent-device`, `appduct` and `rozenite` are how any of them
 works with a device.
 
@@ -309,6 +329,16 @@ works with a device.
   runs for three days; a crashed agent must not hold an issue through it).
 - A pull request from a `<kind>/<n>` branch fails its check unless its body
   closes `#<n>` and nothing else.
+
+`.github/workflows/factory.yml` is the dispatcher (ADR 0012). On the booth
+laptop's self-hosted `factory` runners it starts one unattended run per
+issue — `deliver` when `feature:ready`, `task:ready` or `bug:ready` is added,
+`triage` when `bug:triage` is — through `.agents/scripts/factory-run.sh`, a
+watchdog with a hard and a no-progress timeout. It acts only on a label set
+by someone with write access or by this repository's own automation, and
+never on a pull request. Labels the workflow token sets start no workflow,
+so `issue-state.yml` dispatches `factory.yml` itself when it promotes an
+issue to a state agents act on.
 
 The judgment calls stay manual by design: `bug:new` → `bug:triage`,
 `bug:triage` → `bug:ready`, and `feature:spec` → `feature:ready`.

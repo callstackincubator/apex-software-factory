@@ -90,10 +90,17 @@ function requireBundleEnv(): void {
 }
 
 export default defineConfig({
-  // Only `deploy` builds, so only `deploy` needs the bundle's public env.
+  // Only `deploy` builds, so only `deploy` needs the bundle's public env. Each platform bundles
+  // into its own directory (dist/<platform>), because CI deploys iOS and Android at the same
+  // time and the plugin empties its output directory before bundling.
   build: (args) => {
     requireBundleEnv();
-    return expo({ sourcemap: false })(args);
+    const plugin = expo({ sourcemap: false })(args);
+    return {
+      ...plugin,
+      build: (options) =>
+        expo({ sourcemap: false, outDir: `dist/${options.platform}` })(args).build(options),
+    };
   },
 
   // Same bucket as apps/ota-server. The CLI uploads from the laptop, so this

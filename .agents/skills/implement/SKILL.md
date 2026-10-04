@@ -6,8 +6,8 @@ description: Implement one claimed issue (task, bug, or single-PR feature) tests
 # Implement an issue
 
 Rules 3, 7, 9, 13 and 17 in `docs/internal/agent-rules/delivery.md`, all of
-`docs/internal/agent-rules/testing.md` and
-`docs/internal/agent-rules/architecture.md` govern this skill. The issue body
+`docs/internal/agent-rules/testing.md`, `docs/internal/agent-rules/architecture.md`
+and `docs/internal/agent-rules/defaults.md` govern this skill. The issue body
 is the spec. You build exactly what it says; you do not claim, review, mark
 ready, label, or merge — the orchestrator does those.
 
@@ -37,12 +37,37 @@ The issue body; for a task, its parent's body and the ADRs under Decisions;
 for a bug, the triage report (its Simplest fix is the agreed approach); the
 latest `## Handoff` comment, whose Findings are facts. Never the rest of the
 comment thread. Reread the files under Rules in play before touching the code
-they cover.
+they cover, and `docs/internal/agent-rules/defaults.md`, the house answers
+for whatever the spec leaves unsaid (loading and error states, retries, empty
+states, limits, accessibility labels, appduct hooks, offline behaviour, copy).
 
-If the spec is wrong, contradicts itself, or cannot be built as written,
-stop: push what you have and report it under Open as `spec needs: <line>`.
-Do not work around it. The same applies when the build turns out to need a
-native change the spec's Native change line does not admit (rule 17).
+Before you add a dependency or rely on a native module, permission or config
+key, check `docs/internal/NATIVE-CAPABILITIES.md`: it lists what the installed
+booth binary has. A capability it does not list needs a native build.
+
+**A gap is an assumption, not a stop** (rule 3). When the spec, the rules and
+`defaults.md` leave a small question open (a label's wording, a sort order,
+which existing component to reuse, a bound the spec implies but does not
+number), take the conservative option — the smallest change, the one that
+matches existing behaviour, the one easiest to undo — build it, and record it
+in the PR body's `## Assumptions` section, one line each:
+
+```markdown
+## Assumptions
+
+- Assumption: <the question, in a few words> — <what you chose and why it is the conservative option>.
+```
+
+An assumption is a visible proposal, not a spec change: the spec reviewer
+checks every line, and a person can reject one in review.
+
+Stop only when building would contradict a line of the spec, an agent rule or
+an accepted ADR, or would decide something a user would notice that only a
+person should decide (a new screen's purpose, what data is shown or kept, a
+limit a visitor will hit). Then push what you have and report it under Open
+as `spec needs: <line>`. Do not work around it. The same applies when the
+build turns out to need a native change the spec's Native change line does
+not admit (rule 17).
 
 ## 3. Red tests first (`build` mode)
 
@@ -95,6 +120,10 @@ Implement: red (0/<n> green) Review: pending Simulator: <pending | n/a> Native: 
 
 <"Ships over the air when merged." or the native-check reasons>
 
+## Assumptions
+
+<"none", or one `- Assumption: ...` line per small gap you closed (step 2)>
+
 ## Review
 
 <!-- Filled in by the review stage. -->
@@ -142,8 +171,10 @@ and move on. Otherwise apply testing rule 5: run it on the base commit; if it
 fails there too, open a `bug:new` issue labelled `flaky-test` naming the
 test, and list it. Never skip, disable or loosen a test.
 
-For each new code path, delete it and run its package's tests (testing rule
-3). If nothing goes red, write the test that does, then restore the code.
+For each new code path, delete it and run its test file (testing rule 3):
+`pnpm --filter <package> exec vitest run <file>`, or `exec jest <file>` for
+`@apex/mobile`. If nothing goes red, write the test that does, then restore
+the code. `pnpm check` runs once, at the end; CI runs it again on every push.
 
 If `native-check.sh` exits 3, tick the native box in the PR body, paste its
 reasons under OTA, and report them under Native. The orchestrator labels the
@@ -167,7 +198,9 @@ lane script (load the `agent-device` skill):
 .agents/scripts/device-lane.sh release              # always, whatever happened
 ```
 
-Poll the build with `sleep 90; cat "<log>.exit" 2>/dev/null || echo running`.
+Poll the build with `sleep 20; cat "<log>.exit" 2>/dev/null || echo running`: a JS-only
+change reuses the cached binary and is ready in well under a minute; a native
+change compiles for several minutes.
 What you find is yours to fix before you report. Busy or unavailable: skip
 it and say so; never wait more than one `lease` retry for it. A lease you
 took is released before you report, on every path.
@@ -191,5 +224,6 @@ Native: no | yes (<native-check reasons, one per line>)
 Simulator: <Done when lines and e2e: scripts that need the app running, or "none">
 Self-check: pass | fail (<what is still wrong>) | skipped (<busy, unavailable, or not UI work>)
 Flaky: <test title — #issue per line, or "none">
+Assumptions: <n, as listed in the PR body, or "none">
 Open: <"spec needs: ..." lines, blockers, or "none">
 ```

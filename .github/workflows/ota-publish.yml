@@ -49,6 +49,7 @@ jobs:
     runs-on: [self-hosted, ota]
     permissions:
       actions: read # wait for CI's `check` on this commit
+      checks: read # or prove it from the merged PR head's `check` (scripts/ci/wait-for-check.sh)
       contents: read
       issues: write # label and comment on the merged PR when it needs a native build
       pull-requests: write
@@ -110,11 +111,14 @@ jobs:
             echo "EOF_MESSAGE"
           } >>"$GITHUB_OUTPUT"
 
+      # Skipped at once when the merge commit's tree is the tree of the merged PR's head and
+      # that head's check passed (a squash merge of an up-to-date branch: the same code, already
+      # tested); otherwise waits for CI on this commit (ADR 0009).
       - name: Wait for CI's check on this commit
         if: github.ref == 'refs/heads/main' && !inputs.preflight_only
         run: scripts/ci/wait-for-check.sh "$GITHUB_SHA" 25
 
-      - name: Deploy iOS, then Android
+      - name: Deploy iOS and Android, side by side
         id: deploy
         if: github.ref == 'refs/heads/main' && !inputs.preflight_only
         env:
@@ -137,6 +141,14 @@ jobs:
           # An empty repo variable must not blank out the script's default.
           [ -n "$OTA_MISMATCH_PATTERN" ] || unset OTA_MISMATCH_PATTERN
           scripts/ci/ota-deploy.sh
+
+      # Best effort, never fails the job: booth phones paired with this laptop's appduct daemon
+      # check now instead of on their next 30 s poll (docs/internal/OTA.md, Booth phones).
+      - name: Nudge paired booth phones
+        if: steps.deploy.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 2
+        run: scripts/ci/ota-nudge.sh
 
       - name: Summary
         if: always() && steps.deploy.outcome != 'skipped'

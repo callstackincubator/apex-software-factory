@@ -7,9 +7,11 @@
 # from what they can see. This script decides that mechanically, instead of trusting a prompt:
 #
 #   <main>/.worktrees/review-inputs/<pr>/spec-review/   diff.patch, issue.md, and when they
-#       exist feature.md (a task's parent), triage.md (a bug's triage report), and spec/ with
-#       every ADR the issue lists under Decisions and every rule file under Rules in play.
-#       Never the rest of the rules, the PR body, commit messages or comments.
+#       exist feature.md (a task's parent), triage.md (a bug's triage report), assumptions.md
+#       (the PR body's `Assumption:` lines, delivery rule 3, and nothing else from the body), and
+#       spec/ with every ADR the issue lists under Decisions, every rule file under Rules in
+#       play, and always defaults.md (the house answers for what a spec leaves unsaid).
+#       Never the rest of the rules, the rest of the PR body, commit messages or comments.
 #   <main>/.worktrees/review-inputs/<pr>/code-review/   diff.patch, and rules/ with every file
 #       in docs/internal/agent-rules/ plus the ADR index. Never the issue.
 #   <main>/.worktrees/review-<pr>/                      a detached worktree of the PR head with
@@ -100,6 +102,15 @@ if [ -n "$issue" ]; then
         ;;
     esac
   done
+
+  # The house defaults fill whatever a spec leaves unsaid, so they are part of every spec.
+  git -C "$main_root" show "$base:docs/internal/agent-rules/defaults.md" \
+    >"$out/spec-review/spec/defaults.md" 2>/dev/null || rm -f "$out/spec-review/spec/defaults.md"
+
+  # The implementer's visible proposals for small gaps (delivery rule 3): only the lines that
+  # start with "Assumption:", never the rest of the PR body.
+  gh pr view "$pr" --json body -q .body | grep -E '^([-*] )?Assumption:' >"$out/spec-review/assumptions.md" || true
+  [ -s "$out/spec-review/assumptions.md" ] || rm -f "$out/spec-review/assumptions.md"
 else
   kind=no-spec
   rm -rf "$out/spec-review"

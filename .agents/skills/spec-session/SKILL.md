@@ -1,6 +1,6 @@
 ---
 name: spec-session
-description: Run a spec session on a GitHub issue — turn a request:new into a feature spec, write or amend its business sections with the product owner, write the Technical spec with a developer, or (unattended, from deliver) split a feature:ready feature into task sub-issues from the slices its Technical spec lists. Always reconciles comments posted since the body was last edited before writing anything. Use when someone says "spec session for #N", "/spec N", "write the spec for #N", "add the technical spec to #N", or "split #N".
+description: Run a spec session on a GitHub issue — turn a request:new into a feature spec, write or amend its business sections with the product owner, write the Technical spec with a developer (ending with a fresh spec-checker subagent's report, fixed before the ready label), or (unattended, from deliver) split a feature:ready feature into task sub-issues from the slices its Technical spec lists. Always reconciles comments posted since the body was last edited before writing anything. Use when someone says "spec session for #N", "/spec N", "write the spec for #N", "add the technical spec to #N", or "split #N".
 ---
 
 # Spec session
@@ -102,14 +102,21 @@ code first, so your recommended answers name real files. Cover, in order:
 1. Packages and modules touched, contract first (architecture rule 2).
 2. Contract changes: each schema in `packages/contract` and its fields.
 3. Native change: does any part need a new app dependency with native code,
-   an `app.json` plugin, or a permission? If it can be avoided, write the JS
-   alternative; if not, say so — it will not ship over the air (rule 17).
+   an `app.json` plugin, or a permission? Check
+   `docs/internal/NATIVE-CAPABILITIES.md` first: it lists the native modules,
+   permissions and config the installed booth binary already has, and what
+   is there can be used over the air. Anything it does not list needs a
+   native build. If that can be avoided, write the JS alternative; if not,
+   say so — it will not ship over the air (rule 17).
 4. Rules in play.
 5. Failure modes and limits: what the user sees when the API is down, the
    input is empty, too long or malformed, or the list is huge; every bound
    the build must enforce (a length, a count, a timeout), with its number.
-   An agent builds exactly what is written, so a limit nobody wrote down is
-   a limit nobody enforces.
+   `docs/internal/agent-rules/defaults.md` already answers the common cases
+   (inline error with retry, skeleton while loading, empty states, body
+   limits, offline); write only where this feature differs. An agent builds
+   exactly what is written, so a limit nobody wrote down and no default
+   covers is a limit nobody enforces.
 6. Agent hooks: what a device check needs to reach and read the outcome
    without guessing. The appduct tools a Done when line relies on, existing
    (`app_info`, `open_route`, `ota_check_now`, `show_update_banner`, …; see
@@ -126,12 +133,29 @@ code first, so your recommended answers name real files. Cover, in order:
    slices under Tasks, each a vertical slice a user could see, in dependency
    order.
 
+For a booth feature, start the body from
+`docs/internal/templates/booth-feature.md`: it is pre-filled with the house
+defaults, so the session only writes what is specific to this idea.
+
 Ask whether any decision constrains more than one future change or would be
 expensive to reverse. Each such decision becomes an ADR: draft it in
 `docs/internal/adr/` at status _Proposed_ on a branch, add its line to
 Decisions, and tell the developer the feature cannot leave `feature:spec`
 until it is accepted. Never set `feature:ready`; that is the developer's
 signature.
+
+**Spec check (end of `technical`).** Before telling the developer the spec
+is done, start a fresh `spec-checker` subagent with the `task` tool, prompt
+`issue #<N>` and nothing else — it reads the body as written on GitHub, so
+post the body first (step 4). It reports contradictions with a rule or ADR,
+Done when or completion lines nobody could test, failure modes neither the
+spec nor `defaults.md` answers, native capabilities the binary lacks ("needs
+native build"), and selectors missing from Agent hooks. Walk each finding
+with the developer, one at a time, with your recommended fix, fold the
+accepted ones into the body, and run the checker once more if anything
+changed. Tell the developer to set the ready label only once it says
+`Verdict: ready` (or they have decided to accept a finding). A spec that goes
+out with these gaps comes back as a parked run.
 
 **`split`.** For each slice under the feature's Tasks, write a body from
 `docs/internal/templates/task.md`: Scope from the slice, a Technical spec cut
@@ -218,5 +242,6 @@ End with exactly this block:
 Issue: #N  Mode: create | business | technical | split | revise
 Wrote: <sections changed, or "nothing">
 Created: <#issues with their Depends on, or "none">
+Spec check: ready | fix first (<open findings>) | not run (<mode>)
 Stopped: <why, or "no">
 ```

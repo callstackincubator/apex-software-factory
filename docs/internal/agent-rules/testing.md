@@ -19,15 +19,20 @@ though the suite is green — being green is exactly the failure mode.
    light wired to nothing. A test that fails only by timing out pins the
    schedule rather than the behaviour. Red-first delivery (the spec's tests
    are committed failing before the code exists) is how this is shown for new
-   code.
+   code. Prove it with the test's own file
+   (`pnpm --filter <package> exec vitest run <file>`, or `exec jest <file>`
+   for `@apex/mobile`), not the whole suite: CI runs `pnpm check` on every
+   push.
 
 3. **Production code that can be deleted with a green suite is untested.** For
-   a new code path, delete it and run the suite. If nothing goes red, whatever
+   a new code path, delete it and run its tests. If nothing goes red, whatever
    you believed covered it stops short of the part that matters — usually
    because the test exercises an internal callback rather than the observable
    output: the HTTP response, the parsed contract value, the text on screen.
-   Write the test that goes red, then restore the code. The code reviewer does
-   this to every changed path it suspects.
+   Write the test that goes red, then restore the code. Run the affected
+   test file, not the suite. The code reviewer does this to at most three
+   changed paths per review — the ones where a wrong answer would hurt a user
+   most — and reads the rest (ADR 0009).
 
 4. **A test that enforces a rule must see everything the rule covers.** A
    boundary or invariant test enforces its rule only where it looks. One that

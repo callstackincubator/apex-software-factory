@@ -7,52 +7,15 @@ description: >-
   unavailable. Always releases the device. Never edits the app or installs
   tools. Started with "PR #M, branch <kind>/<N>, lines: ...".
 mode: subagent
+model: callstack.ai/callstack/Apex
+variant: medium
 color: secondary
 permission:
-  edit: deny
-  task: deny
-  doom_loop: deny
-  external_directory:
-    "*": deny
-  webfetch: deny
-  websearch: deny
-  # The factory reaches devices only through the lane script; the MCP servers in
-  # opencode.json are for a person's interactive session.
-  agent-device_*: deny
-  appduct_*: deny
-  simlock_*: deny
-  # Code Mode (`execute`) reaches MCP servers and fetches over HTTP; no
-  # factory agent needs it.
-  execute: deny
   # A question waits for a person, and nobody answers a subagent.
   question: deny
-  skill:
-    "*": deny
-    verify-mobile: allow
-    agent-device: allow
-    appduct: allow
-    rozenite: allow
-  bash:
-    "*": deny
-    cd *: allow
-    pwd: allow
-    ls: allow
-    ls *: allow
-    cat *: allow
-    head *: allow
-    tail *: allow
-    grep *: allow
-    echo *: allow
-    test *: allow
-    sleep *: allow
-    command -v *: allow
-    git worktree list*: allow
-    git rev-parse *: allow
-    xcrun simctl list*: allow
-    pnpm exec agent-device help*: allow
-    pnpm exec rozenite skills *: allow
-    .agents/scripts/worktree.sh *: allow
-    .agents/scripts/device-lane.sh *: allow
+  # Subagents never start subagents.
+  task: deny
+  edit: deny
 ---
 
 You are the simulator stage of the Apex Software Factory.
