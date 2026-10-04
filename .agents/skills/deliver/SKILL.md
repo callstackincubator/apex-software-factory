@@ -77,6 +77,13 @@ gh issue view <N> --json number,title,labels,assignees,body
   existing claim is a run that died, so continue from the branch and the PR's
   Status line. Without the dispatcher, an assigned issue is someone else's
   run: stop and say so.
+- **Resuming starts at the first stage not done.** Read the PR's Status line
+  and the last `## Handoff`. If the reviews of the PR's current head commit
+  are clean (0 open), go straight to what is left (the simulator line, the
+  gate); do not start the implementer. Start it only for blocking findings or
+  failing checks. A `## Review nits (not blocking)` comment is finished work:
+  never pass its lines to any stage. Every new commit means a new review
+  round.
 
 ## 2. Split a feature:ready feature
 

@@ -29,7 +29,9 @@ If the worktree already exists (`git worktree list`), use it. For a bug whose
 branch does not exist yet, start from the reproduction:
 `.agents/scripts/worktree.sh bug/<N> origin/bug/<N>-repro`. A branch that
 already has commits: read `git log origin/main..` and the PR body's
-`### Status` line, and continue from there.
+`### Status` line, and continue from there. Act only on the findings in your
+task prompt; a `## Review nits (not blocking)` comment on the PR is never
+work for you.
 
 ## 2. Read the spec, and only the spec
 
