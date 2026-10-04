@@ -1,4 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // fetch, Response and friends: the contract runs in React Native and in Node.
+    "lib": ["ES2023", "DOM"]
+  },
   "include": ["src/**/*.ts"]
 }
