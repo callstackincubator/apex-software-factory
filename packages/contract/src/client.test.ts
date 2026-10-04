@@ -169,14 +169,45 @@ describe("createApiClient", () => {
     expect(error.requestId).toBe("req-from-body");
   });
 
+  /** A one-chunk byte stream carrying this exact text, delivered in full on demand. */
+  function stringStream(text: string): ReadableStream<Uint8Array> {
+    const bytes = new TextEncoder().encode(text);
+    return new ReadableStream<Uint8Array>({
+      type: "bytes",
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    });
+  }
+
+  /** A body stream that errors as soon as it is read, never delivering anything. */
+  function failingStream(): ReadableStream<Uint8Array> {
+    return new ReadableStream<Uint8Array>({
+      type: "bytes",
+      pull(controller) {
+        controller.error(new Error("connection reset"));
+      },
+    });
+  }
+
+  /** A fetch that answers every request with a bodyless response. */
+  function noBodyFetch(status: number): typeof fetch {
+    return async (input) => {
+      expect(String(input)).toBe("http://api.test/health");
+      return new Response(null, { status });
+    };
+  }
+
   it("ApiError does not parse an error body longer than 16384 bytes", async () => {
     const body = oversizedErrorBody();
     expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(16384);
     expect(ErrorResponse.safeParse(JSON.parse(body)).success).toBe(true);
     // No content-length: the client reads, finds the body over the cap, and refuses to parse it.
-    const counted = countingStream(1, new TextEncoder().encode(body).byteLength);
+    // The body itself is streamed — a valid ErrorResponse — so only the refusal to parse
+    // keeps its code and message out of the error.
     const error = await healthError(
-      streamErrorFetch(413, counted.stream, { "x-request-id": "req-oversized" }),
+      streamErrorFetch(413, stringStream(body), { "x-request-id": "req-oversized" }),
     );
     expect(error.message).toBe("GET /health failed with 413");
     expect(error.code).toBeUndefined();
@@ -246,21 +277,87 @@ describe("createApiClient", () => {
     expect(error.status).toBe(500);
   });
 
-  it("ApiError keeps its status and name for every kind of error body", async () => {
-    const bodies: Array<{ status: number; body: string; headers?: Record<string, string> }> = [
+  it("ApiError keeps its status and name for every kind of error body listed above", async () => {
+    // One entry per kind of error body in the Tests list above, each carried by
+    // the fetch that produces it — string body, streamed body, no body, failing stream.
+    const kinds: Array<{ status: number; fetch: () => typeof fetch }> = [
       {
+        // a JSON body that matches ErrorResponse, with details
         status: 422,
-        body: JSON.stringify({
-          error: { code: "validation_failed", message: "bad input", requestId: "req-1" },
-        }),
+        fetch: () =>
+          errorFetch(
+            422,
+            JSON.stringify({
+              error: {
+                code: "validation_failed",
+                message: "bad input",
+                requestId: "req-1",
+                details: [{ path: ["a"], message: "why" }],
+              },
+            }),
+          ),
       },
-      { status: 502, body: "<html>bad gateway</html>" },
-      { status: 500, body: JSON.stringify({ errors: ["nope"] }) },
-      { status: 413, body: oversizedErrorBody() },
-      { status: 503, body: "" },
+      {
+        // a JSON body that matches ErrorResponse, request id from the header
+        status: 404,
+        fetch: () =>
+          errorFetch(
+            404,
+            JSON.stringify({ error: { code: "not_found", message: "no such thing" } }),
+            { "x-request-id": "req-header-1" },
+          ),
+      },
+      {
+        // a body that is not JSON
+        status: 502,
+        fetch: () => errorFetch(502, "<html>bad gateway</html>"),
+      },
+      {
+        // a JSON body that does not match ErrorResponse
+        status: 500,
+        fetch: () => errorFetch(500, JSON.stringify({ errors: ["nope"] })),
+      },
+      {
+        // a JSON body that matches, with both a body request id and a header
+        status: 403,
+        fetch: () =>
+          errorFetch(
+            403,
+            JSON.stringify({
+              error: { code: "forbidden", message: "no", requestId: "req-2" },
+            }),
+            { "x-request-id": "req-header-2" },
+          ),
+      },
+      {
+        // a streamed body longer than 16384 bytes, read but not parsed
+        status: 413,
+        fetch: () => streamErrorFetch(413, stringStream(oversizedErrorBody())),
+      },
+      {
+        // a streamed body over the cap, reading stopped past 16384 bytes
+        status: 507,
+        fetch: () => streamErrorFetch(507, countingStream(10, 4096).stream),
+      },
+      {
+        // a body whose content-length is over 16384 bytes, never read
+        status: 414,
+        fetch: () =>
+          streamErrorFetch(414, countingStream(10, 4096).stream, { "content-length": "40960" }),
+      },
+      {
+        // no body at all
+        status: 503,
+        fetch: () => noBodyFetch(503),
+      },
+      {
+        // a body stream that errors while it is read
+        status: 509,
+        fetch: () => streamErrorFetch(509, failingStream()),
+      },
     ];
-    for (const { status, body, headers } of bodies) {
-      const error = await healthError(errorFetch(status, body, headers));
+    for (const { status, fetch } of kinds) {
+      const error = await healthError(fetch());
       expect(error.status).toBe(status);
       expect(error.name).toBe("ApiError");
     }
