@@ -9,6 +9,9 @@
 // - When hot-updater reports a fingerprint problem, one more line says what it
 //   means for the booth: the change needs a native build. The exit code is
 //   always hot-updater's.
+// - APPDUCT_ENABLED defaults to 1, the one build profile of the booth binary
+//   (hot-updater.config.ts refuses anything else), so `node
+//   scripts/hot-updater.mjs bundle list` works without remembering it.
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -28,7 +31,8 @@ const FINGERPRINT_PROBLEM =
   /fingerprint mismatch|fingerprint\.json not found|fingerprint hash not found/i;
 let fingerprintProblem = false;
 
-const child = spawn(process.execPath, [bin, ...args], { stdio: ["inherit", "pipe", "pipe"] });
+const env = { ...process.env, APPDUCT_ENABLED: process.env.APPDUCT_ENABLED || "1" };
+const child = spawn(process.execPath, [bin, ...args], { stdio: ["inherit", "pipe", "pipe"], env });
 for (const [from, to] of [
   [child.stdout, process.stdout],
   [child.stderr, process.stderr],

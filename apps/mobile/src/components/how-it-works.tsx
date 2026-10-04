@@ -23,6 +23,7 @@ export function HowItWorks() {
           return (
             <View
               key={step.title}
+              testID={`how-step-${index + 1}`}
               accessible
               accessibilityLabel={`Step ${index + 1}, ${step.title}. ${step.body}`}
               style={{ flexDirection: "row", gap: space.md }}

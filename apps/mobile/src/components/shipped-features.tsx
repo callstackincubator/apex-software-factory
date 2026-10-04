@@ -9,6 +9,7 @@ function EmptyState() {
   const theme = useTheme();
   return (
     <View
+      testID="shipped-empty"
       accessible
       accessibilityLabel="Nothing shipped yet. Propose the first one at the booth and watch it land right here."
       style={{
@@ -57,6 +58,9 @@ function FeatureRow({ feature }: { feature: ShippedFeature }) {
   const meta = `#${feature.issue} · ${feature.shippedAt}`;
   const body = (
     <View
+      testID={feature.href ? undefined : `shipped-feature-${feature.id}`}
+      accessible={!feature.href}
+      accessibilityLabel={`${feature.title}. ${feature.summary}. ${meta}`}
       style={{
         gap: space.xs,
         padding: space.md,
@@ -81,7 +85,9 @@ function FeatureRow({ feature }: { feature: ShippedFeature }) {
   return (
     <Link href={feature.href} asChild>
       <Pressable
+        testID={`shipped-feature-${feature.id}`}
         accessibilityRole="button"
+        accessibilityLabel={`${feature.title}. ${feature.summary}. ${meta}`}
         accessibilityHint={`Opens ${feature.title}`}
         style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
       >
@@ -102,10 +108,12 @@ export function ShippedFeatures({ features = shippedFeatures }: Props) {
   const newestFirst = [...features].reverse();
 
   return (
-    <View style={{ gap: space.md }}>
+    <View testID="shipped-features" style={{ gap: space.md }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
         <SectionLabel>Shipped at the booth</SectionLabel>
         <View
+          testID="shipped-count"
+          accessible
           accessibilityLabel={`${features.length} shipped`}
           style={{
             paddingHorizontal: 8,

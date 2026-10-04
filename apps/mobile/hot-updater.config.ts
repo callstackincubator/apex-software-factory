@@ -22,6 +22,25 @@ try {
   // No file: rely on the environment.
 }
 
+/**
+ * One build profile everywhere: the booth binary, its fingerprint and every
+ * OTA bundle are built with APPDUCT_ENABLED=1, so appduct's native module is
+ * linked in Release and its JS stays in OTA bundles. The variable changes
+ * autolinking, and so the iOS fingerprint: a prebuild or fingerprint without
+ * it would describe a binary no phone has. This file is loaded by both
+ * (`expo prebuild` through the config plugin, and every hot-updater command),
+ * so it is the one place that refuses. The package scripts set it, and
+ * `scripts/hot-updater.mjs` defaults it.
+ */
+if (process.env.APPDUCT_ENABLED !== "1") {
+  throw new Error(
+    `hot-updater: APPDUCT_ENABLED must be 1 (got ${JSON.stringify(process.env.APPDUCT_ENABLED ?? null)}).\n` +
+      "Every native build, fingerprint and OTA deploy uses the same profile. Use the package " +
+      "scripts (pnpm --filter @apex/mobile run ios|android|prebuild|ota:*), or prefix the " +
+      "command with APPDUCT_ENABLED=1; see docs/internal/OTA.md.",
+  );
+}
+
 const REQUIRED = [
   // OTA server base URL, e.g. http://localhost:3002/hot-updater
   "HOT_UPDATER_SERVER_URL",

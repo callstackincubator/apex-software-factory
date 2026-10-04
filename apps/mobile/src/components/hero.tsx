@@ -61,6 +61,7 @@ export function Hero() {
       <View style={{ paddingVertical: 32, paddingHorizontal: space.lg }}>
         <CropMarks color={theme.accent} />
         <Text
+          testID="home-headline"
           accessibilityRole="header"
           accessibilityLabel="This app is empty. On purpose."
           maxFontSizeMultiplier={1.25}

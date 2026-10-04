@@ -34,6 +34,7 @@ export function UpdateInfo() {
 
   return (
     <Text
+      testID="status-bundle"
       selectable
       accessibilityLabel={label}
       maxFontSizeMultiplier={1.6}

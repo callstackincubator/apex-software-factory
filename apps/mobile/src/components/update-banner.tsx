@@ -11,11 +11,13 @@ import { fonts, space, useTheme } from "@/theme";
  * Floats over every screen once an OTA bundle is downloaded: "New feature
  * landed — tap to reload". It never reloads on its own, so nobody at the
  * booth loses what they were doing; a cold start applies the bundle anyway.
+ * A previewed banner (the `show_update_banner` agent tool) looks the same,
+ * but a tap only dismisses it: there is no bundle to reload into.
  */
 export function UpdateBanner() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { ready, reload } = useOtaUpdate();
+  const { ready, reload, dismiss } = useOtaUpdate();
   const [reloading, setReloading] = useState(false);
 
   if (!ready) return null;
@@ -23,6 +25,10 @@ export function UpdateBanner() {
   const title = ready.rollback ? "Update withdrawn" : "New feature landed";
   const action = reloading ? "Reloading…" : "Tap to reload";
   const onPress = () => {
+    if (ready.preview) {
+      dismiss();
+      return;
+    }
     setReloading(true);
     reload().catch(() => setReloading(false));
   };
@@ -42,6 +48,7 @@ export function UpdateBanner() {
       }}
     >
       <Pressable
+        testID="update-banner"
         onPress={onPress}
         disabled={reloading}
         accessibilityRole="button"
