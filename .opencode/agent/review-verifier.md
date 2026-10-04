@@ -96,6 +96,16 @@ Two findings that disagree, one from each review, usually mean the
 specification is missing a line. Resolve it in favour of the rules, reject the
 other with that reason, and put the missing line under Spec needs.
 
+Spec needs stops the delivery and waits for a person, so it is only for that
+case, or for a confirmed finding that cannot be fixed without contradicting a
+line of the specification or making a decision it leaves open (a new limit,
+timeout or user-visible behaviour). A defect on an edge case the specification
+does not mention, whose fix follows from what it already says (an error path
+that should end in the fallback it describes, an untested branch, a test title
+that promises too much), is a Fix line and nothing more. When the fix needs
+such a decision, the finding stays under Fix and the decision goes under Spec
+needs.
+
 If `.agents/scripts/native-check.sh origin/main HEAD` exits 3 in the worktree
 while `issue.md`'s Native change line says "none", add a blocking Fix line:
 `native change the spec does not allow: <reasons>`.
