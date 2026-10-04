@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploys the mobile JS bundle over the air, one platform at a time, and says
+# Deploys the mobile JS bundle over the air, both platforms at once, and says
 # per platform whether it shipped, needs a native build, or failed.
 #
 #   scripts/ci/ota-deploy.sh
@@ -37,14 +37,30 @@ unset WITH_ROZENITE
 
 output() { [ -n "${GITHUB_OUTPUT:-}" ] && echo "$1=$2" >>"$GITHUB_OUTPUT"; return 0; }
 
+# Both platforms deploy at the same time: each has its own fingerprint, its own bundle
+# directory (hot-updater.config.ts: dist/<platform>) and its own archive directory (-o), so
+# neither waits for the other. Logs are printed per platform once both finish.
+deploy_one() {
+  local platform=$1 log=$2
+  pnpm --filter @apex/mobile run ota:deploy -p "$platform" -c "$channel" -m "$OTA_MESSAGE" \
+    -o ".hot-updater/output-$platform" >"$log" 2>&1
+  echo $? >"$log.exit"
+}
+
+for platform in $platforms; do
+  rm -f "$logs/ota-deploy-$platform.log.exit"
+  # Options go straight after the script name: pnpm forwards them as they are,
+  # whereas a literal "--" would reach the script and end its option parsing.
+  deploy_one "$platform" "$logs/ota-deploy-$platform.log" &
+done
+wait
+
 shipped=0 native=0 failed=0
 for platform in $platforms; do
   log="$logs/ota-deploy-$platform.log"
-  echo "::group::Deploy $platform to $channel"
-  # Options go straight after the script name: pnpm forwards them as they are,
-  # whereas a literal "--" would reach the script and end its option parsing.
-  pnpm --filter @apex/mobile run ota:deploy -p "$platform" -c "$channel" -m "$OTA_MESSAGE" 2>&1 | tee "$log"
-  code=${PIPESTATUS[0]}
+  code=$(cat "$log.exit" 2>/dev/null || echo 1)
+  echo "::group::Deploy $platform to $channel (exit $code)"
+  cat "$log"
   echo "::endgroup::"
 
   # Strip ANSI colours before matching.

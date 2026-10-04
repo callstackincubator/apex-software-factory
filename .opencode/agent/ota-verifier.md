@@ -7,54 +7,15 @@ description: >-
   the feature on screen. Always releases the device. Never deploys, rolls back
   or edits anything. Started with "PR #M, merge commit <sha>, expect: <text>".
 mode: subagent
+model: callstack.ai/callstack/Apex
+variant: low
 color: info
 permission:
-  edit: deny
-  task: deny
-  doom_loop: deny
-  external_directory:
-    "*": deny
-  webfetch: deny
-  websearch: deny
-  agent-device_*: deny
-  appduct_*: deny
-  simlock_*: deny
-  # Code Mode (`execute`) reaches MCP servers and fetches over HTTP; no
-  # factory agent needs it.
-  execute: deny
   # A question waits for a person, and nobody answers a subagent.
   question: deny
-  skill:
-    "*": deny
-    verify-ota: allow
-    agent-device: allow
-    appduct: allow
-  bash:
-    "*": deny
-    cd *: allow
-    pwd: allow
-    ls: allow
-    ls *: allow
-    cat *: allow
-    head *: allow
-    tail *: allow
-    grep *: allow
-    echo *: allow
-    test *: allow
-    sleep *: allow
-    command -v *: allow
-    git rev-parse *: allow
-    git fetch*: allow
-    git worktree list*: allow
-    git worktree add --detach *: allow
-    git worktree remove --force *: allow
-    gh run list *: allow
-    gh run view *: allow
-    gh pr view *: allow
-    pnpm exec agent-device help*: allow
-    .agents/scripts/worktree.sh --prepare *: allow
-    .agents/scripts/device-lane.sh *: allow
-    "*hot-updater*": deny
+  # Subagents never start subagents.
+  task: deny
+  edit: deny
 ---
 
 You are the OTA check of the Apex Software Factory: after a merge, you find

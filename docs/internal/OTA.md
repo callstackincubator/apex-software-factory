@@ -234,7 +234,10 @@ pnpm --filter @apex/mobile run ota:deploy -p ios -c production -m "<merge commit
 pnpm --filter @apex/mobile run ota:deploy -p android -c production -m "<merge commit subject>"
 ```
 
-Non-interactive (no `-i`); omitting `-p` deploys iOS then Android. Exit code
+Non-interactive (no `-i`); omitting `-p` deploys iOS then Android. CI runs
+one deploy per platform at the same time (`scripts/ci/ota-deploy.sh`): each
+bundles into its own `dist/<platform>` (`hot-updater.config.ts`) and writes
+its archive under `-o .hot-updater/output-<platform>`. Exit code
 0 = registered, non-zero = nothing changed on the channel. Success ends with:
 
 ```
@@ -267,7 +270,39 @@ in CI. Missing variables fail with
 `hot-updater: missing environment variable(s): <names>.`
 
 Phones pick up a normal update within 30 s (banner) or on the next cold start;
-`-f` (force update) reloads them as soon as the download finishes.
+`-f` (force update) reloads them as soon as the download finishes. After a
+CI deploy, `scripts/ci/ota-nudge.sh` makes every paired booth phone check at
+once (next section).
+
+## Booth phones: appduct pairing
+
+After each successful deploy the OTA publish job calls appduct's
+`ota_check_now` on every phone paired with the laptop's appduct daemon, so
+the banner appears within seconds instead of on the next 30 s poll (ADR
+0009). It is best effort: no daemon, no paired phone, or a phone that went
+away is one line in the job log, never a failure. The runner runs as the
+maintainer's user, so it reaches the same daemon (`~/.appduct/daemon.sock`).
+
+Pair a phone (from the main checkout, booth Wi-Fi, app running):
+
+```sh
+.agents/scripts/prewarm.sh --pair-phone     # or: cd apps/mobile && pnpm exec appduct sessions link --qr
+```
+
+Scan the QR code with the phone's camera; the app opens and claims the
+session (the link works once, for 5 minutes). `pnpm exec appduct sessions ls`
+(from `apps/mobile`) lists it as `active`. The booth binary trusts the pin in
+the link and only connects to private LAN addresses, so the laptop and the
+phone must be on the booth router.
+
+A pairing survives JS reloads — including applying an OTA update — and
+backgrounding; a Wi-Fi drop suspends it and it resumes within
+`graceSeconds` (default 600; set `"graceSeconds": 3600` in
+`~/.appduct/config.json` next to the policy for a booth day, then restart the
+daemon once). It ends when the app process dies (swiped away, crashed, phone
+restarted) or the daemon restarts (laptop reboot, `appduct daemon stop`):
+pair again. Check it each morning with `appduct sessions ls`, and after
+anyone relaunches the app.
 
 ## Rollback
 
@@ -388,10 +423,11 @@ Machine as found: macOS 26.5 (Apple silicon), Node 22.22.2, pnpm 11.22.0
    S3 values copied from `apps/ota-server/.env`) plus
    `EXPO_PUBLIC_OTA_URL=http://192.168.1.61:3002/hot-updater` and
    `EXPO_PUBLIC_API_URL=http://192.168.1.61:3001`.
-5. iOS release build for the simulator, through the lane lock:
-   `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 EXPO_PUBLIC_OTA_URL=… EXPO_PUBLIC_API_URL=… APEX_SIM_DEVICE="iPhone 17 Pro" .agents/scripts/sim-lane.sh build`
-   (= `pnpm --filter ./apps/mobile exec expo run:ios --configuration Release --no-bundler`).
-   First build ≈ 6 min (pods + compile), log in `$TMPDIR/apex-sim-lane-build-*.log`.
+5. iOS release build for the simulator:
+   `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 EXPO_PUBLIC_OTA_URL=… EXPO_PUBLIC_API_URL=… pnpm --filter ./apps/mobile exec expo run:ios --configuration Release --no-bundler`
+   (then run through a machine-wide lane lock that has since been replaced
+   by `.agents/scripts/device-lane.sh build ios release`, ADR 0007).
+   First build ≈ 6 min (pods + compile).
    Without `LANG`, CocoaPods warns about the encoding (and may fail). Expo's
    "Installing CocoaPods..." step is `pod install`, not a CocoaPods install.
    Before it: `pnpm exec expo prebuild --clean --no-install` (from

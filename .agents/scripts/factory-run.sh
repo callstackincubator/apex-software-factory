@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# One unattended factory run on one issue, with a watchdog (ADR 0012).
+#
+#   .agents/scripts/factory-run.sh <issue>             deliver #<issue> (the factory agent)
+#   .agents/scripts/factory-run.sh --triage <issue>    triage #<issue> (the triager agent)
+#
+# Wraps `opencode run --standalone --auto` (a private server: the run inherits this shell's
+# environment, SIMLOCK_BIN included) and watches it:
+#   - hard timeout: FACTORY_TIMEOUT_MIN (default 80) minutes for the whole run;
+#   - no progress: FACTORY_STALL_MIN (default 15) minutes in which no session this run started
+#     (the run's own or a subagent's) wrote to OpenCode's database
+#     (~/.local/share/opencode/opencode.db: session_v2 / session_message time_updated) and the
+#     run's log did not grow. Longer than the longest single legitimate wait (merge-pr.sh 9
+#     minutes, a simlock lease call 9 minutes).
+# A run that stalls or times out is stopped and started once more, from the branch: the deliver
+# skill resumes from GitHub (claim, branch, PR Status line). If the second attempt stops too,
+# this script leaves the issue's `## Handoff` (delivery rule 2), releases the claim and moves it
+# to <kind>:blocked, or says why it could not.
+#
+# Exit: 0 the run ended on its own (merged, parked or reported — read the issue); 1 gave up
+# after the restart; 64 usage; 69 opencode or sqlite3 missing.
+# Logs: <checkout>/.worktrees/factory-runs/<issue>-<attempt>-<time>.log
+set -uo pipefail
+
+mode=deliver
+if [ "${1:-}" = --triage ]; then
+  mode=triage
+  shift
+fi
+issue=${1:-}
+case $issue in '' | *[!0-9]*)
+  sed -n '2,20p' "$0" >&2
+  exit 64
+  ;;
+esac
+
+command -v opencode >/dev/null 2>&1 || { echo "unavailable: opencode not on PATH" >&2; exit 69; }
+command -v sqlite3 >/dev/null 2>&1 || { echo "unavailable: sqlite3 not on PATH" >&2; exit 69; }
+
+root=$(git rev-parse --show-toplevel)
+cd "$root" || exit 1
+db=${OPENCODE_DB:-$HOME/.local/share/opencode/opencode.db}
+timeout_min=${FACTORY_TIMEOUT_MIN:-80}
+stall_min=${FACTORY_STALL_MIN:-15}
+logs="$root/.worktrees/factory-runs"
+mkdir -p "$logs"
+started=$(date +%s)
+deadline=$((started + timeout_min * 60))
+
+if [ "$mode" = deliver ]; then
+  agent=factory
+  first="deliver #$issue"
+else
+  agent=triager
+  first="triage #$issue"
+fi
+
+now_ms() { echo $(($(date +%s) * 1000)); }
+
+# Newest write by any session created since $1 (ms) in this checkout or below it.
+last_write_ms() {
+  sqlite3 -readonly "$db" "
+    select max(t) from (
+      select max(s.time_updated) as t from session_v2 s
+        where s.time_created >= $1 and (s.directory = '$root' or s.directory like '$root/%')
+      union all
+      select max(m.time_updated) from session_message m join session_v2 s on s.id = m.session_id
+        where s.time_created >= $1 and (s.directory = '$root' or s.directory like '$root/%')
+    );" 2>/dev/null || true
+}
+
+size_of() { stat -f %z "$1" 2>/dev/null || stat -c %s "$1" 2>/dev/null || echo 0; }
+
+# run_attempt <n> <prompt>: 0 ended on its own, 124 timed out, 125 stalled.
+run_attempt() {
+  local n=$1 prompt=$2 log pid since last_ms last_size last_seen now size w reason
+  log="$logs/$issue-$n-$(date +%Y%m%d-%H%M%S).log"
+  since=$(now_ms)
+  echo "factory-run: #$issue $mode attempt $n, log $log" >&2
+  opencode run --standalone --agent "$agent" --auto --title "factory $mode #$issue (attempt $n)" \
+    "$prompt" >"$log" 2>&1 &
+  pid=$!
+  last_seen=$(date +%s)
+  last_ms=0
+  last_size=0
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 20
+    now=$(date +%s)
+    w=$(last_write_ms "$since")
+    size=$(size_of "$log")
+    if { [ -n "$w" ] && [ "$w" -gt "$last_ms" ]; } || [ "$size" -gt "$last_size" ]; then
+      last_seen=$now
+      [ -n "$w" ] && last_ms=$w
+      last_size=$size
+    fi
+    reason=
+    [ "$now" -ge "$deadline" ] && reason="hard timeout (${timeout_min} min for the run)"
+    [ $((now - last_seen)) -ge $((stall_min * 60)) ] && reason="no progress for ${stall_min} min"
+    if [ -n "$reason" ]; then
+      echo "factory-run: #$issue attempt $n stopped: $reason" >&2
+      echo "$reason" >"$log.stopped"
+      kill -TERM "$pid" 2>/dev/null
+      sleep 10
+      kill -KILL "$pid" 2>/dev/null
+      wait "$pid" 2>/dev/null
+      case $reason in hard*) return 124 ;; *) return 125 ;; esac
+    fi
+  done
+  wait "$pid"
+  echo "factory-run: #$issue attempt $n ended (opencode exit $?) after $(($(date +%s) - started))s" >&2
+  tail -n 15 "$log" >&2
+  return 0
+}
+
+run_attempt 1 "$first"
+code=$?
+[ "$code" -eq 0 ] && exit 0
+first_reason=$(cat "$logs"/"$issue"-1-*.log.stopped 2>/dev/null | tail -n 1)
+
+if [ "$(date +%s)" -lt "$deadline" ]; then
+  run_attempt 2 "$first. An earlier run on this issue was stopped by the watchdog ($first_reason) before it finished. The claim, if any, is yours: continue from the branch, the PR's Status line and the latest handoff instead of starting over."
+  code=$?
+  [ "$code" -eq 0 ] && exit 0
+fi
+second_reason=$(cat "$logs"/"$issue"-2-*.log.stopped 2>/dev/null | tail -n 1)
+
+# Gave up: leave the handoff the deliver skill would have left (delivery rule 2).
+kind=$(gh issue view "$issue" --json labels -q '[.labels[].name | select(test("^(bug|feature|task):"))][0] // ""' 2>/dev/null | cut -d: -f1)
+branch_line="no branch yet"
+if [ "$mode" = deliver ] && [ -n "$kind" ]; then
+  pr=$(gh pr list --head "$kind/$issue" --state open --json number,body -q '.[0] | "\(.number)"' 2>/dev/null)
+  status=$(gh pr view "$kind/$issue" --json body -q .body 2>/dev/null | grep -E '^Implement:' | head -n 1)
+  if git ls-remote --exit-code --heads origin "$kind/$issue" >/dev/null 2>&1; then
+    branch_line="branch \`$kind/$issue\`${pr:+, PR #$pr}${status:+ — $status}"
+  fi
+elif [ "$mode" = triage ]; then
+  git ls-remote --exit-code --heads origin "bug/$issue-repro" >/dev/null 2>&1 && branch_line="branch \`bug/$issue-repro\`"
+fi
+body=$(cat <<EOF
+## Handoff
+
+**Done:** what is on $branch_line; the PR's Status line, if any, says how far it got.
+
+**Not done:** the $mode run did not finish. The factory watchdog stopped it twice: ${first_reason:-unknown}; then ${second_reason:-the hard timeout}.
+
+**Findings:** run logs on the booth laptop under \`.worktrees/factory-runs/$issue-*\` in the runner's checkout.
+
+**Blocked on:** maintainer: look at the logs, then restore the ready label to start a fresh run.
+
+_Written by an agent._
+EOF
+)
+if [ -n "$kind" ] && gh issue comment "$issue" --body "$body" >/dev/null 2>&1; then
+  gh issue edit "$issue" --remove-assignee @me >/dev/null 2>&1 || true
+  if [ "$mode" = deliver ]; then
+    gh issue edit "$issue" --add-label "$kind:blocked" >/dev/null 2>&1 || true
+  else
+    gh issue edit "$issue" --add-label "bug:blocked" >/dev/null 2>&1 || true
+  fi
+  echo "factory-run: gave up on #$issue; handoff posted, claim released, moved to blocked" >&2
+else
+  echo "factory-run: gave up on #$issue and could not post the handoff (gh failed or the issue has no state label); logs in $logs" >&2
+fi
+exit 1

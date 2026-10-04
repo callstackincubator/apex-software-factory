@@ -20,7 +20,9 @@ Load the `agent-device` and `appduct` skills now.
 ## 1. Was it published?
 
 The merge starts `.github/workflows/ota-publish.yml` on the booth laptop's runner when it
-touched `apps/mobile/**`, `packages/**` or `pnpm-lock.yaml`. Find the run for the merge commit
+touched `apps/mobile/**`, `packages/**` or `pnpm-lock.yaml`. It deploys iOS and Android side
+by side, skips the wait for CI when the merged tree is the PR head's tested tree, and nudges
+paired booth phones with `ota_check_now` once it has deployed (ADR 0009). Find the run for the merge commit
 and wait for it, one short call at a time:
 
 ```bash
@@ -48,7 +50,8 @@ cd <that worktree> && .agents/scripts/device-lane.sh lease ios
 Run every later lane command in that worktree. `lease` exits 0 leased, 2 still queued (run it
 again, up to four times; give the bash tool a ten-minute timeout), 75 `busy`, 69
 `unavailable`. From a 0 on, every path out goes through step 5. Wait for the build's
-`<log>.exit` as `verify-mobile` does (`sleep 90; cat "<log>.exit"`).
+`<log>.exit` as `verify-mobile` does (`sleep 20; cat "<log>.exit"`): the parent of a JS-only
+merge has the same native fingerprint, so the build reuses the cached binary (ADR 0010).
 
 The lane's Release build uses `APPDUCT_ENABLED=1` like the booth binary, so its fingerprint
 matches what the publish run deployed against, and its default OTA URL

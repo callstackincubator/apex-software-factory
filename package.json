@@ -4,7 +4,8 @@
   "description": "A software factory showcase: product intent in, OTA update out.",
   "scripts": {
     "typecheck": "pnpm -r --if-present run typecheck",
-    "test": "pnpm -r --if-present run test",
+    "test": "pnpm -r --if-present run test && pnpm run test:tools",
+    "test:tools": "node --test \"tools/**/*.test.js\"",
     "lint": "oxlint .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",

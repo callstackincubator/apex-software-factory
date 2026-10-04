@@ -1,21 +1,26 @@
 #!/usr/bin/env sh
-# Fails if any of the repo's subagents can resolve a tool call to "ask".
+# Fails if any of the repo's agents can resolve a tool call to "ask".
 #
 #   .agents/scripts/check-agent-permissions.sh        run from the checkout, with opencode on PATH
 #
-# `opencode run --auto` approves the primary agent's asks only; a subagent that reaches "ask"
-# waits forever (OpenCode 2.0.11), so an unattended factory run hangs. Every subagent's rules
-# must end in allow or deny for every action. This reads the permissions OpenCode resolves
-# (`opencode debug agents`: built-in defaults, then opencode.json, then the agent's own file)
-# and, for each subagent defined in .opencode/agent/ and each action, finds the last catch-all
+# Permissions are allow-by-default with a short deny list (ADR 0012), and nothing asks: a
+# subagent that reaches "ask" waits forever (`opencode run --auto` answers only the primary
+# agent, OpenCode 2.0.11), and an unattended factory run has nobody to answer the primary
+# either. This reads the permissions OpenCode resolves (`opencode debug agents`: built-in
+# defaults, then opencode.json, then the agent's own file) and, for each agent defined in
+# .opencode/agent/ plus the default `build` agent, and each action, finds the last catch-all
 # rule (resource "*"); the action can reach "ask" when there is none, when it says ask, or when
-# a later, narrower rule says ask. A subagent's `question` tool must be denied outright, since
-# it too waits for a person. Primary agents are listed for information only: --auto answers
-# their asks. MCP tools are checked under their server prefixes.
+# a later, narrower rule says ask. A subagent's and the factory's `question` tool must be
+# denied outright, since it too waits for a person. MCP tools are checked under their server
+# prefixes.
+#
+# OpenCode also loads opencode.json and .opencode/ from every directory above the checkout up
+# to the repository's main checkout, so run this in a checkout that is not nested inside
+# another one (a nested worktree resolves the outer checkout's rules too).
 #
 # Run it after changing permissions in opencode.json or .opencode/agent/*.md. It needs the
 # opencode CLI and the model provider config, so CI cannot run it; it is a local check.
-# Exits 0 when no subagent can reach "ask", 1 when one can, 69 without opencode.
+# Exits 0 when no agent can reach "ask", 1 when one can, 69 without opencode.
 set -eu
 
 command -v opencode >/dev/null 2>&1 || {
@@ -80,11 +85,15 @@ const asks = (rules, action) => {
 const effect = (rules, action) =>
   rules.filter((r) => glob(action, r.action) && r.resource === "*").at(-1)?.effect ?? "ask";
 
+// The default agent for people is configured here too, so it is held to the same rule.
+ours.add("build");
+// Agents that run with nobody to answer a question.
+const unattended = (agent) => agent.mode !== "primary" || agent.id === "factory";
+
 let failed = 0;
 for (const agent of agents) {
   if (!ours.has(agent.id)) continue;
-  const subagent = agent.mode !== "primary";
-  if (subagent && effect(agent.permissions, "question") !== "deny") {
+  if (unattended(agent) && effect(agent.permissions, "question") !== "deny") {
     failed++;
     console.log(`FAIL ${agent.id} (${agent.mode}): question is not denied (it would wait for a person)`);
   }
@@ -92,15 +101,11 @@ for (const agent of agents) {
     const found = asks(agent.permissions, action);
     if (!found.length) continue;
     const name = action.endsWith("_tool") ? `${action.slice(0, -5)}_*` : action;
-    if (subagent) {
-      failed++;
-      console.log(`FAIL ${agent.id} (${agent.mode}): ${name} can ask for ${found.join(", ")}`);
-    } else {
-      console.log(`info ${agent.id} (primary): ${name} asks for ${found.join(", ")} (--auto answers it)`);
-    }
+    failed++;
+    console.log(`FAIL ${agent.id} (${agent.mode}): ${name} can ask for ${found.join(", ")}`);
   }
 }
-const checked = agents.filter((a) => ours.has(a.id) && a.mode !== "primary").map((a) => a.id);
-console.log(`${checked.length} subagents checked (${checked.join(", ")}): ${failed ? `${failed} can ask` : "none can ask"}`);
+const checked = agents.filter((a) => ours.has(a.id)).map((a) => a.id);
+console.log(`${checked.length} agents checked (${checked.join(", ")}): ${failed ? `${failed} can ask` : "none can ask"}`);
 process.exit(failed ? 1 : 0);
 EOF

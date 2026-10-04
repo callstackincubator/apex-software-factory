@@ -20,7 +20,9 @@ name: Issue state
 # - bug:needs-info with no activity for two weeks closes as not planned;
 # - a PR from a <kind>/<n> branch must close issue <n> and no other.
 # Actions taken with the workflow token do not trigger this workflow again,
-# so every job removes the label it replaces itself.
+# so every job removes the label it replaces itself. For the same reason, a
+# job that moves an issue to task:ready or bug:triage starts the factory
+# dispatcher (factory.yml) itself.
 
 on:
   issues:
@@ -74,6 +76,7 @@ jobs:
        (github.event.action == 'edited' && github.event.changes.body != null))
     runs-on: ubuntu-24.04
     permissions:
+      actions: write # start factory.yml for a task that just became ready
       issues: write
     timeout-minutes: 5
     steps:
@@ -96,6 +99,20 @@ jobs:
                 .some((line) => line.trim() !== "" && !line.startsWith("#") && line.trim() !== "- ...");
             };
             const approved = (body) => /^- \[x\] Approved for delivery/im.test(body);
+            // Labels set with the workflow token start no workflow, so start the factory
+            // dispatcher here (factory.yml, ADR 0012).
+            const dispatch = async (issue_number) => {
+              try {
+                await github.rest.actions.createWorkflowDispatch({
+                  ...context.repo, workflow_id: "factory.yml",
+                  ref: context.payload.repository.default_branch,
+                  inputs: { issue: String(issue_number) },
+                });
+                core.info(`#${issue_number}: factory.yml dispatched`);
+              } catch (e) {
+                core.warning(`#${issue_number}: could not dispatch factory.yml (${e.status ?? e.message})`);
+              }
+            };
 
             const candidates = [];
             if (context.payload.action === "edited") {
@@ -137,6 +154,7 @@ jobs:
                   body: `Now \`task:ready\`: approved, technical spec present${deps.length ? `, ${deps.join(", ")} closed` : ""}.`,
                 });
                 core.info(`#${issue_number}: task:draft -> task:ready`);
+                await dispatch(issue_number);
               } else if (!ready && isReady) {
                 if (issue.assignees?.length) {
                   core.info(`#${issue_number} no longer ready (${why.join("; ")}) but is claimed; leaving it`);
@@ -163,6 +181,7 @@ jobs:
       contains(github.event.issue.labels.*.name, 'bug:needs-info')
     runs-on: ubuntu-24.04
     permissions:
+      actions: write # start factory.yml: the bug is back in bug:triage
       issues: write
     timeout-minutes: 5
     steps:
@@ -177,6 +196,17 @@ jobs:
             await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ["bug:triage"] });
             await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: "bug:needs-info" });
             core.info(`#${issue_number}: bug:needs-info -> bug:triage`);
+            // Labels set with the workflow token start no workflow (factory.yml, ADR 0012).
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                ...context.repo, workflow_id: "factory.yml",
+                ref: context.payload.repository.default_branch,
+                inputs: { issue: String(issue_number) },
+              });
+              core.info(`#${issue_number}: factory.yml dispatched`);
+            } catch (e) {
+              core.warning(`#${issue_number}: could not dispatch factory.yml (${e.status ?? e.message})`);
+            }
 
   feature-complete:
     name: Last sub-issue closed
