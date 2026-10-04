@@ -51,6 +51,10 @@ though the suite is green — being green is exactly the failure mode.
    is tested in `apps/mobile` with a Jest render test against what the user
    sees, with the API client stubbed at the contract boundary. Only a claim
    that needs a running app on a device — navigation across native screens,
-   an OTA update applying — becomes a Maestro flow, run on the simulator lane
-   (delivery rule 16). A unit test never needs the simulator, the network, or
-   a running service.
+   an OTA update applying — becomes an agent-device replay script
+   (`apps/mobile/e2e/<name>.ad`, an `e2e:` test), run on a leased device
+   (delivery rule 16). It selects elements by `testID` or accessibility
+   label, never by coordinates, and fails on a named check (`is`, `wait`,
+   `get`), not on a timeout alone. It may reach its starting state through
+   an appduct tool or a deep link the spec names instead of tapping there. A
+   unit test never needs a device, the network, or a running service.

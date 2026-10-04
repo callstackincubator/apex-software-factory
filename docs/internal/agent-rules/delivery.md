@@ -24,10 +24,11 @@ is good.
 
 ## Kinds and labels
 
-Every issue carries exactly one label of the form `<kind>:<state>`. The
-prefix is the kind; there is no separate kind label. An issue with zero or
-two such labels is in an invalid state and must be corrected before anything
-else happens to it.
+Every open issue carries exactly one label of the form `<kind>:<state>`. The
+prefix is the kind; there is no separate kind label. An open issue with zero
+or two such labels is in an invalid state and must be corrected before
+anything else happens to it. An issue closed as completed carries none: the
+automation removes its state label and its assignee when it closes.
 
 | Label             | Set by                             | Meaning                                                         |
 | ----------------- | ---------------------------------- | --------------------------------------------------------------- |
@@ -212,7 +213,9 @@ open, done means closed as completed.
     confirmed finding is fixed and the review that raised it runs again; a
     rejected one is listed in the PR body under `## Review` with the reason.
     Two rounds at most: a blocking finding still confirmed after the second
-    round means the agent hands off and leaves the PR in draft. A diff that
+    round means the agent hands off and leaves the PR in draft. Rounds are
+    counted per delivery run: when the maintainer restores a parked issue to
+    its ready label, the next run starts again at round 1. A diff that
     only changes ADRs gets the spec review alone. A PR from a person gets the
     same two reviews when the maintainer asks for them.
 
@@ -225,14 +228,22 @@ open, done means closed as completed.
     open. Anything short of that parks the issue with a handoff and leaves the
     PR for the maintainer.
 
-16. **The simulator runs one lane at a time, through the script.** A Release
-    build and a Maestro flow share one Mac, and two at once produce timeouts
-    that look like bugs. Agents run them only through
-    `.agents/scripts/sim-lane.sh`, which holds a machine-wide lock, runs
-    detached, and logs to a file. With a person present the agent asks before
-    starting a build. Unattended, it runs when the lane is free; when the lane
-    stays busy or the machine cannot run it, the PR gets `needs-simulator` and
-    waits for the maintainer.
+16. **Devices are leased, one lane per lease, through the script.** Every
+    simulator or emulator an agent uses is leased from simlock and driven
+    with agent-device, and only through `.agents/scripts/device-lane.sh`
+    (ADR 0007). No agent runs `simctl`, `adb`, `emulator`, `simlock` or
+    `agent-device` against a device itself. A lane is one worktree, one lease
+    and one agent-device session; simlock queues a lease it cannot serve
+    yet, so lanes run in parallel safely. A native build holds no lease, runs
+    detached, logs to a file, and waits for one of the machine's build slots.
+    The `mobile-verifier`, `ota-verifier` and `triager` lease a device; the
+    `implementer` may lease one to check its own UI work before review, but
+    the `mobile-verifier`'s Release run is the gate. Whoever leases a device
+    releases it on every path, finished or not; the lease's TTL is only the
+    backstop for a crash. With a person present the agent asks before
+    starting a build. When simlock finds no device within 30 minutes, or the
+    machine cannot run the step, the PR gets `needs-simulator` and waits for
+    the maintainer.
 
 17. **A native change never ships unattended.** OTA updates use the
     fingerprint strategy (ADR 0003): a JS bundle reaches only binaries with
@@ -268,8 +279,10 @@ The repo's skills encode these procedures; use them rather than retyping the
 steps. `deliver` is the orchestrator: it claims, then hands each stage to an
 OpenCode subagent that starts in a fresh context and returns a fixed report —
 `implementer`; `spec-reviewer`, `code-reviewer` and `review-verifier`, started
-by the `review` skill; `mobile-verifier`. Subagents never start subagents.
-`intent`, `spec-session` and `triage-bug` cover the rest.
+by the `review` skill; `mobile-verifier`; and after a merge `ota-verifier`.
+Subagents never start subagents. `intent`, `spec-session` and `triage-bug`
+cover the rest; `agent-device`, `appduct` and `rozenite` are how any of them
+works with a device.
 
 ## Automation
 
@@ -288,6 +301,8 @@ by the `review` skill; `mobile-verifier`. Subagents never start subagents.
   comments that the feature can be closed once the completion conditions hold.
 - A feature closed as completed closes the request named on its `Request:`
   line, with a comment pointing at the feature.
+- An issue closed as completed loses its assignee and its `<kind>:<state>`
+  label.
 - A pull request closed without merging releases the claim on every issue its
   body closes. A claim on a `*:ready` or `bug:triage` issue with no comment,
   label change, or commit on its branch for six hours is released (the booth

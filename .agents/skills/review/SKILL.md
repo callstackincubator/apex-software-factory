@@ -95,6 +95,10 @@ on the next round (the block's Rerun). After round 2 there is no third: a
 blocking finding still confirmed is reported as open, and the orchestrator
 parks the issue.
 
+Rounds count within one delivery run. When the maintainer restores a parked
+issue to a ready label, the next run's first review is round 1 again, on the
+branch as it then is; the rounds of an earlier run do not carry over.
+
 ## Report
 
 The verifier's block is the result. End with exactly this block, nothing

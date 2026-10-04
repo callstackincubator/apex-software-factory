@@ -71,10 +71,25 @@ dependency with native code, an app.json plugin) and why it cannot be avoided. -
 
 <!-- Which files in docs/internal/agent-rules/ the implementer must reread, and why. -->
 
+### Failure modes and limits
+
+<!-- What the user sees when the API is down, the input is empty, too long or
+malformed, or a list is huge; every bound the build enforces (a length, a
+count, a timeout), with its number. "none" only if nothing can fail. -->
+
+### Agent hooks
+
+<!-- What a device check needs to reach and read each outcome: appduct tools
+(existing, or new with name, input, output, read-only or destructive), deep
+links (apexfactory:///<route>), and the testID and accessibility label of
+every element a simulator line or e2e: test names. "none" when nothing needs
+the app running. -->
+
 ### Tests
 
 <!-- Each line is a test title: a claim the body must prove. Prefix with the
-package: "contract:", "api:", "mobile:", or "flow:" for a Maestro flow. -->
+package: "contract:", "api:", "mobile:", or "e2e:" for an agent-device replay
+script under apps/mobile/e2e/ (only for a claim a running app must show). -->
 
 - ...
 

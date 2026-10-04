@@ -12,3 +12,4 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0004](0004-opencode-with-one-model.md) | The factory runs on OpenCode with one model | Accepted |
 | [0005](0005-github-issues-are-spec-and-queue.md) | GitHub Issues are the spec and the queue | Accepted |
 | [0006](0006-wave-a-amendments.md) | Source-shipping packages are installed, not deployed; the OTA server is exempt from the OpenAPI rule | Accepted |
+| [0007](0007-device-lane-simlock-agent-device.md) | Devices are leased with simlock and driven with agent-device; appduct ships in the booth binary | Accepted |

@@ -105,10 +105,24 @@ code first, so your recommended answers name real files. Cover, in order:
    an `app.json` plugin, or a permission? If it can be avoided, write the JS
    alternative; if not, say so — it will not ship over the air (rule 17).
 4. Rules in play.
-5. Tests, one title per line, prefixed `contract:`, `api:`, `mobile:` or
-   `flow:` (testing rule 6). Every completion condition is covered by at
-   least one.
-6. Size: if it is more than one PR an agent can land in an hour, list the
+5. Failure modes and limits: what the user sees when the API is down, the
+   input is empty, too long or malformed, or the list is huge; every bound
+   the build must enforce (a length, a count, a timeout), with its number.
+   An agent builds exactly what is written, so a limit nobody wrote down is
+   a limit nobody enforces.
+6. Agent hooks: what a device check needs to reach and read the outcome
+   without guessing. The appduct tools a Done when line relies on, existing
+   (`app_info`, `open_route`, `ota_check_now`, `show_update_banner`, …; see
+   the `appduct` skill) or new (name, input, output, read-only or
+   destructive — the implementer adds them); the deep links
+   (`apexfactory:///<route>`); and the `testID` and accessibility label of
+   every element a simulator line or `e2e:` test names. "none" when nothing
+   needs the app running.
+7. Tests, one title per line, prefixed `contract:`, `api:`, `mobile:` or
+   `e2e:` (testing rule 6). `e2e:` is an agent-device replay script under
+   `apps/mobile/e2e/`, for a claim only a running app can show. Every
+   completion condition is covered by at least one.
+8. Size: if it is more than one PR an agent can land in an hour, list the
    slices under Tasks, each a vertical slice a user could see, in dependency
    order.
 
@@ -135,7 +149,15 @@ one of these holds:
   Depends on. Two agents editing the same lines in parallel is a merge
   conflict the second one resolves blind.
 - **Simulator lines.** A Done when line that needs the app running says so in
-  its own words ("on the simulator: ..."), so delivery verifies it there.
+  its own words ("on the simulator: ..."), so delivery verifies it there,
+  and names an outcome a device check can address: an element by the
+  `testID` or label listed under Agent hooks, or text on screen ("on the
+  simulator: `shipped-feature-12` reads 'Confetti button'"). A line that
+  only a person's eye could judge ("looks nice") is not checkable; rewrite
+  it.
+- **Agent hooks.** Every tool, deep link and selector a task's lines rely on
+  is in that task's Agent hooks; a tool two tasks need is added by the
+  earlier one, and the later one depends on it.
 
 Then create each task and attach it to the feature:
 

@@ -58,9 +58,16 @@ different idea. Do not file it.
 
 ## 2. Show the draft
 
-Write the request in the visitor's words, lightly tidied: fix typos and join
-fragments, keep their phrasing, add nothing they did not say. Fill exactly the
-sections of the feature request form (`.github/ISSUE_TEMPLATE/feature_request.yml`):
+Write the request in the visitor's words: quote, don't embellish. You may fix
+typos and join fragments; you may not add a word, a detail, a reason, an
+example or an adjective the visitor did not say — not even a helpful one, not
+even one you suggested in a question that they did not take up. Your
+one-sentence reflections and example answers are yours, not theirs: only what
+the visitor said or clearly agreed to goes in. A section they left empty says
+`_No response_`, never your guess. Before showing the draft, read each
+sentence against what they said and cut anything that is not theirs. Fill
+exactly the sections of the feature request form
+(`.github/ISSUE_TEMPLATE/feature_request.yml`):
 
 ```markdown
 ### The problem

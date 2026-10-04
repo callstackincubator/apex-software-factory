@@ -66,10 +66,11 @@ blind to the rules — keep it that way.
 4. `/deliver <n>` claims it, splits it into tasks if the spec lists them, and
    per issue: implements tests-first in a worktree, opens a draft PR,
 5. runs two blind reviews (spec, code) and verifies every finding,
-6. proves mobile lines on the iOS simulator when needed,
+6. proves mobile lines on a leased iOS simulator when needed,
 7. and merges through `.agents/scripts/merge-pr.sh` — never `gh pr merge`.
-8. The merge to `main` ships an OTA update; a native change cannot, and is
-   parked as `needs-native-build` for a maintainer.
+8. The merge to `main` ships an OTA update, checked on a simulator afterwards;
+   a native change cannot ship, and is parked as `needs-native-build` for a
+   maintainer.
 9. Bugs: `/triage <n>` reproduces and reports; a maintainer sets `bug:ready`.
 10. Agents act only on `bug:triage`, `bug:ready`, `feature:ready`, `task:ready`.
 
@@ -80,21 +81,32 @@ the OTA side is [docs/internal/OTA.md](docs/internal/OTA.md).
 
 - **Skills** (`.agents/skills/`, loaded with the `skill` tool): `intent`,
   `spec-session`, `deliver`, `implement`, `review`, `triage-bug`,
-  `verify-mobile`.
+  `verify-mobile`, `verify-ota`; and the device tools `agent-device`,
+  `appduct`, `rozenite` (vendored upstream skills, each with a `SOURCE.md`).
 - **Primary agents** (`.opencode/agent/`): `factory` (unattended delivery),
   `intake` (the booth front door). The default `build` agent is for people.
 - **Subagents** (started with the `task` tool, fresh context, fixed report
   block): `implementer`, `spec-reviewer`, `code-reviewer`, `review-verifier`,
-  `triager`, `mobile-verifier`. Subagents never start subagents.
+  `triager`, `mobile-verifier`, `ota-verifier`. Subagents never start
+  subagents.
 - **Commands** (`.opencode/command/`): `/intent`, `/spec <n> [mode]`,
   `/deliver <n>`, `/triage <n>`, `/review <pr>`.
 - **Scripts** (`.agents/scripts/`): `worktree.sh` (create a worktree under
   `.worktrees/` and install), `merge-pr.sh` (the merge gate),
   `review-inputs.sh` (blind review inputs), `native-check.sh` (can this ship
-  over the air?), `sim-lane.sh` (the locked simulator lane), `ensure-pnpm.sh`.
+  over the air?), `device-lane.sh` (a simlock-leased device driven with
+  agent-device, appduct and Rozenite), `check-agent-permissions.sh` (no
+  subagent can reach "ask"), `ensure-pnpm.sh`.
+- **Devices**: simulators and emulators are leased through simlock and driven
+  through agent-device, only via `.agents/scripts/device-lane.sh`. The
+  `agent-device` and `appduct` MCP servers in `opencode.json` are for a
+  person in the `build` agent; every other agent is denied their tools.
 
 Unattended runs use `opencode run --agent factory --auto "deliver #<n>"`:
 `--auto` approves what `opencode.json` leaves at "ask", and every "deny" still
 holds. It answers only the primary agent's asks: a subagent that reaches "ask"
 waits forever. So every subagent's permissions resolve to allow or deny — its
 `bash`, `external_directory` and `doom_loop` each end in a `"*"` rule.
+After changing any permission in `opencode.json` or `.opencode/agent/`, run
+`.agents/scripts/check-agent-permissions.sh` on a machine with OpenCode; CI
+cannot run it.

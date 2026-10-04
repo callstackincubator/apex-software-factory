@@ -4,6 +4,33 @@
   "small_model": "callstack.ai/callstack/Apex",
   "default_agent": "build",
   "share": "disabled",
+  "mcp": {
+    "agent-device": {
+      "type": "local",
+      "command": ["pnpm", "exec", "agent-device", "mcp"],
+      "enabled": true,
+      "environment": {
+        "AGENT_DEVICE_NO_UPDATE_NOTIFIER": "1"
+      },
+      "timeout": 120000
+    },
+    "appduct": {
+      "type": "local",
+      "command": ["pnpm", "exec", "appduct", "mcp", "--scheme", "apexfactory"],
+      "cwd": "apps/mobile",
+      "enabled": true,
+      "timeout": 60000
+    },
+    "simlock": {
+      "type": "local",
+      "command": ["pnpm", "exec", "simlock", "mcp"],
+      "enabled": false,
+      "environment": {
+        "SIMLOCK_AGENT_ID": "opencode-build"
+      },
+      "timeout": 600000
+    }
+  },
   "permission": {
     "read": {
       "*": "allow",
@@ -21,6 +48,9 @@
     "webfetch": "ask",
     "websearch": "ask",
     "doom_loop": "ask",
+    "agent-device_*": "deny",
+    "appduct_*": "deny",
+    "simlock_*": "deny",
     "bash": {
       "*": "ask",
       "pnpm *": "allow",
@@ -82,7 +112,7 @@
       ".agents/scripts/worktree.sh *": "allow",
       ".agents/scripts/native-check.sh*": "allow",
       ".agents/scripts/review-inputs.sh *": "allow",
-      ".agents/scripts/sim-lane.sh *": "allow",
+      ".agents/scripts/device-lane.sh *": "allow",
       ".agents/scripts/merge-pr.sh *": "allow",
       "git commit --no-verify*": "deny",
       "git commit -n*": "deny",
@@ -131,7 +161,33 @@
       "eas *": "deny",
       "docker *": "deny",
       "docker-compose *": "deny",
-      "sudo *": "deny"
+      "sudo *": "deny",
+      "*simlock nuke*": "deny",
+      "*simlock release --all*": "deny",
+      "*simlock config set*": "deny",
+      "*simlock daemon stop*": "deny",
+      "*simlock cleanup*": "deny",
+      "*simlock token*": "deny",
+      "*simlock component*": "deny",
+      "*--allow-download*": "deny",
+      "*agent-device install-from-source*": "deny",
+      "*agent-device react-devtools*": "deny",
+      "*agent-device daemon stop*": "deny",
+      "*appduct daemon stop*": "deny",
+      "*appduct sessions revoke*": "deny",
+      "xcrun simctl erase*": "deny",
+      "xcrun simctl delete*": "deny",
+      "*adb kill-server*": "deny",
+      "*emu kill*": "deny"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "agent-device_*": "allow",
+        "appduct_*": "allow",
+        "simlock_*": "allow"
+      }
     }
   }
 }

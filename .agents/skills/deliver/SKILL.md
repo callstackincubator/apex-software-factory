@@ -23,6 +23,7 @@ instructions, and returns only its report block:
 | Implement | subagent `implementer` (skill `implement`)                                                 | implement report |
 | Review    | load skill `review` here; it starts `spec-reviewer`, `code-reviewer` and `review-verifier` | review report    |
 | Simulator | subagent `mobile-verifier` (skill `verify-mobile`)                                         | simulator report |
+| OTA check | subagent `ota-verifier` (skill `verify-ota`), after a merge                                | OTA report       |
 
 Review runs from your session because subagents cannot start subagents; you
 only prepare the inputs, start the three, and pass report lines along. You
@@ -41,7 +42,8 @@ ended without its report block; report on the work already done".
 
 **A person present or not.** If a person is in this session, show any text
 you are about to post and ask before a simulator build. Unattended, post
-directly and use the simulator lane when it is free (rule 16).
+directly. Devices are leased from simlock by the subagents that use them
+(rule 16, ADR 0007); you never touch one yourself.
 
 ## 1. Take stock
 
@@ -78,11 +80,17 @@ build`. A report with `spec needs` under Open: park (step 6).
    `implementer` with mode `fix` and the Fix lines pasted, then the `review`
    skill again with `round 2` and the report's Rerun value. Spec needs, or a
    confirmed blocking finding after round 2: park. Keep every Rejected line.
+   Rounds are counted per run: when the maintainer restores a parked issue
+   to a ready label, this run starts again at round 1 on the branch as it
+   is, whatever earlier runs reached (rule 14).
 3. **Simulator.** If implement reported Simulator lines,
-   `mobile-verifier` with the PR, the branch and those lines. `fail`:
-   `implementer` in fix mode with the Evidence lines, then the `review` skill
-   round 2 on the code review, then `mobile-verifier` once more. `busy` or
-   `unavailable`: add the `needs-simulator` label to the PR and park.
+   `mobile-verifier` with the PR, the branch, those lines (Done when lines
+   and `e2e:` scripts) and the spec's Agent hooks, pasted from the issue.
+   `fail`: `implementer` in fix mode with the Evidence lines, then the
+   `review` skill round 2 on the code review, then `mobile-verifier` once
+   more. `busy` (simlock found no device within 30 minutes) or `unavailable`
+   (this machine cannot run it): add the `needs-simulator` label to the PR
+   and park.
 4. **Native.** If implement reported `Native: yes`, add the
    `needs-native-build` label to the PR. Do step 5, mark it ready
    (`gh pr ready <M>`), and park instead of running the gate, with Blocked
@@ -116,6 +124,16 @@ build`. A report with `spec needs` under Open: park (step 6).
    means CI is still running: run it again, up to four times. Any other exit:
    park with the line it printed.
 
+7. **Did it land?** After a merge that changed `apps/mobile/` or
+   `packages/`, start `ota-verifier` with the PR, its merge commit
+   (`gh pr view <M> --json mergeCommit -q .mergeCommit.oid`) and the text a
+   user should see once the update applies: the feature's title in the
+   "Shipped at the booth" list, or the text of a simulator Done when line.
+   Start it in the same message as the next task's stage when there is one;
+   nothing waits on it. Its OTA line goes into the run's comment (step 5);
+   `not landed` or `not shipped` is a note for the maintainer, never a
+   reason to reopen or park anything.
+
 Keep the PR body's status line current after every stage, so any session can
 resume from GitHub alone:
 
@@ -140,7 +158,10 @@ makes a task ready only once everything under its Depends on is closed, so
 readiness already encodes the order. Deliver up to two runnable tasks at
 once: start each stage for both with two `task` calls in the same message,
 and keep the two pipelines apart. Each task has its own worktree, so they
-never share files; the simulator lane serialises itself. After each merge,
+never share files. Both may be at the simulator stage at once: each
+`mobile-verifier` leases its own device, simlock queues a lease it cannot
+serve yet, and the lane's build slot keeps two Xcode builds from running
+together. After each merge,
 list again: merging closes the task, and the tasks that waited on it turn
 ready on their own.
 
@@ -155,6 +176,7 @@ Post one comment on the feature (or the single issue):
 ## Delivery run
 
 Merged: #PR (#task), ...
+OTA: #PR — <landed | not landed | not shipped | busy | unavailable, from the OTA report>, ...
 Parked: #task — <reason, one line>, ...
 Waiting: #task — on #dependency, ...
 

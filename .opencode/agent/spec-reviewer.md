@@ -16,6 +16,14 @@ permission:
   skill: deny
   webfetch: deny
   websearch: deny
+  agent-device_*: deny
+  appduct_*: deny
+  simlock_*: deny
+  # Code Mode (`execute`) reaches MCP servers and fetches over HTTP; no
+  # factory agent needs it.
+  execute: deny
+  # A question waits for a person, and nobody answers a subagent.
+  question: deny
   lsp: deny
   read:
     "*": deny
