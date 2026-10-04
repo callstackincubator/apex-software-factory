@@ -55,7 +55,7 @@ review worktree checked out at the reviewed commit. Read nothing about the
 change beyond those: not the PR body, not the commit messages, not the
 issue's comments. `git log`, `git show` and `gh` are denied on purpose.
 
-**Blocking findings.** Reproduce each one's evidence: read the cited lines in
+**Blocking findings.** Never research library or native sources (`node_modules`): a finding whose evidence is not in the diff, this repository or one test run is rejected as unproven. Reproduce each one's evidence: read the cited lines in
 the worktree, or run the cited command there — one test file
 (`pnpm --filter <package> exec vitest run <file>`, or `exec jest <file>` for
 `@apex/mobile`), never the whole `pnpm check`; CI runs that. Restore anything
