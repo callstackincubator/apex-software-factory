@@ -28,17 +28,32 @@ after this PR merges that they could not after the previous one. -->
 
 <!-- Which files in docs/internal/agent-rules/ the implementer must reread, and why. -->
 
+### Failure modes and limits
+
+<!-- What the user sees when something this slice touches fails or is out of
+bounds, and every bound it enforces, with its number. "none" only if nothing
+can fail. -->
+
+### Agent hooks
+
+<!-- appduct tools, deep links, and the testID and accessibility label of each
+element the simulator lines and e2e: tests below rely on. A new tool: name,
+input, output, read-only or destructive. "none" when nothing needs the app
+running. -->
+
 ### Tests
 
 <!-- Each line is a test title: a claim the body must prove. Prefix with the
-package: "contract:", "api:", "mobile:", or "flow:" for a Maestro flow. -->
+package: "contract:", "api:", "mobile:", or "e2e:" for an agent-device replay
+script under apps/mobile/e2e/ (only for a claim a running app must show). -->
 
 - ...
 
 ## Done when
 
 <!-- Observable checks a reviewer runs before merging. A line that needs the
-app running on a simulator says so: "on the simulator: ...". -->
+app running on a simulator says so, and names what a device check reads:
+"on the simulator: `shipped-feature-12` reads 'Confetti button'". -->
 
 - ...
 

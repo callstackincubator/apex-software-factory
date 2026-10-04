@@ -115,10 +115,19 @@ their report blocks.
    it cannot see the issue, the PR body, or commit messages. A third fresh
    subagent, `review-verifier`, reproduces every finding and confirms or
    rejects it. Confirmed findings go back to the implementer; at most two
-   rounds.
-5. **Simulator.** Lines that need the app running go to `mobile-verifier`: a
-   Release build of the PR's worktree and a Maestro flow or screenshot,
-   through the locked `sim-lane.sh`. Busy or impossible → `needs-simulator`.
+   rounds per run (a run on an issue the maintainer restored to ready starts
+   at round 1 again).
+5. **Simulator.** Lines that need the app running go to `mobile-verifier`. It
+   leases an iOS simulator from simlock, installs a Release build of the PR's
+   worktree (appduct included, as in the booth binary), checks each line with
+   agent-device — snapshots, waits, the PR's `e2e:` replay scripts, appduct
+   shortcuts the spec's Agent hooks name — and on a failure adds Rozenite
+   evidence from a debug build. Everything goes through `device-lane.sh`, and
+   the device is always released. Two tasks can be at this stage at once:
+   simlock queues, and a build slot keeps Xcode builds apart. No device within
+   30 minutes, or a machine that cannot run it → `needs-simulator`. The
+   implementer may already have checked its own UI on a leased device; this
+   run is still the gate. See [ADR 0007](adr/0007-device-lane-simlock-agent-device.md).
 6. **Native.** A native change gets `needs-native-build` and is parked for the
    maintainer.
 7. **Merge.** The factory fills the PR's `## Review` section, marks it ready,
@@ -127,14 +136,22 @@ their report blocks.
 8. **Ship.** The merge to `main` triggers the OTA publish on the booth
    laptop's runner. The bundle carries the binary's fingerprint, so only
    compatible phones take it. See [OTA.md](OTA.md).
-9. The run ends with one `## Delivery run` comment: merged, parked, waiting.
+9. **Did it land?** `ota-verifier` waits for the publish run, installs a
+   Release build of `main` from before the merge on a leased simulator, asks
+   the app to check now (appduct `ota_check_now`), taps the update banner, and
+   confirms the new bundle id and the feature on screen. A miss is a note for
+   the maintainer, never a reason to park.
+10. The run ends with one `## Delivery run` comment: merged, OTA, parked,
+    waiting.
 
 ## Walkthrough 5: a bug
 
 1. A bug arrives through the form as `bug:new`. The maintainer reads it and,
    if it sounds real, adds `bug:triage`.
 2. `/triage <n>` runs the `triager` subagent: it reproduces the bug as a
-   failing test on `bug/<n>-repro`, finds the root cause, and posts a report
+   failing test on `bug/<n>-repro` (an `e2e:` replay script on a leased
+   simulator when only a running app shows it, with Rozenite and appduct
+   evidence), finds the root cause, and posts a report
    (Reproduction, Root cause, Simplest fix, Alternatives rejected, Risk). No
    fix, no PR. Cannot reproduce → `bug:needs-info`.
 3. The maintainer agrees → `bug:ready`. `/deliver <n>` builds the fix on
@@ -168,6 +185,7 @@ released by the automation. Every comment an agent writes ends with
 ↔ `task:ready` from approval, spec and dependencies; a reporter's reply moves
 `bug:needs-info` back to `bug:triage`; two silent weeks close it; a feature
 whose last task closed gets a note; a completed feature closes its request;
+an issue closed as completed loses its claim and its state label;
 stale or orphaned claims are released; a `<kind>/<n>` PR must close `#<n>`.
 `.github/workflows/labels.yml` keeps the labels equal to `.github/labels.json`.
 
@@ -256,7 +274,10 @@ the service (`cd ~/actions-runner && ./svc.sh stop && ./svc.sh start`).
 - Skills: `.agents/skills/`; agents and commands: `.opencode/`; config:
   `opencode.json`
 - Scripts: `.agents/scripts/` — `worktree.sh`, `review-inputs.sh`,
-  `native-check.sh`, `sim-lane.sh`, `merge-pr.sh`, `ensure-pnpm.sh`
+  `native-check.sh`, `device-lane.sh`, `merge-pr.sh`,
+  `check-agent-permissions.sh`, `ensure-pnpm.sh`
 - Workflows: `.github/workflows/` — `ci.yml`, `ota-publish.yml`,
   `issue-state.yml`, `labels.yml`; their helpers are in `scripts/ci/`
 - OTA: [OTA.md](OTA.md)
+- Devices (simlock, agent-device, appduct, Rozenite host setup): [DEVICES.md](DEVICES.md),
+  [ADR 0007](adr/0007-device-lane-simlock-agent-device.md)

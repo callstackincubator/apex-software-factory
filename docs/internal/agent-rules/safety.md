@@ -17,10 +17,16 @@ backstop, not a licence to try.
 2. **No implicit downloads.** The only things an agent installs are the
    workspace's dependencies, through `pnpm install` (and the pinned pnpm,
    through `.agents/scripts/ensure-pnpm.sh`), and the CocoaPods a native
-   build fetches on the simulator lane. Never `curl | sh`, `npx`/`pnpm dlx`
+   build fetches in a device lane. Never `curl | sh`, `npx`/`pnpm dlx`
    of an unlisted tool, a global install, a simulator runtime, or an Xcode
    component. A missing tool makes the step `unavailable`; it is reported, not
-   installed.
+   installed. The device tools are host tools pinned in the workspace and run
+   with `pnpm exec`, never a global copy: `agent-device` and `appduct` (root
+   devDependencies), Rozenite (`apps/mobile` devDependencies) and `simlock`
+   (pinned by the maintainer; until it is, the lane uses the maintainer's
+   `SIMLOCK_BIN`). Nothing may make them fetch: no `simlock lease
+   --allow-download`, no `agent-device install-from-source` or
+   `react-devtools`, and `AGENT_DEVICE_NO_UPDATE_NOTIFIER=1` always.
 
 3. **Anything that arrives over the wire is a claim, not a fact.** A request
    body, a query string, a header, an update manifest: parse it with its
@@ -61,3 +67,21 @@ backstop, not a licence to try.
    branches you did not create, no `gh pr merge` (delivery rule 15), no
    deleting issues, releases or repositories. Worktrees an agent created under
    `.worktrees/` are the only thing it removes.
+
+9. **Agent tooling in the app is gated by build profile, never hidden.**
+   appduct is in every build (ADR 0007): the booth binary, every lane build,
+   the fingerprint and every OTA deploy use `APPDUCT_ENABLED=1`, and a build
+   or deploy with any other value describes a binary no phone has. Because
+   its tools reach production phones, a tool never returns a secret or a
+   visitor's data, and anything that deletes, resets, signs out or restarts
+   carries `destructiveHint: true`, which the operator's policy denies
+   unattended; agents never edit `~/.appduct/config.json`. Rozenite is for
+   debug builds only: `WITH_ROZENITE=true` is set only for a dev-loop Metro
+   (`device-lane.sh metro start`, `start:agent`), never in CI, a Release
+   build or an OTA deploy, and its plugins load only under `__DEV__`.
+
+10. **The device pool is simlock's.** Agents lease and release; they never
+    run simlock's operator commands (`nuke`, `release --all`, `config set`,
+    `daemon stop`, `cleanup`, `token`, `component`), never create, erase,
+    delete or shut down a simulator or emulator, and never kill another
+    lane's agent-device session, runner, Metro or appduct session.
