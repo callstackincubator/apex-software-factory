@@ -134,7 +134,8 @@ export default defineConfig({
   fingerprint: {
     // hot-updater hashes native sources of autolinked modules but skips the
     // Expo config entirely. With CNG, app.json (plugins, Info.plist keys,
-    // permissions, cleartext) *is* native configuration, so hash it too.
-    extraSources: ["app.json"],
+    // permissions, cleartext) *is* native configuration, so hash it too,
+    // together with the local config plugins it lists.
+    extraSources: ["app.json", "plugins/**"],
   },
 });

@@ -16,7 +16,8 @@
           "NSAllowsArbitraryLoads": false,
           "NSAllowsLocalNetworking": true
         },
-        "NSLocalNetworkUsageDescription": "Apex Factory downloads new features from the Callstack booth laptop on this Wi-Fi network."
+        "NSLocalNetworkUsageDescription": "Apex Factory downloads new features from the Callstack booth laptop on this Wi-Fi network.",
+        "NSCameraUsageDescription": "Apex Factory uses the camera for booth features you try, like scanning a QR code or taking a photo. Nothing is uploaded."
       }
     },
     "android": {
@@ -27,7 +28,13 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.CAMERA"],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.READ_MEDIA_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -59,7 +66,51 @@
           "trust": "link",
           "allowPrivateLanOnly": true
         }
-      ]
+      ],
+      "expo-sqlite",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Apex Factory opens your photo library only when you pick a photo for a booth feature you try.",
+          "cameraPermission": "Apex Factory uses the camera for booth features you try, like scanning a QR code or taking a photo. Nothing is uploaded.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Apex Factory opens your photo library only when you pick a photo for a booth feature you try.",
+          "savePhotosPermission": "Apex Factory saves pictures you create in a booth feature to your photo library.",
+          "granularPermissions": ["photo"]
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Apex Factory uses your location while the app is open, for booth features you try such as showing where you are on a map.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "motionUsagePermission": "Apex Factory reads motion sensors (steps, movement) for booth features you try, such as a step counter."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Apex Factory reads and adds calendar events only for booth features you try, such as saving a reactCon session to your calendar.",
+          "remindersPermission": false
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "Apex Factory reads motion sensors (steps, movement) for booth features you try, such as a step counter."
+        }
+      ],
+      "./plugins/with-local-notifications-only",
+      ["expo-notifications", {}],
+      "./plugins/with-android-maps-key",
+      "react-native-maps"
     ],
     "experiments": {
       "typedRoutes": true,
