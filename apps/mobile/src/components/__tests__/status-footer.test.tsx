@@ -4,11 +4,15 @@ import { Platform } from "react-native";
 
 import { StatusFooter } from "@/components/status-footer";
 
-// jest-expo's expo-constants mock carries no app config.
+// jest-expo's expo-constants mock carries no app config. "1.0.0" is the exact
+// version e2e/app-platform.ad pins on the device; the tie test below keeps the
+// two in step so a version bump fails here, not on a simulator run.
 jest.mock("expo-constants", () => ({
   __esModule: true,
   default: { expoConfig: { version: "1.0.0" } },
 }));
+
+const appJsonVersion: string = require("../../../app.json").expo.version;
 
 function clientReturning(response: () => Promise<Response>) {
   return createApiClient({ baseUrl: "http://api.test", fetch: response });
@@ -53,6 +57,7 @@ describe("StatusFooter", () => {
   });
 
   it("shows the app version and the running bundle", async () => {
+    platform.OS = "ios";
     const client = clientReturning(() => Promise.reject(new Error("down")));
     await render(<StatusFooter client={client} />);
 
@@ -77,5 +82,20 @@ describe("StatusFooter", () => {
 
     expect(screen.getByText("v1.0.0 · Android")).toBeOnTheScreen();
     expect(screen.getByTestId("status-app")).toHaveAccessibleName("App version 1.0.0 on Android");
+  });
+
+  it("shows any other platform value as it is", async () => {
+    platform.OS = "web";
+    const client = clientReturning(() => Promise.reject(new Error("down")));
+    await render(<StatusFooter client={client} />);
+
+    expect(screen.getByText("v1.0.0 · web")).toBeOnTheScreen();
+    expect(screen.getByTestId("status-app")).toHaveAccessibleName("App version 1.0.0 on web");
+  });
+
+  it("pins the same app version the e2e script checks on the device", () => {
+    // e2e/app-platform.ad asserts the label "App version 1.0.0 on iOS" against
+    // the real app.json version. If they drift, fail here, not on the device lane.
+    expect(appJsonVersion).toBe("1.0.0");
   });
 });

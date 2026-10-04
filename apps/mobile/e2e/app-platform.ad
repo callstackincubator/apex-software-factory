@@ -1,7 +1,7 @@
 # the footer names the platform next to the app version: the App row's label is
-# "App version <version> on iOS" on an iPhone (the exact text, including the
-# version, is pinned in the Jest tests). Passes on a debug (Metro) or release
-# build, API up or down.
+# "App version <version> on iOS" on an iPhone. The version pinned below must
+# match app.json; the Jest footer tests fail on drift (see status-footer.test).
+# Passes on a debug (Metro) or release build, API up or down.
 #
 #   .agents/scripts/device-lane.sh ad replay apps/mobile/e2e/app-platform.ad
 context platform=ios timeout=120000
