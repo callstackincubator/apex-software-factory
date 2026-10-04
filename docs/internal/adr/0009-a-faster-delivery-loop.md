@@ -19,7 +19,10 @@ other.
 1. **Lean proving.** A reviewer proves a claim with the affected test file only
    (`pnpm --filter <pkg> exec vitest run <file>`, `exec jest <file>` for the
    app) and makes at most three break-and-rerun probes per review, on its
-   riskiest claims. Nobody in review runs the full `pnpm check`; CI does.
+   riskiest claims. Nobody in review runs the full `pnpm check`; CI does. A
+   reviewer stays in the diff and the repository (about 25 tool calls, never
+   library or native sources in `node_modules`): in the second timed run a
+   code review spent 18 minutes reading React Native internals.
 2. **Severity gate.** A finding is _blocking_ (it breaks behaviour, leaks data,
    or breaches a rule or the spec) or a _nit_. Only confirmed blocking findings
    start another round. Nits are not reproduced; they are posted once, as one

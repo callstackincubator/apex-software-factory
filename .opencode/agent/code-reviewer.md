@@ -82,6 +82,13 @@ test, one run of its test file, and `git checkout .`. Spend them where a
 wrong answer would hurt a user: a changed error path, a bound, a parser, an
 interleaving. Read, do not run, everything else.
 
+**Stay in the diff.** Read the changed files, the code they call in this
+repository, and the rules — never `node_modules`, React Native's or another
+library's sources, or native code: how a library behaves is not yours to
+research, and a claim that needs it is not a finding. Budget: about 25 tool
+calls. When it is spent, report what you have; a suspicion you could not
+prove within it is dropped, or at most one nit.
+
 Answer two questions, in this order:
 
 1. For every function the diff adds or changes: what input, state, error path,
