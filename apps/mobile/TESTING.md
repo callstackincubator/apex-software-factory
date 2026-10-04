@@ -34,8 +34,9 @@ jest.mock("expo-constants", () => ({
 
 it("shows the API version once healthy, and re-checks on press", async () => {
   await render(<StatusFooter client={client} />);
+  // The row's label carries the round trip too, which changes every run.
   expect(await screen.findByText("ok · v1.4.0")).toBeOnTheScreen(); // findBy* waits for effects
-  await fireEvent.press(screen.getByRole("button", { name: "API status: ok · v1.4.0" }));
+  await fireEvent.press(screen.getByTestId("status-api"));
 });
 ```
 
