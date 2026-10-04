@@ -48,9 +48,9 @@ function parseErrorBody(text: string): ErrorResponse | undefined {
  * The error response's body as UTF-8 text, bounded at the read itself (safety
  * rule 3): refuse on a content-length over the cap, otherwise read the stream
  * and cancel it as soon as more than the cap has arrived. Returns undefined
- * when the body is too large, so it is never parsed. A body that errors or
- * fails to decode while it is read has no usable body: also undefined, so the
- * caller falls back. The caller never sees a stream or decoding error.
+ * when the body is too large, so it is never parsed. A body whose stream
+ * errors while it is read has no usable body: also undefined, so the caller
+ * falls back. The caller never sees a stream error.
  */
 async function readErrorBody(response: Response): Promise<string | undefined> {
   try {

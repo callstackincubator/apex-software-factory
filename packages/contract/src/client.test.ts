@@ -169,6 +169,36 @@ describe("createApiClient", () => {
     expect(error.requestId).toBe("req-from-body");
   });
 
+  it("ApiError carries the error body streamed across many chunks", async () => {
+    // The JSON arrives in 64-byte fragments, so no single chunk parses on its
+    // own: only a client that concatenates every chunk before parsing can
+    // carry the body's code, message and request id.
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        error: {
+          code: "validation_failed",
+          message: "split across chunks",
+          requestId: "req-streamed",
+          details: { field: "uptimeSeconds" },
+        },
+      }),
+    );
+    expect(bytes.byteLength).toBeGreaterThan(64);
+    const stream = new ReadableStream<Uint8Array>({
+      type: "bytes",
+      start(controller) {
+        for (let offset = 0; offset < bytes.byteLength; offset += 64)
+          controller.enqueue(bytes.slice(offset, offset + 64));
+        controller.close();
+      },
+    });
+    const error = await healthError(streamErrorFetch(422, stream));
+    expect(error.message).toBe("split across chunks");
+    expect(error.code).toBe("validation_failed");
+    expect(error.requestId).toBe("req-streamed");
+    expect(error.details).toEqual({ field: "uptimeSeconds" });
+  });
+
   /** A one-chunk byte stream carrying this exact text, delivered in full on demand. */
   function stringStream(text: string): ReadableStream<Uint8Array> {
     const bytes = new TextEncoder().encode(text);
