@@ -12,6 +12,8 @@ name: Issue state
 # - a feature whose last sub-issue closed gets a note to check completion
 #   conditions and close;
 # - a feature closed as completed closes the request it came from;
+# - an issue closed as completed loses its assignee and its <kind>:<state>
+#   label (done is read from the closed state, never from a label);
 # - a PR closed without merge releases the claim on the issue it would close;
 # - a claim with no activity for six hours is released (the factory runs at a
 #   three-day booth, so a crashed agent must not hold an issue for days);
@@ -203,6 +205,39 @@ jobs:
             });
             core.info(`#${parent.number}: all sub-issues closed`);
 
+  completed-cleanup:
+    name: Completed issue drops its claim and state label
+    if: >-
+      github.event_name == 'issues' && github.event.action == 'closed' &&
+      github.event.issue.state_reason == 'completed'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // Done is "closed as completed"; a claim or a ready label left on a closed
+            // issue only misleads the next query. Other jobs read the labels from the
+            // event payload, so removing them here does not race them.
+            const re = new RegExp(process.env.STATE_LABEL);
+            const issue = context.payload.issue;
+            const issue_number = issue.number;
+            const assignees = (issue.assignees ?? []).map((a) => a.login);
+            if (assignees.length) {
+              await github.rest.issues.removeAssignees({ ...context.repo, issue_number, assignees });
+              core.info(`#${issue_number}: unassigned ${assignees.join(", ")}`);
+            }
+            for (const name of issue.labels.map((l) => l.name).filter((n) => re.test(n))) {
+              try {
+                await github.rest.issues.removeLabel({ ...context.repo, issue_number, name });
+                core.info(`#${issue_number}: removed ${name}`);
+              } catch (e) {
+                if (e.status !== 404) throw e;
+              }
+            }
+
   request-close:
     name: Feature completed, close its request
     if: >-
@@ -231,6 +266,12 @@ jobs:
             await github.rest.issues.update({
               ...context.repo, issue_number, state: "closed", state_reason: "completed",
             });
+            // A close made with the workflow token starts no new run, so completed-cleanup
+            // never sees this one: drop the request's state label here.
+            const re = new RegExp(process.env.STATE_LABEL);
+            for (const name of request.data.labels.map((l) => l.name).filter((n) => re.test(n))) {
+              await github.rest.issues.removeLabel({ ...context.repo, issue_number, name });
+            }
             core.info(`#${issue_number}: closed, shipped as #${feature.number}`);
 
   pr-closed-unmerged:
