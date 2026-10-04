@@ -10,9 +10,10 @@
  *   (`rozenite agent app call --tool app.app_info`), so an agent with Metro but
  *   no appduct session still has them.
  *
- * Every plugin's entry swaps itself for a no-op when `NODE_ENV` is
- * `production`, so release and OTA bundles carry only those stubs; Expo
- * Atlas is a Metro-only plugin (metro.config.js).
+ * The root layout loads this file only under `__DEV__`, so release and OTA
+ * bundles carry none of it (each plugin entry would also swap itself for a
+ * no-op when `NODE_ENV` is `production`). Expo Atlas is a Metro-only plugin
+ * (metro.config.js).
  */
 import { type AgentTool, useRozeniteInAppAgentTool } from "@rozenite/agent-bridge";
 import { useRozeniteControlsPlugin } from "@rozenite/controls-plugin";
@@ -31,6 +32,9 @@ function BridgedTool({ registration }: { registration: Registration }) {
     () => ({
       name: registration.name,
       description: registration.description,
+      readOnly: registration.annotations?.readOnlyHint,
+      destructive: registration.annotations?.destructiveHint,
+      idempotent: registration.annotations?.idempotentHint,
       inputSchema: (registration.inputSchema
         ? z.toJSONSchema(registration.inputSchema as z.ZodType, { io: "input" })
         : { type: "object" }) as AgentTool["inputSchema"],

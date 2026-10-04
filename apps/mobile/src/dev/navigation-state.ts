@@ -93,6 +93,8 @@ export function useTrackNavigation(): void {
   const pathname = usePathname();
   const sitemap = useSitemap();
   useEffect(() => {
-    setNavigationState({ pathname, routes: collectRoutes(sitemap) });
+    // An unmatched route reports its path without the leading slash.
+    const path = pathname.startsWith("/") ? pathname : `/${pathname}`;
+    setNavigationState({ pathname: path, routes: collectRoutes(sitemap) });
   }, [pathname, sitemap]);
 }
