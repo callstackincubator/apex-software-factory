@@ -1,0 +1,19 @@
+{
+  // Expo's base (bundler resolution, react-native conditions) plus the
+  // repo-wide strictness flags from tsconfig.base.json. The root base itself
+  // targets Node (NodeNext), so it is not extended here.
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    // @apex/contract ships TypeScript source with `.ts`-suffixed imports.
+    "allowImportingTsExtensions": true,
+    "types": ["jest"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/assets/*": ["./assets/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
+}
