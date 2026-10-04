@@ -85,7 +85,9 @@ blind to the rules — keep it that way.
 10. Agents act only on `bug:triage`, `bug:ready`, `feature:ready`, `task:ready`.
 
 The full manual is [docs/internal/DELIVERY.md](docs/internal/DELIVERY.md);
-the OTA side is [docs/internal/OTA.md](docs/internal/OTA.md).
+the OTA side is [docs/internal/OTA.md](docs/internal/OTA.md). An overview
+with diagrams is [docs/FACTORY.md](docs/FACTORY.md); setting up a machine
+from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
 
 ## Skills, agents, commands
 
