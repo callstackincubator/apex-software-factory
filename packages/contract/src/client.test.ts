@@ -41,8 +41,9 @@ function oversizedErrorBody(): string {
 }
 
 /**
- * A stream of `chunks` chunks of `size` bytes each, tracking how many bytes were
- * actually pulled out of it — so a test can prove the client stopped reading.
+ * A byte stream of `chunks` chunks of `size` bytes each, demand-driven, tracking
+ * how many bytes it has delivered and whether the consumer cancelled it — so a
+ * test can prove the client stopped reading and let go of the stream.
  */
 function countingStream(
   chunks: number,
@@ -50,21 +51,27 @@ function countingStream(
 ): {
   stream: ReadableStream<Uint8Array>;
   delivered: () => number;
+  cancelled: () => boolean;
 } {
   let delivered = 0;
+  let cancelled = false;
   let remaining = chunks;
-  const chunk = new TextEncoder().encode("x".repeat(size));
-  const stream = new ReadableStream<Uint8Array>({
+  const stream = new ReadableStream({
+    type: "bytes",
     pull(controller) {
       if (remaining-- <= 0) {
         controller.close();
         return;
       }
+      const chunk = new TextEncoder().encode("x".repeat(size));
       delivered += chunk.byteLength;
       controller.enqueue(chunk);
     },
+    cancel() {
+      cancelled = true;
+    },
   });
-  return { stream, delivered: () => delivered };
+  return { stream, delivered: () => delivered, cancelled: () => cancelled };
 }
 
 /** A fetch that answers every request with this streamed error body (no content-length inferred). */
@@ -182,6 +189,7 @@ describe("createApiClient", () => {
     const counted = countingStream(10, 4096);
     const error = await healthError(streamErrorFetch(500, counted.stream));
     expect(counted.delivered()).toBeLessThanOrEqual(20480);
+    expect(counted.cancelled()).toBe(true);
     expect(error.message).toBe("GET /health failed with 500");
     expect(error.code).toBeUndefined();
     expect(error.status).toBe(500);
@@ -196,6 +204,7 @@ describe("createApiClient", () => {
       }),
     );
     expect(counted.delivered()).toBe(0);
+    expect(counted.cancelled()).toBe(true);
     expect(error.message).toBe("GET /health failed with 413");
     expect(error.code).toBeUndefined();
     expect(error.requestId).toBe("req-refused");

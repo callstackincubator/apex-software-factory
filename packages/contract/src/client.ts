@@ -8,8 +8,8 @@ export type ApiClientOptions = {
   fetch?: typeof globalThis.fetch;
 };
 
-/** Error bodies longer than this (in characters) are not parsed, per safety rule 3. */
-const MAX_ERROR_BODY_CHARS = 16384;
+/** Error bodies longer than this (in bytes) are not read or parsed, per safety rule 3. */
+const MAX_ERROR_BODY_BYTES = 16384;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -36,13 +36,47 @@ export class ApiError extends Error {
 
 /** What an error response's body says, as far as it can be trusted. */
 function parseErrorBody(text: string): ErrorResponse | undefined {
-  if (text.length > MAX_ERROR_BODY_CHARS) return undefined;
   try {
     const parsed = ErrorResponse.safeParse(JSON.parse(text));
     return parsed.success ? parsed.data : undefined;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The error response's body as UTF-8 text, bounded at the read itself (safety
+ * rule 3): refuse on a content-length over the cap, otherwise read the stream
+ * and cancel it as soon as more than the cap has arrived. Returns undefined
+ * when the body is too large, so it is never parsed.
+ */
+async function readErrorBody(response: Response): Promise<string | undefined> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_ERROR_BODY_BYTES) {
+    await response.body?.cancel();
+    return undefined;
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_ERROR_BODY_BYTES) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 /** A typed client for the API. Every response is parsed with its contract schema. */
@@ -52,7 +86,8 @@ export function createApiClient({ baseUrl, fetch = globalThis.fetch }: ApiClient
   async function get<S extends z.ZodType>(path: string, schema: S): Promise<z.infer<S>> {
     const response = await fetch(`${origin}${path}`, { headers: { accept: "application/json" } });
     if (!response.ok) {
-      const body = parseErrorBody(await response.text());
+      const text = await readErrorBody(response);
+      const body = text === undefined ? undefined : parseErrorBody(text);
       const headerRequestId = response.headers.get("x-request-id");
       const requestId = body?.error.requestId ?? headerRequestId ?? undefined;
       const idInfo = requestId === undefined ? {} : { requestId };
