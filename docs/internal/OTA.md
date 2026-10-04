@@ -360,7 +360,14 @@ Machine as found: macOS 26.5 (Apple silicon), Node 22.22.2, pnpm 11.22.0
 7. Android release APK (no device attached, emulator not started):
    `cd apps/mobile/android && ANDROID_HOME=$HOME/Library/Android/sdk JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home EXPO_PUBLIC_OTA_URL=… EXPO_PUBLIC_API_URL=… ./gradlew assembleRelease`
    (first run downloads the Gradle distribution and Maven dependencies).
-   ANDROID_RESULT_PLACEHOLDER
+   `BUILD SUCCESSFUL in 8m 42s` (first run, all four ABIs) →
+   `android/app/build/outputs/apk/release/app-release.apk` (≈ 100 MB,
+   debug-keystore signed). `aapt dump xmltree` shows
+   `usesCleartextTraffic=true`, `com.hotupdater.CHANNEL=production` and
+   `com.hotupdater.FINGERPRINT_HASH=8bdbddf8…` (= `fingerprint.json`
+   `android.hash`). Not installed or OTA-tested on a device/emulator yet —
+   on the booth laptop: `adb install -r app-release.apk`, then repeat the
+   smoke test with `-p android`.
 
 Left running for the CI agent and the demo: MinIO container
 `apex-ota-minio-1` (ports 9000 on all interfaces, 9001 on 127.0.0.1) and the
