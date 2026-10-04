@@ -32,12 +32,51 @@ async function healthError(fetchImpl: typeof fetch): Promise<ApiError> {
   return error as ApiError;
 }
 
-/** A valid ErrorResponse body padded past the 16384-character parse limit. */
+/** A valid ErrorResponse body padded past the 16384-byte read limit. */
 function oversizedErrorBody(): string {
   return JSON.stringify({
     error: { code: "validation_failed", message: "too large to trust", requestId: "req-from-body" },
     pad: "x".repeat(16385),
   });
+}
+
+/**
+ * A stream of `chunks` chunks of `size` bytes each, tracking how many bytes were
+ * actually pulled out of it — so a test can prove the client stopped reading.
+ */
+function countingStream(
+  chunks: number,
+  size: number,
+): {
+  stream: ReadableStream<Uint8Array>;
+  delivered: () => number;
+} {
+  let delivered = 0;
+  let remaining = chunks;
+  const chunk = new TextEncoder().encode("x".repeat(size));
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (remaining-- <= 0) {
+        controller.close();
+        return;
+      }
+      delivered += chunk.byteLength;
+      controller.enqueue(chunk);
+    },
+  });
+  return { stream, delivered: () => delivered };
+}
+
+/** A fetch that answers every request with this streamed error body (no content-length inferred). */
+function streamErrorFetch(
+  status: number,
+  stream: ReadableStream<Uint8Array>,
+  headers: Record<string, string> = {},
+): typeof fetch {
+  return async (input) => {
+    expect(String(input)).toBe("http://api.test/health");
+    return new Response(stream, { status, headers });
+  };
 }
 
 describe("createApiClient", () => {
@@ -113,14 +152,53 @@ describe("createApiClient", () => {
     expect(error.requestId).toBe("req-500");
   });
 
-  it("ApiError does not parse an error body longer than 16384 characters", async () => {
+  it("ApiError prefers the body's request id over the x-request-id header when both are present", async () => {
+    const body = {
+      error: { code: "not_found", message: "no such thing", requestId: "req-from-body" },
+    };
+    const error = await healthError(
+      errorFetch(404, JSON.stringify(body), { "x-request-id": "req-from-header" }),
+    );
+    expect(error.requestId).toBe("req-from-body");
+  });
+
+  it("ApiError does not parse an error body longer than 16384 bytes", async () => {
     const body = oversizedErrorBody();
-    expect(body.length).toBeGreaterThan(16384);
+    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(16384);
     expect(ErrorResponse.safeParse(JSON.parse(body)).success).toBe(true);
-    const error = await healthError(errorFetch(413, body, { "x-request-id": "req-oversized" }));
+    // No content-length: the client reads, finds the body over the cap, and refuses to parse it.
+    const counted = countingStream(1, new TextEncoder().encode(body).byteLength);
+    const error = await healthError(
+      streamErrorFetch(413, counted.stream, { "x-request-id": "req-oversized" }),
+    );
     expect(error.message).toBe("GET /health failed with 413");
     expect(error.code).toBeUndefined();
     expect(error.requestId).toBe("req-oversized");
+  });
+
+  it("ApiError stops reading an error body after 16384 bytes", async () => {
+    // No content-length: ten 4096-byte chunks, 40960 bytes in all. The client must
+    // stop pulling once more than 16384 bytes have arrived, not drain the stream.
+    const counted = countingStream(10, 4096);
+    const error = await healthError(streamErrorFetch(500, counted.stream));
+    expect(counted.delivered()).toBeLessThanOrEqual(20480);
+    expect(error.message).toBe("GET /health failed with 500");
+    expect(error.code).toBeUndefined();
+    expect(error.status).toBe(500);
+  });
+
+  it("ApiError does not read an error body whose content-length is over 16384 bytes", async () => {
+    const counted = countingStream(10, 4096);
+    const error = await healthError(
+      streamErrorFetch(413, counted.stream, {
+        "content-length": "40960",
+        "x-request-id": "req-refused",
+      }),
+    );
+    expect(counted.delivered()).toBe(0);
+    expect(error.message).toBe("GET /health failed with 413");
+    expect(error.code).toBeUndefined();
+    expect(error.requestId).toBe("req-refused");
   });
 
   it("ApiError keeps its status and name for every kind of error body", async () => {
