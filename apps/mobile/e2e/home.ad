@@ -1,0 +1,20 @@
+# The home screen an agent starts from: the blank canvas, the empty
+# "Shipped at the booth" list, and the status footer (API answered or
+# offline, app version, running bundle on the production channel). Passes on
+# a debug (Metro) or release build, API up or down.
+#
+#   pnpm exec agent-device replay apps/mobile/e2e/home.ad --udid <UDID>
+context platform=ios timeout=120000
+env APP_ID=com.callstack.apexfactory
+open ${APP_ID} --relaunch
+wait id="home-headline" 60000
+is visible "id=\"home-headline\" label=\"This app is empty. On purpose.\""
+is exists "id=\"shipped-count\" label=\"0 shipped\""
+is exists id="shipped-empty"
+scroll bottom
+is visible id="status-api"
+wait absent "label=\"API status: checking…\"" 10000
+is visible id="status-app"
+is visible id="status-bundle"
+wait text "production" 5000
+close
