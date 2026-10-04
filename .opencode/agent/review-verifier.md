@@ -9,6 +9,7 @@ mode: subagent
 color: warning
 permission:
   task: deny
+  doom_loop: deny
   skill: deny
   webfetch: deny
   websearch: deny

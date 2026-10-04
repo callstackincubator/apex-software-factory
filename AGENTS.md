@@ -95,4 +95,6 @@ the OTA side is [docs/internal/OTA.md](docs/internal/OTA.md).
 
 Unattended runs use `opencode run --agent factory --auto "deliver #<n>"`:
 `--auto` approves what `opencode.json` leaves at "ask", and every "deny" still
-holds.
+holds. It answers only the primary agent's asks: a subagent that reaches "ask"
+waits forever. So every subagent's permissions resolve to allow or deny — its
+`bash`, `external_directory` and `doom_loop` each end in a `"*"` rule.
