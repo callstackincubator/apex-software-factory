@@ -6,8 +6,9 @@
 # Gates, in order: the PR is open and not a draft; it carries neither `needs-simulator` nor
 # `needs-native-build`; its body has a `## Review` section with the review stage's result line
 # and no "spec needs" line; its diff changes nothing native (native-check.sh), because a native
-# change cannot ship over the air; every CI check passed or was skipped; and GitHub calls it
-# mergeable. Waits up to [minutes] for pending checks. Prints the first gate that fails and
+# change cannot ship over the air; the required check CI/check (`pnpm check`) reported and
+# passed, and every other CI check passed or was skipped; and GitHub calls it mergeable. Waits
+# up to [minutes] for pending or not-yet-reported checks. Prints the first gate that fails and
 # exits 1, or exits 2 when checks are still pending at the deadline (run it again to wait on).
 #
 # Agents may not run `gh pr merge` themselves (opencode.json denies it); this script is the one
@@ -43,16 +44,28 @@ if ! native=$("$here/native-check.sh" "origin/$base" "refs/gate/$pr"); then
   fail "PR #$pr changes native code and cannot ship over the air: $(printf '%s\n' "$native" | grep '^native:' | tr '\n' ';')"
 fi
 
+# Checks are "<bucket> <workflow>/<job>". The required ones must report and pass: right after a
+# push GitHub lists only the checks that have started, and "every listed check passed" would
+# let a PR through before CI even ran. CI/check is `pnpm check` (.github/workflows/ci.yml).
+required="CI/check"
+bucket_of() { printf '%s\n' "$checks" | awk -v want="$1" '{ b = $1; sub(/^[^ ]+ /, ""); if ($0 == want) print b }'; }
 deadline=$(($(date +%s) + minutes * 60))
 while :; do
-  checks=$(gh pr checks "$pr" --json name,bucket -q '.[] | "\(.bucket) \(.name)"' || true)
-  [ -n "$checks" ] || fail "PR #$pr has no CI checks"
-  echo "$checks" | grep -q '^pending ' || break
+  checks=$(gh pr checks "$pr" --json name,bucket,workflow -q '.[] | "\(.bucket) \(.workflow)/\(.name)"' || true)
+  missing=
+  for req in $required; do
+    [ -n "$(bucket_of "$req")" ] || missing="$missing $req"
+  done
+  [ -z "$missing" ] && ! printf '%s\n' "$checks" | grep -q '^pending ' && break
   [ "$(date +%s)" -lt "$deadline" ] || {
+    [ -z "$missing" ] || fail "required check(s)$missing never reported after $minutes minutes"
     echo "not merged: checks still pending after $minutes minutes; run again to keep waiting" >&2
     exit 2
   }
   sleep 30
+done
+for req in $required; do
+  [ "$(bucket_of "$req" | sort -u)" = pass ] || fail "required check $req did not pass: $(bucket_of "$req" | tr '\n' ' ')"
 done
 bad=$(echo "$checks" | grep -v -e '^pass ' -e '^skipping ' || true)
 [ -z "$bad" ] || fail "CI not green: $(echo "$bad" | tr '\n' ';')"

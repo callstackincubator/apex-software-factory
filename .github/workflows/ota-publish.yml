@@ -1,0 +1,171 @@
+name: OTA publish
+
+# Ships the mobile JS bundle to the `production` channel of the self-hosted
+# hot-updater server on the booth laptop (ADR 0003). Runs after every merge to
+# main that can change the bundle. A native change cannot ship over the air:
+# the fingerprint does not match the installed binary, the deploy refuses, and
+# this workflow reports "needs a native build" on the job and the merged PR.
+#
+# SECURITY: this job runs on the self-hosted runner on the booth laptop, which
+# holds the OTA token and S3 credentials and runs as the maintainer's user.
+# It must only ever run reviewed code from main. Never add pull_request,
+# pull_request_target, or any other trigger that runs a branch or a fork here.
+# A workflow_dispatch from another branch runs the preflight only; the deploy
+# step is gated on refs/heads/main.
+#
+# Setup (secrets, variables, the runner's PATH): docs/internal/DELIVERY.md,
+# "CI and OTA publishing". Booth-day runbook: docs/internal/OTA.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/mobile/**
+      - packages/**
+      - pnpm-lock.yaml
+  workflow_dispatch:
+    inputs:
+      preflight_only:
+        description: Check the runner and the OTA stack, print fingerprints, deploy nothing
+        type: boolean
+        default: false
+
+permissions: {}
+
+# One publish at a time and never cut one off halfway. GitHub keeps at most one
+# run waiting: a newer merge replaces a waiting one, which is fine, because it
+# builds from a later main that contains the replaced commit.
+concurrency:
+  group: ota-publish
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  publish:
+    name: publish
+    runs-on: [self-hosted, ota]
+    permissions:
+      actions: read # wait for CI's `check` on this commit
+      contents: read
+      issues: write # label and comment on the merged PR when it needs a native build
+      pull-requests: write
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      CHANNEL: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Put Node, pnpm and gh on PATH
+        run: scripts/ci/runner-env.sh
+
+      - name: Preflight (configuration, OTA server, MinIO)
+        env:
+          HOT_UPDATER_SERVER_URL: ${{ vars.HOT_UPDATER_SERVER_URL || secrets.HOT_UPDATER_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          S3_ENDPOINT: ${{ vars.S3_ENDPOINT || secrets.S3_ENDPOINT }}
+          S3_REGION: ${{ vars.S3_REGION || secrets.S3_REGION }}
+          S3_BUCKET: ${{ vars.S3_BUCKET || secrets.S3_BUCKET }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+        run: scripts/ci/ota-preflight.sh
+
+      # No secrets in this step's environment: install scripts never see them.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Fingerprints
+        run: pnpm --filter @apex/mobile run ota:fingerprint
+
+      - name: Describe the commit
+        id: commit
+        run: |
+          subject=$(git log -1 --format=%s)
+          short=$(git rev-parse --short HEAD)
+          pr=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" \
+            -q '[.[] | select(.merged_at != null and .base.ref == "main")][0].number // empty' || true)
+          {
+            echo "short=$short"
+            echo "pr=$pr"
+            # The deploy message is the merge commit subject plus the short sha.
+            echo "message<<EOF_MESSAGE"
+            echo "$subject ($short)"
+            echo "EOF_MESSAGE"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Wait for CI's check on this commit
+        if: github.ref == 'refs/heads/main' && !inputs.preflight_only
+        run: scripts/ci/wait-for-check.sh "$GITHUB_SHA" 25
+
+      - name: Deploy iOS, then Android
+        id: deploy
+        if: github.ref == 'refs/heads/main' && !inputs.preflight_only
+        env:
+          OTA_CHANNEL: ${{ env.CHANNEL }}
+          OTA_MESSAGE: ${{ steps.commit.outputs.message }}
+          OTA_PLATFORMS: ios android
+          OTA_MISMATCH_PATTERN: ${{ vars.OTA_MISMATCH_PATTERN }}
+          HOT_UPDATER_SERVER_URL: ${{ vars.HOT_UPDATER_SERVER_URL || secrets.HOT_UPDATER_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          S3_ENDPOINT: ${{ vars.S3_ENDPOINT || secrets.S3_ENDPOINT }}
+          S3_REGION: ${{ vars.S3_REGION || secrets.S3_REGION }}
+          S3_BUCKET: ${{ vars.S3_BUCKET || secrets.S3_BUCKET }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+        run: |
+          # An empty repo variable must not blank out the script's default.
+          [ -n "$OTA_MISMATCH_PATTERN" ] || unset OTA_MISMATCH_PATTERN
+          scripts/ci/ota-deploy.sh
+
+      - name: Summary
+        if: always() && steps.deploy.outcome != 'skipped'
+        env:
+          RESULT: ${{ steps.deploy.outputs.result }}
+          IOS_STATUS: ${{ steps.deploy.outputs.ios_status }}
+          IOS_BUNDLE: ${{ steps.deploy.outputs.ios_bundle }}
+          ANDROID_STATUS: ${{ steps.deploy.outputs.android_status }}
+          ANDROID_BUNDLE: ${{ steps.deploy.outputs.android_bundle }}
+          MESSAGE: ${{ steps.commit.outputs.message }}
+          PR: ${{ steps.commit.outputs.pr }}
+        run: |
+          url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY
+          case $RESULT in
+            shipped) title="Shipped over the air to \`$CHANNEL\`" ;;
+            needs-native-build) title="Needs a native build — not shipped over the air" ;;
+            *) title="OTA publish failed" ;;
+          esac
+          row() { echo "| $1 | ${2:-not run} | ${3:+\`$3\`} |"; }
+          {
+            echo "### $title"
+            echo
+            echo "| Platform | Result | Bundle id |"
+            echo "| --- | --- | --- |"
+            row iOS "$IOS_STATUS" "$IOS_BUNDLE"
+            row Android "$ANDROID_STATUS" "$ANDROID_BUNDLE"
+            echo
+            echo "- Channel: \`$CHANNEL\`"
+            echo "- Commit: [\`${GITHUB_SHA:0:7}\`]($url/commit/$GITHUB_SHA) — $MESSAGE"
+            if [ -n "$PR" ]; then echo "- PR: [#$PR]($url/pull/$PR)"; else echo "- PR: none (pushed to main directly)"; fi
+            if [ "$RESULT" = needs-native-build ]; then
+              echo
+              echo "The native fingerprint no longer matches the installed binary. A maintainer builds and installs a new binary (docs/internal/OTA.md, Mobile release builds); phones keep the last bundle until then."
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Tell the merged PR it needs a native build
+        if: always() && steps.deploy.outputs.result == 'needs-native-build' && steps.commit.outputs.pr != ''
+        env:
+          PR: ${{ steps.commit.outputs.pr }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api "repos/$GH_REPO/issues/$PR/labels" -f 'labels[]=needs-native-build' >/dev/null
+          gh api "repos/$GH_REPO/issues/$PR/comments" -f body="$(printf '%s\n' \
+            "**Needs a native build — not shipped over the air.** The native fingerprint of \`${GITHUB_SHA:0:7}\` does not match the installed binary, so the OTA publish refused it." \
+            "" \
+            "A maintainer ships a new binary (docs/internal/OTA.md). Run: $RUN_URL")" >/dev/null

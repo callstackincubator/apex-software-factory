@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Deploys the mobile JS bundle over the air, one platform at a time, and says
+# per platform whether it shipped, needs a native build, or failed.
+#
+#   scripts/ci/ota-deploy.sh
+#
+# env: OTA_MESSAGE (required), OTA_CHANNEL (default production),
+#      OTA_PLATFORMS (default "ios android"), plus the hot-updater variables the
+#      deploy reads (HOT_UPDATER_SERVER_URL, HOT_UPDATER_AUTH_TOKEN, S3_*).
+#      OTA_MISMATCH_PATTERN overrides the extended regex that recognises a
+#      fingerprint mismatch in the deploy output.
+#
+# Outputs ($GITHUB_OUTPUT): result=shipped|needs-native-build|failed, and
+# <platform>_status / <platform>_bundle for each platform. Exit 0 only when
+# every platform shipped. Platforms are independent (each has its own native
+# fingerprint), so a mismatch on one does not stop the other.
+#
+# Production is deployed only from main by this workflow (safety rule 5); the
+# fingerprint strategy is never bypassed (safety rule 4): no -f, no forced
+# fingerprint, no app-version override.
+set -uo pipefail
+
+: "${OTA_MESSAGE:?OTA_MESSAGE is required}"
+channel=${OTA_CHANNEL:-production}
+platforms=${OTA_PLATFORMS:-ios android}
+# hot-updater 0.36: "Fingerprint mismatch.", "Fingerprint.json not found",
+# "Fingerprint hash not found"; plus wording a wrapper script may add.
+pattern=${OTA_MISMATCH_PATTERN:-'fingerprint (mismatch|hash not found|does not match|doesn.t match)|fingerprint\.json not found|needs? a native build|native build (is )?required|no (registered|matching) native build'}
+logs=${RUNNER_TEMP:-$(mktemp -d)}
+
+output() { [ -n "${GITHUB_OUTPUT:-}" ] && echo "$1=$2" >>"$GITHUB_OUTPUT"; return 0; }
+
+shipped=0 native=0 failed=0
+for platform in $platforms; do
+  log="$logs/ota-deploy-$platform.log"
+  echo "::group::Deploy $platform to $channel"
+  # Options go straight after the script name: pnpm forwards them as they are,
+  # whereas a literal "--" would reach the script and end its option parsing.
+  pnpm --filter @apex/mobile run ota:deploy -p "$platform" -c "$channel" -m "$OTA_MESSAGE" 2>&1 | tee "$log"
+  code=${PIPESTATUS[0]}
+  echo "::endgroup::"
+
+  # Strip ANSI colours before matching.
+  plain=$(sed -E $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$log")
+  if [ "$code" -eq 0 ]; then
+    bundle=$(printf '%s\n' "$plain" | grep -oE 'Deployment Successful \([0-9a-fA-F-]{36}\)' | tail -1 | grep -oE '[0-9a-fA-F-]{36}' || true)
+    status=shipped
+    shipped=$((shipped + 1))
+    echo "$platform: shipped ${bundle:-"(bundle id not found in the output)"}"
+  elif printf '%s\n' "$plain" | grep -qiE "$pattern"; then
+    bundle=
+    status=needs-native-build
+    native=$((native + 1))
+    echo "::error title=$platform needs a native build::The native fingerprint does not match a registered native build. Not shipped over the air."
+  else
+    bundle=
+    status=failed
+    failed=$((failed + 1))
+    echo "::error title=$platform deploy failed::ota:deploy exited $code; see the log above. docs/internal/OTA.md, Troubleshooting."
+  fi
+  output "${platform}_status" "$status"
+  output "${platform}_bundle" "$bundle"
+done
+
+if [ "$failed" -gt 0 ]; then
+  output result failed
+  exit 1
+elif [ "$native" -gt 0 ]; then
+  output result needs-native-build
+  exit 1
+fi
+output result shipped
+echo "shipped $shipped platform(s) to $channel"
