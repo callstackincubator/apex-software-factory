@@ -60,6 +60,7 @@
           }
         }
       ],
+      "./plugins/with-android-build-memory",
       [
         "@appduct/react-native",
         {
