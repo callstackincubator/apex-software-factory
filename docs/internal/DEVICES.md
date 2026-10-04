@@ -114,7 +114,10 @@ again.
 
 | Symptom | Fix |
 | --- | --- |
-| `DEVICE_IN_USE` / "owned by session" from agent-device | Another agent-device session holds the simulator. `pnpm exec agent-device device status --platform ios --udid <UDID>`; the owner closes with `agent-device close`. |
+| `DEVICE_IN_USE` / "owned by session" from agent-device | Another agent-device session holds the simulator. `pnpm exec agent-device device status --platform ios --udid <UDID>`; the owner closes with `agent-device close`. A lane's own leftover session (a lease that died): `device-lane.sh release` in that worktree closes it even without a lease, and every new lease closes it first. |
+| `device-lane.sh ad …` exits 76 | The command failed twice on the device side (CoreSimulator late, XCUITest runner lost); the lane already retried once. Release, lease again, retry once; then report `unavailable`. |
+| "a build of this worktree is still running" | One build per worktree at a time: a second would recompute the fingerprint while `pod install` or a native step writes files it hashes. Wait for the first build's `.exit`. |
+| Android lane commands fail on a device "name" | Fixed: the lane drives the emulator's adb serial (simlock's `device.address`), not the AVD name simlock reports as `driverDeviceId`. Lease again. |
 | An `xcodebuild test-without-building … AgentDeviceRunner` process outlives its session | Orphaned runner. Check its `-xctestrun` path names your UDID, then `kill <pid>`; the next `open` starts a fresh one. |
 | `Replacing daemon … version mismatch` | Normal after a version bump; the pinned CLI replaces the old daemon. |
 | `appduct tools ls` → `unknown_session` right after `link --open` | The app never claimed the link: the "Open in" sheet is up (press Open), or the app was not running. Mint a new link (one use, 5 min). |
