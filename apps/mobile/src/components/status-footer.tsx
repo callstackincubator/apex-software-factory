@@ -29,23 +29,37 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 function describe(health: ApiHealth, theme: Theme) {
   switch (health.state) {
     case "ok":
-      return { text: `ok · v${health.version}`, color: theme.accent };
+      return {
+        text: `ok · v${health.version}`,
+        // The row shows the time as its own element; the row's label speaks
+        // the whole line: "ok · v0.1.0 · 42 ms".
+        labelText: `ok · v${health.version} · ${health.latencyMs} ms`,
+        latencyMs: health.latencyMs,
+        color: theme.accent,
+      };
     case "offline":
-      return { text: "offline", color: theme.danger };
+      return { text: "offline", labelText: "offline", latencyMs: null, color: theme.danger };
     case "checking":
-      return { text: "checking…", color: theme.textFaint };
+      return {
+        text: "checking…",
+        labelText: "checking…",
+        latencyMs: null,
+        color: theme.textFaint,
+      };
   }
 }
 
 type Props = {
   /** Defaults to the app's API client; injectable for tests. */
   client?: Pick<ApiClient, "health">;
+  /** Clock the round trip is measured on; injectable for tests. */
+  now?: () => number;
 };
 
-/** API health, app version and running bundle — what a booth demo needs at a glance. */
-export function StatusFooter({ client = api }: Props) {
+/** API health with its round trip, app version and running bundle — what a booth demo needs at a glance. */
+export function StatusFooter({ client = api, now }: Props) {
   const theme = useTheme();
-  const { health, refresh } = useApiHealth(client);
+  const { health, refresh } = useApiHealth(client, now);
   const status = describe(health, theme);
   const appVersion = Constants.expoConfig?.version ?? "unknown";
 
@@ -62,7 +76,7 @@ export function StatusFooter({ client = api }: Props) {
         testID="status-api"
         onPress={refresh}
         accessibilityRole="button"
-        accessibilityLabel={`API status: ${status.text}`}
+        accessibilityLabel={`API status: ${status.labelText}`}
         accessibilityHint="Checks the API again"
         style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
       >
@@ -75,6 +89,17 @@ export function StatusFooter({ client = api }: Props) {
           >
             {status.text}
           </Text>
+          {status.latencyMs !== null && (
+            <Text
+              testID="status-api-latency"
+              selectable
+              maxFontSizeMultiplier={1.6}
+              accessibilityLabel={`API round trip ${status.latencyMs} ms`}
+              style={{ fontFamily: fonts.mono, fontSize: 12, color: theme.text }}
+            >
+              {` · ${status.latencyMs} ms`}
+            </Text>
+          )}
         </Row>
       </Pressable>
       <View testID="status-app" accessible accessibilityLabel={`App version ${appVersion}`}>

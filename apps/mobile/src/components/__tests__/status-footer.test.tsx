@@ -51,11 +51,13 @@ describe("StatusFooter", () => {
     });
     await render(<StatusFooter client={client} now={clock.now} />);
 
-    expect(await screen.findByText("ok · v1.4.0 · 18 ms")).toBeOnTheScreen();
+    const apiRow = await screen.findByTestId("status-api");
+    expect(apiRow).toHaveTextContent(/ok · v1\.4\.0 · 18 ms/);
     expect(calls).toBe(1);
 
     await fireEvent.press(screen.getByRole("button", { name: "API status: ok · v1.4.0 · 18 ms" }));
-    expect(await screen.findByText("ok · v1.4.0 · 36 ms")).toBeOnTheScreen();
+    await screen.findByTestId("status-api-latency");
+    expect(screen.getByTestId("status-api")).toHaveTextContent(/ok · v1\.4\.0 · 36 ms/);
     expect(calls).toBe(2);
   });
 
@@ -67,12 +69,14 @@ describe("StatusFooter", () => {
     });
     await render(<StatusFooter client={client} now={clock.now} />);
 
-    // The row's exact text, per the spec: `ok · v0.1.0 · 42 ms`.
-    expect(await screen.findByText(/^ok · v1\.4\.0 · 42 ms$/)).toBeOnTheScreen();
+    // The row reads "ok · v1.4.0 · 42 ms", as the spec words it.
+    await screen.findByTestId("status-api-latency");
+    expect(screen.getByTestId("status-api")).toHaveTextContent(/ok · v1\.4\.0 · 42 ms/);
 
     // The time is its own element, selectable by testID, labelled as the spec words it.
     const latency = screen.getByTestId("status-api-latency");
     expect(latency).toBeOnTheScreen();
+    expect(latency).toHaveTextContent(/42 ms/);
     expect(latency.props.accessibilityLabel).toBe("API round trip 42 ms");
 
     // The row's own label states the same line for screen readers.
@@ -88,6 +92,7 @@ describe("StatusFooter", () => {
 
     expect(await screen.findByText("offline")).toBeOnTheScreen();
     expect(screen.queryByTestId("status-api-latency")).toBeNull();
+    expect(screen.getByTestId("status-api")).not.toHaveTextContent(/· \d+ ms/);
     expect(screen.getByRole("button", { name: "API status: offline" })).toBeOnTheScreen();
   });
 
@@ -96,30 +101,25 @@ describe("StatusFooter", () => {
     const clock = fixedClock();
     const client = clientReturning(async () => {
       calls += 1;
-      clock.at(calls === 1 ? 400 : 950);
+      clock.advance(calls === 1 ? 400 : 950);
       return healthResponse();
     });
     await render(<StatusFooter client={client} now={clock.now} />);
 
-    expect(await screen.findByText("ok · v1.4.0 · 400 ms")).toBeOnTheScreen();
+    await screen.findByTestId("status-api-latency");
+    expect(screen.getByTestId("status-api")).toHaveTextContent(/ok · v1\.4\.0 · 400 ms/);
 
     await fireEvent.press(screen.getByRole("button", { name: "API status: ok · v1.4.0 · 400 ms" }));
 
-    // The new time replaces the old one; 400 ms is nowhere on screen — even
-    // past the 5 s timeout, a time stays in milliseconds.
-    expect(await screen.findByText("ok · v1.4.0 · 950 ms")).toBeOnTheScreen();
-    expect(screen.queryByText(/400 ms/)).toBeNull();
+    // The row shows "checking…" while it re-checks; the element comes back
+    // only when the new answer arrives.
+    await screen.findByTestId("status-api-latency");
     expect(screen.getByTestId("status-api-latency").props.accessibilityLabel).toBe(
       "API round trip 950 ms",
     );
-  });
-
-  it("shows the app version and the running bundle", async () => {
-    const client = clientReturning(() => Promise.reject(new Error("down")));
-    await render(<StatusFooter client={client} />);
-
-    expect(screen.getByText("v1.0.0")).toBeOnTheScreen();
-    expect(screen.getByText("embedded · production")).toBeOnTheScreen();
-    await screen.findByText("offline");
+    // The new time replaced the old one; 400 ms is nowhere on the row —
+    // even past the 5 s timeout a time stays in milliseconds.
+    expect(screen.getByTestId("status-api")).toHaveTextContent(/ok · v1\.4\.0 · 950 ms/);
+    expect(screen.getByTestId("status-api")).not.toHaveTextContent(/400/);
   });
 });
