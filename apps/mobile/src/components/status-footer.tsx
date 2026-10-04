@@ -40,14 +40,22 @@ function describe(health: ApiHealth, theme: Theme) {
 type Props = {
   /** Defaults to the app's API client; injectable for tests. */
   client?: Pick<ApiClient, "health">;
+  /** Clock the round trip is measured with; injectable for tests. */
+  now?: () => number;
 };
 
 /** API health, app version and running bundle — what a booth demo needs at a glance. */
-export function StatusFooter({ client = api }: Props) {
+export function StatusFooter({ client = api, now }: Props) {
   const theme = useTheme();
-  const { health, refresh } = useApiHealth(client);
+  const { health, refresh } = useApiHealth(client, now);
   const status = describe(health, theme);
   const appVersion = Constants.expoConfig?.version ?? "unknown";
+  // The row's label carries the round trip too, so an agent reads the time
+  // from the row itself; only an "ok" answer has one.
+  const apiLabel =
+    health.state === "ok"
+      ? `API status: ${status.text} · ${health.latencyMs} ms`
+      : `API status: ${status.text}`;
 
   return (
     <View
@@ -62,7 +70,7 @@ export function StatusFooter({ client = api }: Props) {
         testID="status-api"
         onPress={refresh}
         accessibilityRole="button"
-        accessibilityLabel={`API status: ${status.text}`}
+        accessibilityLabel={apiLabel}
         accessibilityHint="Checks the API again"
         style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
       >
@@ -75,6 +83,17 @@ export function StatusFooter({ client = api }: Props) {
           >
             {status.text}
           </Text>
+          {health.state === "ok" ? (
+            <Text
+              testID="status-api-latency"
+              accessible
+              accessibilityLabel={`API round trip ${health.latencyMs} ms`}
+              maxFontSizeMultiplier={1.6}
+              style={{ fontFamily: fonts.mono, fontSize: 12, color: theme.text }}
+            >
+              {`· ${health.latencyMs} ms`}
+            </Text>
+          ) : null}
         </Row>
       </Pressable>
       <View testID="status-app" accessible accessibilityLabel={`App version ${appVersion}`}>
