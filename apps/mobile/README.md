@@ -37,29 +37,104 @@ Android Studio with an emulator (Android). If `pod install` fails with
 
 To regenerate the native projects from scratch: `pnpm --filter @apex/mobile prebuild`.
 
+## Release builds and over-the-air updates
+
+Over-the-air updates only run in a **release** build: a debug build always
+loads JS from Metro. The release binary checks the OTA server when it starts,
+whenever it comes back to the foreground, and every 30 seconds. A new bundle
+downloads in the background, then a banner says **New feature landed — tap to
+reload** with the change's title; tapping it restarts into the new code. A
+bundle also takes effect on the next cold start, banner or not. The status
+footer's **Bundle** row shows what is running: `embedded · production` for the
+JS inside the binary, `ota 0199b111…7777 · production` after an update.
+
+The server address is compiled into the binary, so set it when you build:
+
+```sh
+LAN_IP=$(ipconfig getifaddr en0)    # the laptop's Wi-Fi address
+export EXPO_PUBLIC_OTA_URL=http://$LAN_IP:3002/hot-updater
+export EXPO_PUBLIC_API_URL=http://$LAN_IP:3001
+export LANG=en_US.UTF-8             # CocoaPods needs a UTF-8 locale
+```
+
+On the iOS simulator `localhost` works too (the defaults), but then the build
+only works on this Mac.
+
+**iOS simulator** (from `apps/mobile`):
+
+```sh
+pnpm exec expo run:ios --configuration Release --no-bundler
+```
+
+**Android device** — USB debugging on, `adb devices` lists it, Android Studio's
+SDK installed (`ANDROID_HOME=$HOME/Library/Android/sdk`). From `apps/mobile`:
+
+```sh
+pnpm exec expo run:android --variant release --no-bundler
+```
+
+The release variant is signed with the debug keystore that `expo prebuild`
+generates — fine for installing at the booth, not for a store. To build the APK
+without a device: `pnpm exec expo prebuild --platform android`, then
+`cd android && ./gradlew assembleRelease`; the APK is
+`android/app/build/outputs/apk/release/app-release.apk`
+(`adb install -r <apk>`).
+
+The release build allows plain HTTP to the laptop: on iOS through the
+local-networking exception of App Transport Security, on Android through
+cleartext traffic. iOS asks once to "find devices on your local network" —
+allow it, or no update arrives.
+
+### What can ship over the air
+
+Only JavaScript and assets. Each binary carries a fingerprint of its native
+side (native modules, their versions, `app.json`, config plugins), and the
+server hands a bundle only to binaries with the same fingerprint. Adding or
+upgrading a package with native code, or changing `app.json`, changes the
+fingerprint: deploying is refused until a new binary is built and installed.
+
+```sh
+pnpm --filter @apex/mobile ota:fingerprint   # this checkout's iOS and Android fingerprints
+```
+
+`fingerprint.json` holds the fingerprints of the binaries in use; building a
+binary (`expo prebuild` / `expo run:*`) rewrites it. Run `pnpm format`, commit
+it together with the native change and install the new binary on every booth
+phone.
+
+An update replaces the binary's JavaScript, including the inlined
+`EXPO_PUBLIC_*` addresses — so every deploy must use the same
+`EXPO_PUBLIC_OTA_URL` and `EXPO_PUBLIC_API_URL` the installed binary was built
+with (the deploy refuses to run without them).
+
 ## Environment
 
-| Variable              | Default                 | Purpose                                                                                                                               |
-| --------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `EXPO_PUBLIC_API_URL` | `http://localhost:3001` | Origin of `apps/api`. `localhost` works on the iOS simulator; on a phone or Android emulator use the laptop's LAN IP (or `10.0.2.2`). |
+| Variable              | Default                             | Purpose                                                                                                                               |
+| --------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `EXPO_PUBLIC_API_URL` | `http://localhost:3001`             | Origin of `apps/api`. `localhost` works on the iOS simulator; on a phone or Android emulator use the laptop's LAN IP (or `10.0.2.2`). |
+| `EXPO_PUBLIC_OTA_URL` | `http://localhost:3002/hot-updater` | The OTA server (`apps/ota-server`). Same rule: the laptop's LAN IP for a phone.                                                       |
 
 `EXPO_PUBLIC_*` variables are inlined when the bundle is built. Put them in
-`apps/mobile/.env.local` (git-ignored) or pass them on the command line.
+`apps/mobile/.env.local` (git-ignored) or pass them on the command line. For a
+release binary they must be set at native build time; changing them means a
+new binary.
 
 The API is optional: when it is not reachable the status footer shows
 "offline" and the app keeps working.
 
 ## Scripts
 
-| Script         | What it does                                                |
-| -------------- | ----------------------------------------------------------- |
-| `start`        | Metro for the dev client                                    |
-| `ios`          | `expo run:ios` — native build and launch                    |
-| `android`      | `expo run:android`                                          |
-| `prebuild`     | Regenerate `ios/` and `android/` from `app.json`            |
-| `typecheck`    | `tsc --noEmit`                                              |
-| `test`         | Jest (`jest-expo` preset, React Native Testing Library)     |
-| `export:check` | Production bundles for iOS and Android into `dist/` (smoke) |
+| Script            | What it does                                                                   |
+| ----------------- | ------------------------------------------------------------------------------ |
+| `start`           | Metro for the dev client                                                       |
+| `ios`             | `expo run:ios` — native build and launch                                       |
+| `android`         | `expo run:android`                                                             |
+| `prebuild`        | Regenerate `ios/` and `android/` from `app.json`                               |
+| `typecheck`       | `tsc --noEmit`                                                                 |
+| `test`            | Jest (`jest-expo` preset, React Native Testing Library)                        |
+| `export:check`    | Production bundles for iOS and Android into `dist/` (smoke)                    |
+| `ota:deploy`      | `hot-updater deploy`: build, upload and register an OTA bundle (CI does this)  |
+| `ota:fingerprint` | Print the native fingerprints; exits non-zero if they differ from the recorded |
 
 `pnpm check` at the root runs `typecheck` and `test` here along with lint and
 format for the whole repo.
@@ -71,7 +146,7 @@ src/
   app/                 routes (Expo Router) — screens only
   components/          UI building blocks
   features/registry.ts the list of features shipped at the booth
-  lib/                 API client and hooks
+  lib/                 API client, OTA updates (hot-updater) and hooks
   theme.ts             colour, spacing and font tokens (dark first)
 ```
 

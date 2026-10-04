@@ -1,8 +1,12 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useColorScheme } from "react-native";
+import { useColorScheme, View } from "react-native";
 
+import { UpdateBanner } from "@/components/update-banner";
+import { initOta } from "@/lib/ota";
 import { useTheme } from "@/theme";
+
+initOta();
 
 export default function RootLayout() {
   const scheme = useColorScheme();
@@ -17,9 +21,12 @@ export default function RootLayout() {
       }}
     >
       <StatusBar style={scheme === "light" ? "dark" : "light"} />
-      <Stack screenOptions={{ contentStyle: { backgroundColor: theme.background } }}>
-        <Stack.Screen name="index" options={{ headerShown: false, title: "Apex Factory" }} />
-      </Stack>
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <Stack screenOptions={{ contentStyle: { backgroundColor: theme.background } }}>
+          <Stack.Screen name="index" options={{ headerShown: false, title: "Apex Factory" }} />
+        </Stack>
+        <UpdateBanner />
+      </View>
     </ThemeProvider>
   );
 }
