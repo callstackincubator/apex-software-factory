@@ -325,8 +325,8 @@ Runner setup (once per runner directory, as the maintainer's user):
   `SIMLOCK_HOME` must be the one the running simlock daemon uses
   (`/tmp/apex-slk` on the dev Mac). Without `SIMLOCK_BIN` the job warns and
   simulator checks report `unavailable`.
-- **OpenCode**: `~/.opencode/bin/opencode`, with the provider config in
-  `~/.config/opencode/opencode.json` and the login in
+- **OpenCode**: `~/.opencode/bin/opencode`, with the provider definition in
+  the repository's `opencode.json` (ADR 0014) and the login in
   `~/.local/share/opencode/auth.json` — the runner runs as the same user, so
   the maintainer's login applies. The run uses `--standalone`, so it inherits
   the job's environment.

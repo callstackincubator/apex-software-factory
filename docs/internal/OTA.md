@@ -386,7 +386,7 @@ Full reset (deletes every deployed bundle): stop everything, remove
 
 Every machine-level step taken on the **temporary dev Mac** (4 Oct 2026)
 while bootstrapping the OTA client, in order, so the booth laptop can be set
-up from docs (to become `docs/BOOTSTRAP.md`). Secrets are never written here.
+up from docs (now [docs/BOOTSTRAP.md](../BOOTSTRAP.md)). Secrets are never written here.
 
 Machine as found: macOS 26.5 (Apple silicon), Node 22.22.2, pnpm 11.22.0
 (`packageManager`), Docker Desktop running, Xcode 26.6 with an iPhone 17 Pro
