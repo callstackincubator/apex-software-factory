@@ -84,7 +84,9 @@ it, and returns the report block below. If both reviews said "No findings.",
 skip the verifier and write the block yourself with Fix, Rejected and Spec
 needs set to "none".
 
-Then remove the review worktree: `git worktree remove --force <WORKTREE>`.
+Then remove the review worktree and the ref the script fetched:
+`git worktree remove --force <WORKTREE>` and
+`git update-ref -d refs/review/<PR>`.
 
 ## 4. Decide what runs again
 
