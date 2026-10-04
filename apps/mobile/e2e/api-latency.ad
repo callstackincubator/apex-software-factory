@@ -1,0 +1,17 @@
+# The footer shows the API round trip, and shows it again after tapping the
+# API row. Needs the product API running on the laptop (the first check must
+# answer "ok"). The exact time changes every run; its format is pinned in the
+# Jest tests, this script proves the element is there and re-appears.
+#
+#   pnpm exec agent-device replay apps/mobile/e2e/api-latency.ad --udid <UDID>
+context platform=ios timeout=120000
+env APP_ID=com.callstack.apexfactory
+open ${APP_ID} --relaunch
+wait id="home-headline" 60000
+scroll bottom
+is visible id="status-api"
+wait id="status-api-latency" 15000
+press id="status-api"
+wait absent "label=\"API status: checking…\"" 10000
+is visible id="status-api-latency"
+close

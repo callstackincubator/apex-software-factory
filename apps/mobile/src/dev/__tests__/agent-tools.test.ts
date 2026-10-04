@@ -34,12 +34,19 @@ beforeEach(() => jest.clearAllMocks());
 const EMBEDDED = "0199a000-0000-7000-8000-000000000000";
 const OTA = "0199b111-2222-7333-8444-555566667777";
 
+/** A clock that hands back these millisecond readings, one per call, repeating the last. */
+function stepClock(...readings: number[]): () => number {
+  let calls = 0;
+  return () => readings[Math.min(calls++, readings.length - 1)] ?? 0;
+}
+
 function makeDeps(overrides: Partial<AgentToolDeps> = {}) {
   const deps = {
     platform: "ios",
     appVersion: "1.0.0",
     otaUrl: "http://192.168.1.20:3002/hot-updater",
     apiUrl: "http://192.168.1.20:3001",
+    now: () => 0,
     hotUpdater: {
       getBundleId: jest.fn(() => EMBEDDED),
       getMinBundleId: jest.fn(() => EMBEDDED),
@@ -215,12 +222,14 @@ describe("agent tools", () => {
     expect(registration?.annotations?.destructiveHint).toBe(true);
   });
 
-  it("api_health returns the API version through the contract client", async () => {
-    const deps = makeDeps();
+  it("api_health returns latencyMs when the API answers", async () => {
+    // The clock reads 1000 ms just before the request and 1042.6 ms once the answer is parsed.
+    const deps = makeDeps({ now: stepClock(1000, 1042.6) });
 
     expect(await call(deps, "api_health")).toEqual({
       state: "ok",
       version: "0.1.0",
+      latencyMs: 43,
       apiUrl: "http://192.168.1.20:3001",
     });
   });
