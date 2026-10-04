@@ -210,6 +210,42 @@ describe("createApiClient", () => {
     expect(error.requestId).toBe("req-refused");
   });
 
+  it("ApiError falls back to the status message when the error response has no body", async () => {
+    const client = createApiClient({
+      baseUrl: "http://api.test",
+      fetch: async (input) => {
+        expect(String(input)).toBe("http://api.test/health");
+        return new Response(null, { status: 503, headers: { "x-request-id": "req-nobody" } });
+      },
+    });
+    const error = await client.health().then(
+      () => undefined,
+      (thrown: unknown) => thrown,
+    );
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({
+      message: "GET /health failed with 503",
+      code: undefined,
+      details: undefined,
+      requestId: "req-nobody",
+    });
+  });
+
+  it("ApiError falls back to the status message when reading the error body fails", async () => {
+    // The stream errors mid-read: the client must reject with the fallback
+    // ApiError, never with the stream's own error.
+    const broken = new ReadableStream<Uint8Array>({
+      type: "bytes",
+      pull(controller) {
+        controller.error(new Error("connection reset"));
+      },
+    });
+    const error = await healthError(streamErrorFetch(500, broken));
+    expect(error.message).toBe("GET /health failed with 500");
+    expect(error.code).toBeUndefined();
+    expect(error.status).toBe(500);
+  });
+
   it("ApiError keeps its status and name for every kind of error body", async () => {
     const bodies: Array<{ status: number; body: string; headers?: Record<string, string> }> = [
       {
