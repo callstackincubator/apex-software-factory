@@ -1,0 +1,82 @@
+[
+  {
+    "name": "request:new",
+    "color": "bfdadc",
+    "description": "An idea from a booth visitor or a user. Inbox; never picked up, body never edited."
+  },
+  {
+    "name": "bug:new",
+    "color": "d73a4a",
+    "description": "Reported. Nobody has looked yet."
+  },
+  {
+    "name": "bug:triage",
+    "color": "d73a4a",
+    "description": "An agent may reproduce it and write the triage report."
+  },
+  {
+    "name": "bug:needs-info",
+    "color": "d73a4a",
+    "description": "Could not reproduce. Waiting on the reporter."
+  },
+  {
+    "name": "bug:ready",
+    "color": "d73a4a",
+    "description": "Triage report accepted. An agent may fix it."
+  },
+  {
+    "name": "bug:blocked",
+    "color": "d73a4a",
+    "description": "Agent stopped on a blocker in its handoff. Maintainer re-adds the label it came from."
+  },
+  {
+    "name": "feature:spec",
+    "color": "0e8a16",
+    "description": "Business or technical spec in progress."
+  },
+  {
+    "name": "feature:ready",
+    "color": "0e8a16",
+    "description": "Business sections accepted and Technical spec written by a developer. Agents deliver it."
+  },
+  {
+    "name": "feature:planned",
+    "color": "0e8a16",
+    "description": "Split into tasks. Never picked up itself."
+  },
+  {
+    "name": "feature:blocked",
+    "color": "0e8a16",
+    "description": "Agent stopped on a blocker in its handoff. Maintainer re-adds the label it came from."
+  },
+  {
+    "name": "task:draft",
+    "color": "5319e7",
+    "description": "Scope written; technical spec, approval, or deps missing."
+  },
+  {
+    "name": "task:ready",
+    "color": "5319e7",
+    "description": "An agent may implement it."
+  },
+  {
+    "name": "task:blocked",
+    "color": "5319e7",
+    "description": "Agent stopped on a blocker in its handoff. Maintainer re-adds the label it came from."
+  },
+  {
+    "name": "flaky-test",
+    "color": "fbca04",
+    "description": "Names a test that fails without a code change. Delivery skips its base-commit check."
+  },
+  {
+    "name": "needs-simulator",
+    "color": "1d76db",
+    "description": "PR parked: a Done when line needs a simulator run that has not happened."
+  },
+  {
+    "name": "needs-native-build",
+    "color": "b60205",
+    "description": "PR changes native code: cannot ship over the air. A maintainer merges it and ships a binary."
+  }
+]
