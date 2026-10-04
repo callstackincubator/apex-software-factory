@@ -1,0 +1,40 @@
+name: Bug report
+description: Something the app or the API does that it should not, or does not do that it should.
+labels: ["bug:new"]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened
+      description: What you saw, as precisely as you can. A screenshot, or the exact request and response, helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: Steps from opening the app (or from a fresh API call). If it only happens sometimes, say how often.
+      placeholder: |
+        1. Open the app
+        2. Tap ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Where
+      description: Device and OS version, or the API endpoint; the app's update or build if you know it (shown on the About screen when there is one).
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs and evidence
+      description: Screenshots, logs, or anything else that shows the problem. Remove tokens and personal details first.

@@ -1,0 +1,54 @@
+name: Idea for the app
+description: Something you would like the app to do. Plain words are perfect — no technical detail needed.
+labels: ["request:new"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea! Tell us the problem, not the solution — what you would like help with, and how you would know it works.
+
+        If the idea is picked up, a product owner and a developer write a spec in a separate issue and link it here. Agents then build it, and the app updates on its own, no app store needed. This issue stays yours, in your words, and stays open until that feature ships.
+
+        Please do not include anyone's personal details (emails, phone numbers, photos).
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What would you like the app to help with? What gets in the way today?
+      placeholder: At a conference I never know which talk my friends are going to.
+    validations:
+      required: true
+  - type: textarea
+    id: who
+    attributes:
+      label: Who runs into this
+      description: Who has this problem, and when?
+      placeholder: Anyone at a conference with friends there, between talks.
+    validations:
+      required: true
+  - type: textarea
+    id: see
+    attributes:
+      label: What you would see
+      description: Imagine it is done and you open the app. What do you see, and what do you tap?
+      placeholder: A list of the next talks, with my friends' names next to the ones they picked.
+    validations:
+      required: true
+  - type: textarea
+    id: works
+    attributes:
+      label: How you would know it works
+      description: What would you try first to check it?
+      placeholder: I pick a talk on my phone, and it shows up next to my name on my friend's phone.
+    validations:
+      required: true
+  - type: textarea
+    id: else
+    attributes:
+      label: Anything else
+      description: Optional. Something it should not do, a name for the idea, links.
+  - type: input
+    id: credit
+    attributes:
+      label: Credit
+      description: Optional. A first name or a public handle, if you would like credit. Leave empty to stay anonymous.
