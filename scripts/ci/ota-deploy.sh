@@ -8,7 +8,8 @@
 #      OTA_PLATFORMS (default "ios android"), plus the hot-updater variables the
 #      deploy reads (HOT_UPDATER_SERVER_URL, HOT_UPDATER_AUTH_TOKEN, S3_*).
 #      OTA_MISMATCH_PATTERN overrides the extended regex that recognises a
-#      fingerprint mismatch in the deploy output.
+#      fingerprint mismatch in the deploy output. APPDUCT_ENABLED is forced
+#      to 1 and WITH_ROZENITE unset (the booth binary's build profile).
 #
 # Outputs ($GITHUB_OUTPUT): result=shipped|needs-native-build|failed, and
 # <platform>_status / <platform>_bundle for each platform. Exit 0 only when
@@ -27,6 +28,12 @@ platforms=${OTA_PLATFORMS:-ios android}
 # "Fingerprint hash not found"; plus wording a wrapper script may add.
 pattern=${OTA_MISMATCH_PATTERN:-'fingerprint (mismatch|hash not found|does not match|doesn.t match)|fingerprint\.json not found|needs? a native build|native build (is )?required|no (registered|matching) native build'}
 logs=${RUNNER_TEMP:-$(mktemp -d)}
+
+# The booth binary's build profile: appduct linked (it changes the iOS
+# fingerprint), Rozenite off. The ota:deploy script sets APPDUCT_ENABLED too;
+# setting it here keeps a manual run of this script on the same profile.
+export APPDUCT_ENABLED=1
+unset WITH_ROZENITE
 
 output() { [ -n "${GITHUB_OUTPUT:-}" ] && echo "$1=$2" >>"$GITHUB_OUTPUT"; return 0; }
 

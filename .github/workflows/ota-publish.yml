@@ -57,6 +57,13 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       CHANNEL: production
+      # One build profile (docs/internal/DEVICES.md): the booth binary links
+      # appduct (APPDUCT_ENABLED=1), and the variable changes the iOS
+      # fingerprint, so fingerprints and bundles are computed with it too. The
+      # ota:* scripts set it as well. Rozenite is a dev-only Metro plugin:
+      # WITH_ROZENITE stays empty here, so the bundle carries none of it.
+      APPDUCT_ENABLED: "1"
+      WITH_ROZENITE: ""
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -79,6 +86,8 @@ jobs:
         run: scripts/ci/ota-preflight.sh
 
       # No secrets in this step's environment: install scripts never see them.
+      # A full install (not --prod): the bundle build needs the app's
+      # devDependencies (Metro config helpers, hot-updater's build plugin).
       - name: Install
         run: pnpm install --frozen-lockfile
 
