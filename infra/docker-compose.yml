@@ -1,0 +1,78 @@
+# Object storage for OTA bundles on the booth laptop. See docs/internal/OTA.md.
+#
+#   docker compose -f infra/docker-compose.yml up -d
+#
+# Values come from infra/.env (copy infra/.env.example). The OTA server itself
+# runs on the host (`pnpm --filter @apex/ota-server start`), not in here.
+#
+# Images: MinIO's own images are no longer anonymously pullable (removed from
+# Docker Hub, quay.io gated, Sept 2026), so this uses pgsty/minio + pgsty/mc,
+# a maintained build of the MinIO community edition with the same CLI, API and
+# data layout. Override MINIO_IMAGE / MC_IMAGE to use another build.
+name: apex-ota
+
+services:
+  minio:
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in infra/.env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in infra/.env}
+    ports:
+      # S3 API: phones download bundles from here, so it listens on the LAN.
+      - "${MINIO_API_BIND:-0.0.0.0}:${MINIO_API_PORT:-9000}:9000"
+      # Web console: root credentials, so laptop-only by default.
+      - "${MINIO_CONSOLE_BIND:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - ./data/minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  # One-shot: creates the bucket and a least-privilege user for the OTA server
+  # and the deploy CLI. Idempotent; safe on every `up`.
+  minio-init:
+    image: ${MC_IMAGE:-pgsty/mc:RELEASE.2026-09-16T00-00-00Z}
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in infra/.env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in infra/.env}
+      S3_BUCKET: ${S3_BUCKET:-hot-updater}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID in infra/.env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in infra/.env}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+        # The bucket stays private: devices get presigned URLs from the OTA server.
+        mc anonymous set none "local/$$S3_BUCKET"
+        cat > /tmp/apex-ota-policy.json <<EOF
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"],
+              "Resource": ["arn:aws:s3:::$$S3_BUCKET"]
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"],
+              "Resource": ["arn:aws:s3:::$$S3_BUCKET/*"]
+            }
+          ]
+        }
+        EOF
+        mc admin policy create local apex-ota /tmp/apex-ota-policy.json
+        mc admin user add local "$$S3_ACCESS_KEY_ID" "$$S3_SECRET_ACCESS_KEY"
+        mc admin policy attach local apex-ota --user "$$S3_ACCESS_KEY_ID" 2>/dev/null \
+          || mc admin user info local "$$S3_ACCESS_KEY_ID" | grep -q apex-ota
+        echo "bucket '$$S3_BUCKET' ready; user '$$S3_ACCESS_KEY_ID' has policy apex-ota"
+    restart: "no"
