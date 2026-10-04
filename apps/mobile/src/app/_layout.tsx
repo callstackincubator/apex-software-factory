@@ -1,17 +1,31 @@
+// Listens for appduct's pairing link and resumes a session after a reload.
+import "@appduct/react-native/auto";
+
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import type { ReactNode } from "react";
 import { useColorScheme, View } from "react-native";
 
 import { UpdateBanner } from "@/components/update-banner";
+import { installAgentTools } from "@/dev/agent-tools";
+import { useTrackNavigation } from "@/dev/navigation-state";
 import { initOta } from "@/lib/ota";
 import { useTheme } from "@/theme";
 
 initOta();
+installAgentTools();
+
+// Rozenite DevTools, debug builds only. A `require` under `__DEV__` (not an
+// import) lets Metro drop the module from release and OTA bundles entirely.
+const DevTools: () => ReactNode = __DEV__
+  ? (require("@/dev/devtools") as typeof import("@/dev/devtools")).DevTools
+  : () => null;
 
 export default function RootLayout() {
   const scheme = useColorScheme();
   const theme = useTheme();
   const base = scheme === "light" ? DefaultTheme : DarkTheme;
+  useTrackNavigation();
 
   return (
     <ThemeProvider
@@ -27,6 +41,7 @@ export default function RootLayout() {
         </Stack>
         <UpdateBanner />
       </View>
+      <DevTools />
     </ThemeProvider>
   );
 }

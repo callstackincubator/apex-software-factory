@@ -3,7 +3,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { AppState, type AppStateStatus } from "react-native";
 
 import { UpdateBanner } from "@/components/update-banner";
-import { CHECK_INTERVAL_MS } from "@/lib/use-ota-update";
+import { checkForUpdateNow, previewUpdateBanner } from "@/lib/ota-control";
+import { CHECK_INTERVAL_MS, FORCED_RELOAD_DELAY_MS } from "@/lib/use-ota-update";
 
 jest.mock(
   "react-native-safe-area-context",
@@ -101,6 +102,9 @@ describe("UpdateBanner", () => {
     checkForUpdate.mockResolvedValue(update({ shouldForceUpdate: true }));
     await render(<UpdateBanner />);
     await flush();
+    await act(async () => {
+      jest.advanceTimersByTime(FORCED_RELOAD_DELAY_MS);
+    });
 
     expect(reload).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button")).toBeNull();
@@ -187,5 +191,70 @@ describe("UpdateBanner", () => {
     await flush();
 
     expect(screen.getByRole("button", { name: /Update withdrawn/ })).toBeOnTheScreen();
+  });
+
+  it("runs a check on demand and reports the bundle it staged", async () => {
+    await render(<UpdateBanner />);
+    await flush();
+    checkForUpdate.mockResolvedValue(update());
+
+    let outcome: Awaited<ReturnType<typeof checkForUpdateNow>> | undefined;
+    await act(async () => {
+      outcome = await checkForUpdateNow();
+    });
+
+    expect(outcome).toEqual({
+      status: "staged",
+      update: {
+        id: "0199b111-2222-7333-8444-555566667777",
+        message: "Add a confetti button",
+        rollback: false,
+      },
+    });
+    expect(screen.getByRole("button", { name: BANNER })).toBeOnTheScreen();
+  });
+
+  it("reports an on-demand check as unavailable when no banner is mounted", async () => {
+    await expect(checkForUpdateNow()).resolves.toEqual({ status: "unavailable" });
+    expect(checkForUpdate).not.toHaveBeenCalled();
+  });
+
+  it("shows a previewed banner like a landed feature, and a tap only dismisses it", async () => {
+    await render(<UpdateBanner />);
+    await flush();
+
+    await act(async () => {
+      previewUpdateBanner({
+        id: "preview-update",
+        message: "Preview",
+        rollback: false,
+        preview: true,
+      });
+    });
+    expect(screen.getByText("New feature landed")).toBeOnTheScreen();
+    expect(screen.getByText("Preview")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole("button", { name: BANNER }));
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("answers an on-demand check before it reloads into a forced update", async () => {
+    await render(<UpdateBanner />);
+    await flush();
+    checkForUpdate.mockResolvedValue(update({ status: "ROLLBACK", shouldForceUpdate: true }));
+
+    let outcome: Awaited<ReturnType<typeof checkForUpdateNow>> | undefined;
+    await act(async () => {
+      outcome = await checkForUpdateNow();
+    });
+
+    expect(outcome).toEqual({ status: "reloading", id: "0199b111-2222-7333-8444-555566667777" });
+    expect(reload).not.toHaveBeenCalled();
+    await act(async () => {
+      jest.advanceTimersByTime(FORCED_RELOAD_DELAY_MS);
+    });
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });

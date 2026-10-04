@@ -52,6 +52,13 @@
             "usesCleartextTraffic": true
           }
         }
+      ],
+      [
+        "@appduct/react-native",
+        {
+          "trust": "link",
+          "allowPrivateLanOnly": true
+        }
       ]
     ],
     "experiments": {

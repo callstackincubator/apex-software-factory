@@ -59,6 +59,7 @@ export function StatusFooter({ client = api }: Props) {
       }}
     >
       <Pressable
+        testID="status-api"
         onPress={refresh}
         accessibilityRole="button"
         accessibilityLabel={`API status: ${status.text}`}
@@ -76,7 +77,7 @@ export function StatusFooter({ client = api }: Props) {
           </Text>
         </Row>
       </Pressable>
-      <View accessible accessibilityLabel={`App version ${appVersion}`}>
+      <View testID="status-app" accessible accessibilityLabel={`App version ${appVersion}`}>
         <Row label="App">
           <Text
             selectable

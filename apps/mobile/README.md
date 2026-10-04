@@ -63,20 +63,20 @@ only works on this Mac.
 **iOS simulator** (from `apps/mobile`):
 
 ```sh
-pnpm exec expo run:ios --configuration Release --no-bundler
+APPDUCT_ENABLED=1 pnpm exec expo run:ios --configuration Release --no-bundler
 ```
 
 **Android device** — USB debugging on, `adb devices` lists it, Android Studio's
 SDK installed (`ANDROID_HOME=$HOME/Library/Android/sdk`). From `apps/mobile`:
 
 ```sh
-pnpm exec expo run:android --variant release --no-bundler
+APPDUCT_ENABLED=1 pnpm exec expo run:android --variant release --no-bundler
 ```
 
 The release variant is signed with the debug keystore that `expo prebuild`
 generates — fine for installing at the booth, not for a store. To build the APK
-without a device: `pnpm exec expo prebuild --platform android`, then
-`cd android && ./gradlew assembleRelease`; the APK is
+without a device: `APPDUCT_ENABLED=1 pnpm exec expo prebuild --platform android`,
+then `cd android && APPDUCT_ENABLED=1 ./gradlew assembleRelease`; the APK is
 `android/app/build/outputs/apk/release/app-release.apk`
 (`adb install -r <apk>`).
 
@@ -107,6 +107,116 @@ An update replaces the binary's JavaScript, including the inlined
 `EXPO_PUBLIC_OTA_URL` and `EXPO_PUBLIC_API_URL` the installed binary was built
 with (the deploy refuses to run without them).
 
+## Agent tooling
+
+Agents drive the app with three Callstack tools, all pinned in the workspace
+(run them with `pnpm exec`, never `npx`). Host setup and recovery for the
+laptop: [docs/internal/DEVICES.md](../../docs/internal/DEVICES.md).
+
+| Tool                                                         | Version                    | What for                                                                                     | Where it runs                                             |
+| ------------------------------------------------------------ | -------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| [agent-device](https://oss.callstack.com/agent-device/docs/) | 0.21.20 (root)             | every interaction with a simulator: open, snapshot, press, screenshot, replay `e2e/*.ad`     | host only, nothing in the app                             |
+| [appduct](https://incubator.callstack.com/appduct/)          | 0.14.0 (root CLI, app SDK) | shortcuts: read app state, jump to a screen, run an OTA check now, emulate the update banner | in every build, the booth binary and OTA bundles included |
+| [Rozenite](https://www.rozenite.dev)                         | 2.4.0 (app devDependency)  | debugging: network, console, React tree, performance, plus the same tools                    | debug builds with Metro started by `start:agent`          |
+
+<p>
+  <img src="docs/agent-tooling/show-update-banner.png" alt="The update banner emulated by the show_update_banner tool" width="260">
+  <img src="docs/agent-tooling/home-footer-debug.png" alt="The status footer an e2e script checks: API, app version, bundle" width="260">
+</p>
+
+### One build profile: `APPDUCT_ENABLED=1`
+
+appduct has native code. `APPDUCT_ENABLED=1` links it into Release as well as
+Debug, and it changes the native fingerprint, so the booth binary, every
+fingerprint check and every OTA deploy use it. The package scripts (`ios`,
+`android`, `prebuild`, `export:check`, `ota:*`, `start:agent`) set it, and
+`hot-updater.config.ts` refuses to load without it, so a prebuild or deploy
+that forgot it fails instead of describing a binary no phone has. Run native
+builds through the scripts, or prefix `expo run:*` and `./gradlew` with
+`APPDUCT_ENABLED=1`. Check a built app with
+`pnpm exec appduct doctor <path/to/App.app|app.apk> --assert-present`.
+
+### Dev loop (debug build + Metro)
+
+```sh
+pnpm --filter @apex/mobile ios --device <UDID> --no-bundler      # once: debug build with appduct
+pnpm --filter @apex/mobile start:agent                            # Metro with Rozenite on
+```
+
+### agent-device
+
+```sh
+export AGENT_DEVICE_NO_UPDATE_NOTIFIER=1
+pnpm exec agent-device open com.callstack.apexfactory --platform ios --udid <UDID>
+pnpm exec agent-device snapshot -i                    # refs like @e7
+pnpm exec agent-device press 'id="status-api"' --settle
+pnpm exec agent-device screenshot ./shot.png
+pnpm exec agent-device open com.callstack.apexfactory "apexfactory:///some/route"   # deep link
+pnpm exec agent-device close
+pnpm exec agent-device replay apps/mobile/e2e/home.ad --udid <UDID>   # from the repo root
+```
+
+Selectors use the `testID`s (`id="status-api"`) and labels on every key
+element. `e2e/*.ad` are replay scripts; `home.ad` proves the home screen on a
+debug or release build. A device is owned by one agent-device session at a
+time: `close` before a `replay` on the same simulator.
+
+### appduct
+
+The app registers its tools at startup (`src/dev/agent-tools.ts`). Pair once
+per app launch, from `apps/mobile` (the scheme comes from
+`.appduct/config.json`):
+
+```sh
+pnpm exec appduct sessions link --open ios-sim --device <UDID> --json   # keep data.sessionId
+pnpm exec appduct sessions ls                                           # state: active
+pnpm exec appduct tools ls <session>
+pnpm exec appduct tools call <session> app_info --input '{}'
+pnpm exec appduct tools call <session> open_route --input '{"path":"/"}'
+pnpm exec appduct tools call <session> show_update_banner --input '{"message":"Add a confetti button"}'
+pnpm exec appduct events tail <session> --follow --name 'ota.*'
+```
+
+iOS asks "Open in Apex Factory?" the first time a link arrives; accept it
+(`agent-device press 'label="Open"'`), or deliver the link with agent-device,
+which accepts it for you: `appduct sessions link --json` without `--open`,
+then `agent-device open com.callstack.apexfactory '<data.deepLink>'`. A
+pairing link never navigates the app (`src/app/+native-intent.tsx`).
+
+| Tool                                   | Does                                                                                                                              |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `app_info`                             | app version, platform, channel, bundle id (embedded or OTA), fingerprint, current route, all routes, OTA and API URLs (read-only) |
+| `open_route {path}`                    | navigate to any route by path, e.g. `/features/12`; refuses a path no route matches                                               |
+| `ota_check_now`                        | run the OTA check now instead of waiting up to 30 s; reports `staged`, `no_update`, … (release builds)                            |
+| `show_update_banner {message?, kind?}` | show the "New feature landed" banner without a deploy; a tap dismisses it                                                         |
+| `hide_update_banner`                   | hide the banner                                                                                                                   |
+| `reload_app`                           | restart into the staged bundle, like tapping the banner (destructive)                                                             |
+| `api_health`                           | call `/health` through the contract client, as the footer does (read-only)                                                        |
+| event `ota.update_staged`              | posted when a real bundle has downloaded                                                                                          |
+
+A shipped feature adds its own tools in `src/features/<id>/agent-tools.ts`
+and lists them in `src/features/agent-tools.ts`; they appear under the group
+`features/<id>`.
+
+### Rozenite
+
+With Metro from `start:agent`, from `apps/mobile`:
+
+```sh
+pnpm exec rozenite agent targets                                  # pick your device's id
+pnpm exec rozenite agent session create --deviceId <id>
+pnpm exec rozenite agent domains --session <id>                   # console, network, react, …, app, controls
+pnpm exec rozenite agent network call --tool startRecording --session <id>
+pnpm exec rozenite agent network call --tool listRequests --session <id>
+pnpm exec rozenite agent console call --tool getMessages --session <id>
+pnpm exec rozenite agent app call --tool app.app_info --session <id>   # the appduct tools, through Metro
+```
+
+Every app connected to that Metro shows up in `targets`, so check the name
+and the data before trusting a target. An agent session takes the app's one
+debugger connection, so it disconnects a person's React Native DevTools.
+Release and OTA bundles contain no Rozenite code.
+
 ## Environment
 
 | Variable              | Default                             | Purpose                                                                                                                               |
@@ -127,6 +237,7 @@ The API is optional: when it is not reachable the status footer shows
 | Script            | What it does                                                                   |
 | ----------------- | ------------------------------------------------------------------------------ |
 | `start`           | Metro for the dev client                                                       |
+| `start:agent`     | Metro with Rozenite on (`WITH_ROZENITE=true`), for agents debugging the app    |
 | `ios`             | `expo run:ios` — native build and launch                                       |
 | `android`         | `expo run:android`                                                             |
 | `prebuild`        | Regenerate `ios/` and `android/` from `app.json`                               |

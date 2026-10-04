@@ -26,20 +26,29 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Asks the API for `/health` once on mount and again whenever `refresh` is
- * called. Any failure — network, non-2xx, contract mismatch, timeout — reads
- * as "offline": the API is optional for this app.
+ * One `/health` request, read the way the status footer shows it: any failure
+ * — network, non-2xx, contract mismatch, timeout — is "offline", because the
+ * API is optional for this app. Also what the `api_health` agent tool returns.
  */
+export async function checkApiHealth(
+  client: Pick<ApiClient, "health">,
+): Promise<Exclude<ApiHealth, { state: "checking" }>> {
+  try {
+    const { version } = await withTimeout(client.health(), TIMEOUT_MS);
+    return { state: "ok", version };
+  } catch {
+    return { state: "offline" };
+  }
+}
+
+/** Asks the API for `/health` once on mount and again whenever `refresh` is called. */
 export function useApiHealth(client: Pick<ApiClient, "health">) {
   const [health, setHealth] = useState<ApiHealth>({ state: "checking" });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
-    withTimeout(client.health(), TIMEOUT_MS).then(
-      ({ version }) => active && setHealth({ state: "ok", version }),
-      () => active && setHealth({ state: "offline" }),
-    );
+    void checkApiHealth(client).then((result) => active && setHealth(result));
     return () => {
       active = false;
     };

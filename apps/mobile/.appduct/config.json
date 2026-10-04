@@ -1,0 +1,7 @@
+{
+  "scheme": "apexfactory",
+  "appId": {
+    "ios": "com.callstack.apexfactory",
+    "android": "com.callstack.apexfactory"
+  }
+}

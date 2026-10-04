@@ -141,6 +141,14 @@ and `android/` are generated):
   later" the demo promises.
 - `src/components/update-info.tsx`: the status footer's **Bundle** row,
   `embedded · production` or `ota 0199b111…7777 · production`.
+- appduct (agent shortcuts, [DEVICES.md](DEVICES.md)) is **in the booth
+  binary and in every OTA bundle**: `["@appduct/react-native", { "trust":
+  "link", "allowPrivateLanOnly": true }]` in the plugins, its native module
+  linked in Release because every build runs with `APPDUCT_ENABLED=1`. The
+  `ota_check_now` tool runs the check loop immediately and `ota.update_staged`
+  is posted when a bundle lands — what an agent uses instead of waiting 30 s.
+  Rozenite (debugging) is dev-only: no Rozenite code is in a release or OTA
+  bundle.
 - Plain HTTP to the laptop: iOS `NSAppTransportSecurity.NSAllowsLocalNetworking`
   (the narrowest exception; verified on the simulator against the LAN IP — no
   `NSAllowsArbitraryLoads`) and `NSLocalNetworkUsageDescription` — accept the
@@ -163,16 +171,31 @@ Nothing registers a binary with the server. The pieces:
    the server only answers with bundles carrying that exact hash.
 
 What the fingerprint covers: native sources of every autolinked module (so
-adding, removing or upgrading a native dependency), and — because
+adding, removing or upgrading a native dependency — devDependencies of the
+app are autolinked too), React Native's autolinking config, and — because
 `hot-updater.config.ts` adds it as an extra source — `app.json`. hot-updater
 on its own skips the Expo config entirely; with CNG that would let a plugin or
 `Info.plist` change ship over the air to a binary that lacks it. Any
 `app.json` edit therefore needs a native build, matching delivery rule 17.
 
+**One build profile: `APPDUCT_ENABLED=1`.** The variable decides whether
+appduct's pod is linked in Release, which changes React Native's autolinking
+config and so the **iOS** fingerprint (`e69a1971…` with it, `ac6dc5c2…`
+without it, same code; Android is unaffected). The booth binary, every
+fingerprint check and every deploy must agree, so: the package scripts
+(`ios`, `android`, `prebuild`, `export:check`, `ota:fingerprint`,
+`ota:deploy`) set it; `scripts/hot-updater.mjs` defaults it;
+`.github/workflows/ota-publish.yml` and `scripts/ci/ota-deploy.sh` set it
+too; and `hot-updater.config.ts` — loaded by `expo prebuild` and by every
+hot-updater command — throws unless it is `1`. A raw `expo run:ios` without
+it fails at prebuild instead of building a binary with another fingerprint.
+Check a built binary: `pnpm exec appduct doctor <App.app|app.apk>
+--assert-present`. Verified: the presence or absence of a generated `ios/`
+directory does not change the fingerprint, so CI's fresh checkout matches.
+
 Regenerate `fingerprint.json` only together with a new binary: build it
-(`expo run:ios|android --configuration/--variant Release`, or
-`expo prebuild --clean`), run `pnpm format` (hot-updater writes JSON that
-`oxfmt` reformats; the hashes are unaffected), commit the file with the native
+(`APPDUCT_ENABLED=1 expo run:ios|android --configuration/--variant Release`,
+or `pnpm --filter @apex/mobile prebuild`), commit the file with the native
 change, and install the new binary on every booth phone. Never run
 `hot-updater fingerprint create` just to make a deploy pass — that ships
 bundles to a fingerprint no phone has. Check without changing anything:
@@ -283,6 +306,25 @@ which is how that gap was found). With nothing enabled, the booth binaries run
 their embedded JS until the first real merge; the simulator rolled back to
 `embedded · production` on its own within 30 s.
 
+### Smoke test record: the appduct binary (4 Oct 2026, temporary dev Mac)
+
+Release simulator build with appduct linked (`APPDUCT_ENABLED=1`, LAN URLs,
+fingerprint `e69a1971…` = `fingerprint.json`; `appduct doctor --assert-present`
+holds), paired with appduct. A temporary hero text change ("Shipped OTA.",
+never committed) deployed with
+`pnpm --filter @apex/mobile run ota:deploy -p ios -c production -m "B4 smoke"`
+→ bundle `01a10725…be68`. The 30 s loop had already staged it when
+`ota_check_now` ran (`already_staged`); `ota.update_staged` arrived as an
+appduct event; tapping the banner (agent-device) reloaded into the bundle and
+`app_info` reported `embedded: false`, bundle `01a10725…` — the appduct
+session survived the reload, and the tools kept working from the OTA bundle.
+Then the bundle was **disabled** (`bundle disable … -y`); the next
+`ota_check_now` triggered the forced rollback and the app was back on
+`embedded · production` within seconds. The rollback reloaded before the tool
+could answer, so forced reloads now wait 250 ms (`FORCED_RELOAD_DELAY_MS`).
+
+![Release build: the real banner for the B4 smoke bundle](../../apps/mobile/docs/agent-tooling/release-ota-banner.png)
+
 ## Troubleshooting
 
 | Symptom | Likely cause / fix |
@@ -374,3 +416,26 @@ Left running for the CI agent and the demo: MinIO container
 OTA server (`node src/main.ts`, port 3002, log
 `apps/ota-server/data/ota-server.log` in the main checkout). The simulator has
 the release build installed, running its embedded bundle.
+
+### Agent tooling (appduct binary), same Mac, same day
+
+Device-side steps (agent-device, appduct daemon, Metro, the debug build) are
+logged in [DEVICES.md](DEVICES.md#machine-setup-log). OTA-side:
+
+8. `apps/mobile/.env.hotupdater` recreated in the agent worktree (the earlier
+   one lived in a removed worktree) by a script that copies the token and S3
+   values from the main checkout's `apps/ota-server/.env` without printing
+   them, plus `EXPO_PUBLIC_*` for `192.168.1.61`; mode 600, gitignored.
+9. iOS Release build with appduct over the existing release install:
+   `LANG=en_US.UTF-8 APPDUCT_ENABLED=1 EXPO_PUBLIC_OTA_URL=http://192.168.1.61:3002/hot-updater EXPO_PUBLIC_API_URL=http://192.168.1.61:3001 pnpm exec expo run:ios --configuration Release --no-bundler --device <UDID>`
+   (≈ 8 min, pods already installed). `fingerprint.json` regenerated by the
+   prebuild: iOS `e69a1971…`, Android `c273005b…`.
+10. Smoke deploy `01a10725…` ("B4 smoke") to `production`, then disabled (see
+    the record above). Bundles on `production` afterwards: `01a10665…` (the
+    #12 merge, for the old `b922ef0b…` binary) enabled; every smoke bundle
+    disabled.
+11. `~/.appduct/config.json` created with
+    `{"policy":{"default":"allow","destructive":"deny"}}` and the appduct
+    daemon restarted (`appduct daemon stop`); `reload_app` now answers
+    `policy_denied` (exit 77).
+
