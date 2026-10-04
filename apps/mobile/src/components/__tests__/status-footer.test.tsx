@@ -56,7 +56,7 @@ describe("StatusFooter", () => {
     const client = clientReturning(() => Promise.reject(new Error("down")));
     await render(<StatusFooter client={client} />);
 
-    expect(screen.getByText("v1.0.0")).toBeOnTheScreen();
+    expect(screen.getByText("v1.0.0 · iOS")).toBeOnTheScreen();
     expect(screen.getByText("embedded · production")).toBeOnTheScreen();
     await screen.findByText("offline");
   });
