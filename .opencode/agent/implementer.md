@@ -14,6 +14,9 @@ permission:
   question: deny
   # Subagents never start subagents.
   task: deny
+  # The vendored Expo and React Native guides that opencode.json denies to every other agent
+  # (ADR 0022). They are not in any skill list; the implement skill names them.
+  skill: allow
 ---
 
 You are the implementer stage of the Apex Software Factory.

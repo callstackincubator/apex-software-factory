@@ -97,6 +97,20 @@
     "agent-device_*": "deny",
     "appduct_*": "deny",
     "simlock_*": "deny",
+    "skill": {
+      "*": "allow",
+      "callstack-react-native-best-practices": "deny",
+      "expo-animation": "deny",
+      "expo-data-fetching": "deny",
+      "expo-design-system": "deny",
+      "expo-native-ui": "deny",
+      "expo-router": "deny",
+      "expo-ui": "deny",
+      "react-native-mmkv": "deny",
+      "react-native-vision-camera": "deny",
+      "swm-react-native-best-practices": "deny",
+      "vercel-composition-patterns": "deny"
+    },
     "read": {
       "*": "allow",
       "*.env": "deny",
@@ -164,7 +178,8 @@
       "permission": {
         "agent-device_*": "allow",
         "appduct_*": "allow",
-        "simlock_*": "allow"
+        "simlock_*": "allow",
+        "skill": "allow"
       }
     }
   }

@@ -148,6 +148,32 @@ Implement the smallest change that turns the next test green, in this order:
 the contract schema, then the API route, then the screen (architecture rule
 2), then the Agent hooks.
 
+**Guides for mobile code.** Before you write `apps/mobile` code that does one
+of these things, load the skills its row names with the `skill` tool. They are
+upstream guides from Expo, Software Mansion, Callstack, Vercel and Margelo,
+kept out of every skill list and allowed to you alone (ADR 0022), so this
+table is the only way they load. Load a skill when its row applies and not
+before; most changes need two or three. Where a guide disagrees with
+`apps/mobile/AGENTS.md`, `docs/internal/NATIVE-CAPABILITIES.md` or an agent
+rule (how to add a package, a library or API the booth binary does not have),
+the repository wins.
+
+| When the change…                                                                                               | Load                                                                  |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| adds or changes a route, a layout, a modal, a sheet, tabs, a header or a link                                  | `expo-router`                                                         |
+| builds or restyles a screen: layout, colours, SF Symbols, blur or glass, gradients, images                     | `expo-native-ui`                                                      |
+| uses `@expo/ui` (native pickers, toggles, sliders, menus, bottom sheets)                                       | `expo-ui`                                                             |
+| animates anything, or adds haptics to a motion                                                                 | `expo-animation`, then `swm-react-native-best-practices` (animations) |
+| handles a gesture: pan, swipe, pinch, long press, drag, a swipeable row                                        | `swm-react-native-best-practices` (gestures)                          |
+| draws with `react-native-svg`: icons, charts, illustrations                                                    | `swm-react-native-best-practices` (svg)                               |
+| runs work on another thread with `react-native-worklets`                                                       | `swm-react-native-best-practices` (multithreading)                    |
+| fetches data: loading, empty and error states, refetching, offline                                             | `expo-data-fetching`                                                  |
+| adds a theme token to `src/theme.ts` or a reusable styled component                                            | `expo-design-system`                                                  |
+| designs a component with variants, slots or shared state (compound components, context, no boolean-prop modes) | `vercel-composition-patterns`                                         |
+| renders a long or growing list, or a text input that updates as the visitor types                              | `callstack-react-native-best-practices`                               |
+| stores data with `react-native-mmkv`                                                                           | `react-native-mmkv`                                                   |
+| uses the camera or scans codes with `react-native-vision-camera`                                               | `react-native-vision-camera`                                          |
+
 **Agent hooks.** When the Technical spec's Agent hooks lists appduct tools,
 add or extend them in the same PR: load the `appduct` skill and follow its
 "Writing tools" section and `apps/mobile/AGENTS.md`. Each tool's handler gets
