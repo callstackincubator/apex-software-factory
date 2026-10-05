@@ -7,9 +7,9 @@ name: Issue state
 #   task:ready goes back to task:draft when that stops being true, unless the
 #   task is claimed (its task/<n> branch exists, ADR 0020);
 # - a reporter's reply moves bug:needs-info back to bug:triage, reopening the
-#   issue if the stale job closed it (agents post under a maintainer's
-#   account, so comments carrying the agent footer from rule 12,
-#   "Written by an agent.", do not count);
+#   issue if the stale job closed it (comments from a bot, and comments
+#   carrying the agent footer from rule 12, "Written by an agent.", do not
+#   count: agents in a person's session post under that person's account);
 # - a feature whose last sub-issue closed gets a note to check completion
 #   conditions and close;
 # - a feature closed as completed closes the request it came from;
@@ -17,10 +17,11 @@ name: Issue state
 #   label (done is read from the closed state, never from a label);
 # - bug:needs-info with no activity for two weeks closes as not planned;
 # - a PR from a <kind>/<n> branch must close issue <n> and no other.
-# Actions taken with the workflow token do not trigger this workflow again,
-# so every job removes the label it replaces itself. For the same reason, a
-# job that moves an issue to task:ready or bug:triage starts the factory
-# dispatcher (factory.yml) itself.
+# Every job acts as the factory's GitHub App (ADR 0021), so its comments and
+# labels show the app's bot. Unlike the workflow token, the app's changes start
+# workflows: moving an issue to task:ready or bug:triage starts factory.yml by
+# the label alone, and this workflow sees its own changes. Every job still
+# removes the label it replaces itself, and tolerates one already gone.
 
 on:
   issues:
@@ -47,12 +48,19 @@ jobs:
     name: One state label per issue
     if: github.event_name == 'issues' && github.event.action == 'labeled'
     runs-on: ubuntu-24.04
-    permissions:
-      issues: write
+    permissions: {} # the app's token does every write
     timeout-minutes: 5
     steps:
+      # Act as the factory's GitHub App, not github-actions[bot] (ADR 0021).
+      - name: Factory app token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
+          github-token: ${{ steps.app.outputs.token }}
           script: |
             const re = new RegExp(process.env.STATE_LABEL);
             const added = context.payload.label.name;
@@ -60,10 +68,14 @@ jobs:
             const issue = context.payload.issue;
             for (const label of issue.labels.map((l) => l.name)) {
               if (label === added || !re.test(label)) continue;
-              await github.rest.issues.removeLabel({
-                ...context.repo, issue_number: issue.number, name: label,
-              });
-              core.info(`#${issue.number}: ${label} replaced by ${added}`);
+              try {
+                await github.rest.issues.removeLabel({
+                  ...context.repo, issue_number: issue.number, name: label,
+                });
+                core.info(`#${issue.number}: ${label} replaced by ${added}`);
+              } catch (e) {
+                if (e.status !== 404) throw e;
+              }
             }
 
   task-ready:
@@ -73,14 +85,19 @@ jobs:
       (github.event.action == 'closed' || github.event.action == 'reopened' ||
        (github.event.action == 'edited' && github.event.changes.body != null))
     runs-on: ubuntu-24.04
-    permissions:
-      actions: write # start factory.yml for a task that just became ready
-      contents: read # is the task claimed: does its task/<n> branch exist
-      issues: write
+    permissions: {} # the app's token does every write
     timeout-minutes: 5
     steps:
+      # Act as the factory's GitHub App, not github-actions[bot] (ADR 0021).
+      - name: Factory app token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
+          github-token: ${{ steps.app.outputs.token }}
           script: |
             const hasLabel = (issue, name) => issue.labels.some((l) => l.name === name);
             const section = (body, heading) => {
@@ -98,21 +115,6 @@ jobs:
                 .some((line) => line.trim() !== "" && !line.startsWith("#") && line.trim() !== "- ...");
             };
             const approved = (body) => /^- \[x\] Approved for delivery/im.test(body);
-            // Labels set with the workflow token start no workflow, so start the factory
-            // dispatcher here (factory.yml, ADR 0012).
-            const dispatch = async (issue_number) => {
-              try {
-                await github.rest.actions.createWorkflowDispatch({
-                  ...context.repo, workflow_id: "factory.yml",
-                  ref: context.payload.repository.default_branch,
-                  inputs: { issue: String(issue_number) },
-                });
-                core.info(`#${issue_number}: factory.yml dispatched`);
-              } catch (e) {
-                core.warning(`#${issue_number}: could not dispatch factory.yml (${e.status ?? e.message})`);
-              }
-            };
-
             const candidates = [];
             if (context.payload.action === "edited") {
               const issue = context.payload.issue;
@@ -152,8 +154,7 @@ jobs:
                   ...context.repo, issue_number,
                   body: `Now \`task:ready\`: approved, technical spec present${deps.length ? `, ${deps.join(", ")} closed` : ""}.`,
                 });
-                core.info(`#${issue_number}: task:draft -> task:ready`);
-                await dispatch(issue_number);
+                core.info(`#${issue_number}: task:draft -> task:ready (the label starts factory.yml)`);
               } else if (!ready && isReady) {
                 const claimed = await github.rest.repos
                   .getBranch({ ...context.repo, branch: `task/${issue_number}` })
@@ -179,16 +180,23 @@ jobs:
       github.event_name == 'issue_comment' &&
       github.event.issue.pull_request == null &&
       github.event.comment.user.login == github.event.issue.user.login &&
+      github.event.comment.user.type != 'Bot' &&
       !contains(github.event.comment.body, 'Written by an agent.') &&
       contains(github.event.issue.labels.*.name, 'bug:needs-info')
     runs-on: ubuntu-24.04
-    permissions:
-      actions: write # start factory.yml: the bug is back in bug:triage
-      issues: write
+    permissions: {} # the app's token does every write
     timeout-minutes: 5
     steps:
+      # Act as the factory's GitHub App, not github-actions[bot] (ADR 0021).
+      - name: Factory app token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
+          github-token: ${{ steps.app.outputs.token }}
           script: |
             const issue_number = context.payload.issue.number;
             if (context.payload.issue.state === "closed") {
@@ -197,29 +205,25 @@ jobs:
             }
             await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ["bug:triage"] });
             await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: "bug:needs-info" });
-            core.info(`#${issue_number}: bug:needs-info -> bug:triage`);
-            // Labels set with the workflow token start no workflow (factory.yml, ADR 0012).
-            try {
-              await github.rest.actions.createWorkflowDispatch({
-                ...context.repo, workflow_id: "factory.yml",
-                ref: context.payload.repository.default_branch,
-                inputs: { issue: String(issue_number) },
-              });
-              core.info(`#${issue_number}: factory.yml dispatched`);
-            } catch (e) {
-              core.warning(`#${issue_number}: could not dispatch factory.yml (${e.status ?? e.message})`);
-            }
+            core.info(`#${issue_number}: bug:needs-info -> bug:triage (the label starts factory.yml)`);
 
   feature-complete:
     name: Last sub-issue closed
     if: github.event_name == 'issues' && github.event.action == 'closed'
     runs-on: ubuntu-24.04
-    permissions:
-      issues: write
+    permissions: {} # the app's token does every write
     timeout-minutes: 5
     steps:
+      # Act as the factory's GitHub App, not github-actions[bot] (ADR 0021).
+      - name: Factory app token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
+          github-token: ${{ steps.app.outputs.token }}
           script: |
             const { repository } = await github.graphql(`
               query($owner:String!,$repo:String!,$number:Int!){
@@ -243,12 +247,19 @@ jobs:
       github.event_name == 'issues' && github.event.action == 'closed' &&
       github.event.issue.state_reason == 'completed'
     runs-on: ubuntu-24.04
-    permissions:
-      issues: write
+    permissions: {} # the app's token does every write
     timeout-minutes: 5
     steps:
+      # Act as the factory's GitHub App, not github-actions[bot] (ADR 0021).
+      - name: Factory app token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
+          github-token: ${{ steps.app.outputs.token }}
           script: |
             // Done is "closed as completed"; an assignee or a ready label left on a closed
             // issue only misleads the next query. Other jobs read the labels from the
@@ -279,12 +290,19 @@ jobs:
        contains(github.event.issue.labels.*.name, 'feature:ready') ||
        contains(github.event.issue.labels.*.name, 'feature:spec'))
     runs-on: ubuntu-24.04
-    permissions:
-      issues: write
+    permissions: {} # the app's token does every write
     timeout-minutes: 5
     steps:
+      # Act as the factory's GitHub App, not github-actions[bot] (ADR 0021).
+      - name: Factory app token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
+          github-token: ${{ steps.app.outputs.token }}
           script: |
             const feature = context.payload.issue;
             const m = (feature.body ?? "").match(/^Request:\s*#(\d+)/im);
@@ -298,24 +316,26 @@ jobs:
             await github.rest.issues.update({
               ...context.repo, issue_number, state: "closed", state_reason: "completed",
             });
-            // A close made with the workflow token starts no new run, so completed-cleanup
-            // never sees this one: drop the request's state label here.
-            const re = new RegExp(process.env.STATE_LABEL);
-            for (const name of request.data.labels.map((l) => l.name).filter((n) => re.test(n))) {
-              await github.rest.issues.removeLabel({ ...context.repo, issue_number, name });
-            }
+            // The close starts completed-cleanup, which drops the request's state label.
             core.info(`#${issue_number}: closed, shipped as #${feature.number}`);
 
   stale-needs-info:
     name: Close silent bug:needs-info
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    permissions:
-      issues: write
+    permissions: {} # the app's token does every write
     timeout-minutes: 5
     steps:
+      # Act as the factory's GitHub App, not github-actions[bot] (ADR 0021).
+      - name: Factory app token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
+          github-token: ${{ steps.app.outputs.token }}
           script: |
             const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
             const q = `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open label:bug:needs-info updated:<${cutoff}`;

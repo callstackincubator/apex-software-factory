@@ -4,8 +4,9 @@ name: Factory
 # self-hosted `factory` runners (booth-factory-1/2), so a label is all it takes.
 #   - feature:ready, task:ready, bug:ready added -> deliver (the factory agent)
 #   - bug:triage added                           -> triage (the triager agent)
-#   - workflow_dispatch with an issue            -> either, by the issue's current label; this is
-#     how issue-state.yml starts a run, because labels set with the workflow token start nothing
+#   - workflow_dispatch with an issue            -> either, by the issue's current label
+# issue-state.yml's promotions (task:ready, bug:triage) start a run by the label: it acts as the
+# factory's GitHub App, and the app's labels start workflows (ADR 0021).
 #
 # SECURITY: the runner runs as the maintainer's user, with OpenCode's provider credentials and
 # the device pool. On GitHub the agents act as the factory's GitHub App (ADR 0020): its
@@ -57,15 +58,27 @@ jobs:
       APEX_DISPATCH: "1"
       AGENT_DEVICE_NO_UPDATE_NOTIFIER: "1"
     steps:
+      # The factory's GitHub identity (ADR 0020): an installation token of the factory app, for
+      # this repository only, revoked when the job ends. It expires after an hour, which bounds
+      # the run (factory-run.sh reads FACTORY_TOKEN_EXPIRES, set right after it).
+      - name: Factory app token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+
       - name: Check who asked
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          APP_BOT: ${{ steps.app.outputs.app-slug }}[bot]
         run: |
+          echo "FACTORY_TOKEN_EXPIRES=$(($(date +%s) + 3600))" >>"$GITHUB_ENV"
           case $ISSUE in '' | *[!0-9]*) echo "::error::not an issue number: $ISSUE"; exit 1 ;; esac
-          # The repository's own automation (issue-state.yml) dispatches as github-actions[bot].
-          if [ "$SENDER" = "github-actions[bot]" ]; then
-            echo "Started by this repository's automation."
+          # The repository's own automation: issue-state.yml labels as the factory app (ADR 0021).
+          if [ "$SENDER" = "$APP_BOT" ] || [ "$SENDER" = "github-actions[bot]" ]; then
+            echo "Started by this repository's automation ($SENDER)."
             exit 0
           fi
           permission=$(gh api "repos/$GH_REPO/collaborators/$SENDER/permission" -q .permission 2>/dev/null || echo none)
@@ -110,17 +123,6 @@ jobs:
             [ -d "$dir" ] && echo "$dir" >>"$GITHUB_PATH"
           done
 
-      # The factory's GitHub identity (ADR 0020): an installation token of the factory app, for
-      # this repository only, revoked when the job ends. It expires after an hour, which bounds
-      # the run (factory-run.sh reads FACTORY_TOKEN_EXPIRES).
-      - name: Factory app token
-        id: app
-        if: steps.what.outputs.mode != 'none'
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.FACTORY_APP_ID }}
-          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
-
       # Run the factory from the newest main, not the commit that was main when the label
       # event fired: a run that waited in the queue, or a re-run of an old run, would otherwise
       # deliver with yesterday's skills and scripts. The checkout above cleans the directory,
@@ -130,7 +132,6 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
-          echo "FACTORY_TOKEN_EXPIRES=$(($(date +%s) + 3600))" >>"$GITHUB_ENV"
           # The agents' fetches and pushes authenticate with GH_TOKEN, the app's token, through
           # gh's credential helper. Local config only, shared by every worktree: not
           # `gh auth setup-git`, which would rewrite the runner user's global git config.

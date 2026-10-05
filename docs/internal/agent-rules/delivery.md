@@ -345,9 +345,9 @@ issue — `deliver` when `feature:ready`, `task:ready` or `bug:ready` is added,
 `triage` when `bug:triage` is — through `.agents/scripts/factory-run.sh`, a
 watchdog with a hard and a no-progress timeout. It acts only on a label set
 by someone with write access or by this repository's own automation, and
-never on a pull request. Labels the workflow token sets start no workflow,
-so `issue-state.yml` dispatches `factory.yml` itself when it promotes an
-issue to a state agents act on.
+never on a pull request. `issue-state.yml` acts as the factory's GitHub App
+(ADR 0021), so when it promotes an issue to a state agents act on, the label
+starts the run like a person's would.
 
 The judgment calls stay manual by design: `bug:new` → `bug:triage`,
 `bug:triage` → `bug:ready`, and `feature:spec` → `feature:ready`.

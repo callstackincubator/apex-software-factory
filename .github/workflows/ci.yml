@@ -52,8 +52,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -92,13 +90,23 @@ jobs:
             printf '%s\n' "$out"
             echo '```'
           } >>"$GITHUB_STEP_SUMMARY"
-      # A PR from a fork gets a read-only token; the summary above still says it.
+      # A PR from a fork gets no secrets; the summary above still says it. The label is the
+      # factory app's (ADR 0021), like the agents' work.
+      - name: Factory app token
+        id: app
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
       - name: Sync the needs-native-build label
         if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           NATIVE: ${{ steps.native.outputs.native }}
+          APP_BOT: ${{ steps.app.outputs.app-slug }}[bot]
         with:
+          github-token: ${{ steps.app.outputs.token }}
           script: |
             const label = "needs-native-build";
             const issue_number = context.payload.pull_request.number;
@@ -112,13 +120,14 @@ jobs:
               return;
             }
             if (!has) return;
-            // Only take back a label this job put on. One a person (or an agent
-            // under a maintainer's account) added stays until a person removes it.
+            // Only take back a label the factory app put on: this job, or an agent that
+            // read the same native-check.sh. One a person added stays until a person
+            // removes it.
             const events = await github.paginate(github.rest.issues.listEvents, {
               ...context.repo, issue_number, per_page: 100,
             });
             const last = events.filter((e) => e.event === "labeled" && e.label?.name === label).pop();
-            if (last?.actor?.login === "github-actions[bot]") {
+            if (last?.actor?.login === process.env.APP_BOT || last?.actor?.login === "github-actions[bot]") {
               await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: label });
               core.info(`#${issue_number}: nothing native any more, ${label} removed`);
             } else {
