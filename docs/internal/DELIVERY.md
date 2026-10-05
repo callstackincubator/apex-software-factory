@@ -24,10 +24,10 @@ PR and review → deploy record (ADR 0005).
 
 | Who                                | Does                                                                                                   | Tool                        |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------- |
-| Booth visitor (product person)     | Describes the idea in plain words, confirms the draft                                                  | `/intent` with a facilitator, or the issue form |
+| Booth visitor (product person)     | Describes the idea in plain words, confirms the draft                                                  | The console's Ideas tab or `/intent` with a facilitator, or the issue form |
 | Facilitator                        | Runs the intake conversation, approves the filing                                                       | `intake` agent              |
-| Product owner                      | Writes the business sections: problem, who, outcome, completion conditions                            | `/spec <request>`           |
-| Developer                          | Writes the Technical spec, accepts ADRs, sets `feature:ready`                                           | `/spec <n> technical`       |
+| Product owner                      | Writes the business sections: problem, who, outcome, completion conditions                            | `spec` agent: the console's Specs tab, or `/spec <request>` |
+| Developer                          | Writes the Technical spec, accepts ADRs, sets `feature:ready`                                           | `spec` agent: the console's Specs tab, or `/spec <n> technical` |
 | Maintainer                         | Triage judgments, parked PRs, native builds, closing features                                           | GitHub, `/triage`, `/review` |
 | Agents                             | Implement, test, review, verify, merge                                                                  | `factory` agent, `/deliver` |
 | Automation                         | Label invariants, task readiness, stale claims, request closing                                         | `issue-state.yml`           |

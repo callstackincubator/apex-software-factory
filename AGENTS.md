@@ -97,7 +97,8 @@ from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
   `verify-mobile`, `verify-ota`; and the device tools `agent-device`,
   `appduct`, `rozenite` (vendored upstream skills, each with a `SOURCE.md`).
 - **Primary agents** (`.opencode/agent/`): `factory` (unattended delivery),
-  `intake` (the booth front door). The default `build` agent is for people.
+  `intake` (the booth front door), `spec` (spec sessions with a product
+  owner or a developer). The default `build` agent is for people.
 - **Subagents** (started with the `task` tool, fresh context, fixed report
   block): `implementer`, `spec-reviewer`, `code-reviewer`, `review-verifier`,
   `triager`, `mobile-verifier`, `ota-verifier`, `spec-checker`. Subagents

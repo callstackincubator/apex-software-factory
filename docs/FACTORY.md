@@ -22,9 +22,9 @@ to them instead of repeating them. To set up a machine, see
 
 | Stage                | Who                       | How                                                     | Result                                       |
 | -------------------- | ------------------------- | ------------------------------------------------------- | -------------------------------------------- |
-| Idea                 | Visitor, with a facilitator | `/intent` (the `intake` agent) or the "Idea for the app" issue form | A `request:new` issue, in the visitor's words |
-| Product requirements | Product owner             | `/spec <request>`                                       | A `feature:spec` issue with the business sections |
-| Technical spec       | Developer                 | `/spec <n> technical`, ending with the `spec-checker`  | The Technical spec in the same issue         |
+| Idea                 | Visitor, with a facilitator | The console's Ideas tab or `/intent` (the `intake` agent), or the "Idea for the app" issue form | A `request:new` issue, in the visitor's words |
+| Product requirements | Product owner             | The console's Specs tab or `/spec <request>` (the `spec` agent) | A `feature:spec` issue with the business sections |
+| Technical spec       | Developer                 | The console's Specs tab or `/spec <n> technical` (the `spec` agent), ending with the `spec-checker` | The Technical spec in the same issue         |
 | Signature            | Developer                 | Adds `feature:ready`                                    | A factory run starts on the booth Mac        |
 | Delivery             | Agents                    | `factory.yml` → `factory-run.sh` → the `factory` agent  | A merged PR                                  |
 | Ship                 | GitHub Actions            | `ota-publish.yml` on the booth Mac                      | An OTA bundle on the phones                  |
@@ -251,6 +251,7 @@ text answer ([ADR 0015](internal/adr/0015-step-caps-and-no-implementer-device.md
 | ----------------- | -------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------- | -------- |
 | `factory`         | primary  | Orchestrates one delivery; starts subagents, reasons over their reports, merges through the gate | Everything not denied; never writes code or reads the diff (by its skill)                                                | low     | 60       |
 | `intake`          | primary  | Booth front door: turns a visitor's idea into a `request:new` issue                            | Talks and files one issue; no edits, no subagents                                                                        | default | none     |
+| `spec`            | primary  | Spec sessions: business sections with a product owner, the Technical spec with a developer     | Issue bodies through `gh`, a Proposed ADR; only the `spec-checker` subagent; cannot set a ready label                   | default | none     |
 | `implementer`     | subagent | Tests-first implementation in a worktree; fix mode for findings                                 | The repo, the issue body, defaults; never a device                                                                       | medium  | 80       |
 | `spec-reviewer`   | subagent | Blind spec review: is every Scope and Done when line delivered, nothing extra                  | Only its inputs directory: issue, parent, linked ADRs and rules, `defaults.md`, `Assumption:` lines, diff. Not the repo | medium  | 20       |
 | `code-reviewer`   | subagent | Blind code review: what input or state breaks each changed function; rule breaches              | All agent rules, the ADR index, the diff, a detached worktree of the PR head. No issue, PR body, commit messages, `gh` or web | medium  | 40       |
