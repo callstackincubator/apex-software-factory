@@ -29,6 +29,20 @@ describe("checkApiHealth", () => {
     expect(health).toEqual({ state: "ok", version: "1.4.0", latencyMs: 1200 });
   });
 
+  it("reports an ok round trip on the clock the shipped app runs (no injected now)", async () => {
+    // systemNow is the only clock the shipped app runs — useApiHealth and the
+    // api_health tool both reach checkApiHealth through its default. Any throw
+    // from it is swallowed as "offline" by checkApiHealth's catch, so this
+    // green-on-real-clock test is the one that can fail on a broken systemNow.
+    const health = await checkApiHealth(clientReturning(healthy));
+
+    if (health.state !== "ok") {
+      throw new Error(`expected state "ok", got "${health.state}"`);
+    }
+    expect(Number.isInteger(health.latencyMs)).toBe(true);
+    expect(health.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
   it("shows no round trip when the API is offline", async () => {
     const health = await checkApiHealth(
       clientReturning(() => Promise.reject(new TypeError("Network request failed"))),
