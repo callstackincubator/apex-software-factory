@@ -119,7 +119,10 @@ corepack enable
 Log in to GitHub. You need this login for the setup below. Agents in a
 person's own session (the console, the `build` agent) also act through it.
 Unattended runs act as the factory's GitHub App instead
-([section 9](#9-point-github-at-this-mac)):
+([section 9](#9-point-github-at-this-mac)), except for uploading the
+simulator's screenshots and videos to a PR comment: GitHub accepts those
+uploads only from a user's token. Without this login the PR gets text
+evidence only:
 
 ```bash
 gh auth login

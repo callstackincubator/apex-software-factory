@@ -123,11 +123,11 @@ before a replay, and do not call `agent-device test` directly.
 .agents/scripts/device-lane.sh ad logs start          # then reproduce, then:
 .agents/scripts/device-lane.sh ad logs stop
 .agents/scripts/device-lane.sh ad network dump 20     # HTTP seen in the app's logs
-.agents/scripts/device-lane.sh ad record start        # ... record stop: a video of a flow
+.agents/scripts/device-lane.sh record start <name>    # ... record stop: sim-shots/<name>.mp4
 ```
 
-Screenshots and recordings stay on this machine and are never committed; describe them in a
-report.
+Screenshots and recordings are never committed: describe them in a report. The
+`verify-mobile` skill uploads its own as PR attachments (`attach.sh`, ADR 0023).
 
 ## Not allowed here
 
