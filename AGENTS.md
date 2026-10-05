@@ -19,6 +19,7 @@ every tool.
 | `apps/mobile`       | Expo app (expo-router, hot-updater, Jest). `@apex/mobile`                |
 | `apps/api`          | Product HTTP API, Hono on Node. `@apex/api`                              |
 | `apps/ota-server`   | Self-hosted hot-updater server — release infrastructure, not product     |
+| `apps/console`      | The factory console: local web page, host tooling. `@apex/console`       |
 | `packages/contract` | Every wire shape as zod schemas, plus the typed client. `@apex/contract` |
 | `docs/internal/`    | ADRs, agent rules, delivery manual, spec templates                       |
 | `.agents/`          | Skills (`skills/<name>/SKILL.md`) and helper scripts (`scripts/`)        |
@@ -98,7 +99,8 @@ from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
   `verify-mobile`, `verify-ota`, `retro`; and the device tools `agent-device`,
   `appduct`, `rozenite` (vendored upstream skills, each with a `SOURCE.md`).
 - **Primary agents** (`.opencode/agent/`): `factory` (unattended delivery),
-  `intake` (the booth front door), `retro` (looks back at runs and proposes
+  `intake` (the booth front door), `spec` (spec sessions with a product
+  owner or a developer), `retro` (looks back at runs and proposes
   improvements). The default `build` agent is for people.
 - **Subagents** (started with the `task` tool, fresh context, fixed report
   block): `implementer`, `spec-reviewer`, `code-reviewer`, `review-verifier`,

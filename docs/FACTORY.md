@@ -22,9 +22,9 @@ to them instead of repeating them. To set up a machine, see
 
 | Stage                | Who                       | How                                                     | Result                                       |
 | -------------------- | ------------------------- | ------------------------------------------------------- | -------------------------------------------- |
-| Idea                 | Visitor, with a facilitator | `/intent` (the `intake` agent) or the "Idea for the app" issue form | A `request:new` issue, in the visitor's words |
-| Product requirements | Product owner             | `/spec <request>`                                       | A `feature:spec` issue with the business sections |
-| Technical spec       | Developer                 | `/spec <n> technical`, ending with the `spec-checker`  | The Technical spec in the same issue         |
+| Idea                 | Visitor, with a facilitator | The console's Ideas tab or `/intent` (the `intake` agent), or the "Idea for the app" issue form | A `request:new` issue, in the visitor's words |
+| Product requirements | Product owner             | The console's Specs tab or `/spec <request>` (the `spec` agent) | A `feature:spec` issue with the business sections |
+| Technical spec       | Developer                 | The console's Specs tab or `/spec <n> technical` (the `spec` agent), ending with the `spec-checker` | The Technical spec in the same issue         |
 | Signature            | Developer                 | Adds `feature:ready`                                    | A factory run starts on the booth Mac        |
 | Delivery             | Agents                    | `factory.yml` → `factory-run.sh` → the `factory` agent  | A merged PR                                  |
 | Ship                 | GitHub Actions            | `ota-publish.yml` on the booth Mac                      | An OTA bundle on the phones                  |
@@ -251,6 +251,7 @@ text answer ([ADR 0015](internal/adr/0015-step-caps-and-no-implementer-device.md
 | ----------------- | -------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------- | -------- |
 | `factory`         | primary  | Orchestrates one delivery; starts subagents, reasons over their reports, merges through the gate | Everything not denied; never writes code or reads the diff (by its skill)                                                | low     | 60       |
 | `intake`          | primary  | Booth front door: turns a visitor's idea into a `request:new` issue                            | Talks and files one issue; no edits, no subagents                                                                        | default | none     |
+| `spec`            | primary  | Spec sessions: business sections with a product owner, the Technical spec with a developer     | Issue bodies through `gh`, a Proposed ADR; only the `spec-checker` subagent; cannot set a ready label                   | default | none     |
 | `retro`           | primary  | Looks back at runs: finds what cost time or stopped them, curates lessons, proposes changes      | Run records, the memory branch, GitHub, transcript artifacts; changes `main` only as a draft PR a person accepted        | xhigh   | 120      |
 | `implementer`     | subagent | Tests-first implementation in a worktree; fix mode for findings                                 | The repo, the issue body, defaults; never a device                                                                       | medium  | 80       |
 | `spec-reviewer`   | subagent | Blind spec review: is every Scope and Done when line delivered, nothing extra                  | Only its inputs directory: issue, parent, linked ADRs and rules, `defaults.md`, `Assumption:` lines, diff. Not the repo | medium  | 20       |
@@ -488,6 +489,26 @@ opencode run "Reply with the single word ok."
 
 - **The PR body** has a status line every stage updates, for example
   `Implement: done (5/5 green)  Review: round 2, 0 open  Simulator: pass  Native: no  Gate: merged`.
+
+## The console
+
+The maintainer watches the factory from a web page on their own machine, not
+from GitHub tabs and SQLite queries:
+
+```bash
+pnpm console          # builds the page, serves http://127.0.0.1:4280
+pnpm console --demo   # the same page on sample data, nothing else needed
+```
+
+It shows which `factory` runner holds which issue, every pending delivery with
+the time each phase took, the review statistics, and every GitHub workflow
+(the scheduled ones are the factory's automations, with their next run and
+success rate). It can start a factory run for an issue, run a workflow that
+needs no input, and open OpenCode's web app. It reads what the factory already
+writes and changes none of it; it listens on the loopback interface only.
+Details: [the console spec](internal/CONSOLE.md) and
+[ADR 0017](internal/adr/0017-a-local-factory-console.md); how to run it:
+[apps/console/README.md](../apps/console/README.md).
 
 ## More
 
