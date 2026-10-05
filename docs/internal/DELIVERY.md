@@ -24,10 +24,10 @@ PR and review → deploy record (ADR 0005).
 
 | Who                                | Does                                                                                                   | Tool                        |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------- |
-| Booth visitor (product person)     | Describes the idea in plain words, confirms the draft                                                  | `/intent` with a facilitator, or the issue form |
+| Booth visitor (product person)     | Describes the idea in plain words, confirms the draft                                                  | The console's Ideas tab or `/intent` with a facilitator, or the issue form |
 | Facilitator                        | Runs the intake conversation, approves the filing                                                       | `intake` agent              |
-| Product owner                      | Writes the business sections: problem, who, outcome, completion conditions                            | `/spec <request>`           |
-| Developer                          | Writes the Technical spec, accepts ADRs, sets `feature:ready`                                           | `/spec <n> technical`       |
+| Product owner                      | Writes the business sections: problem, who, outcome, completion conditions                            | `spec` agent: the console's Specs tab, or `/spec <request>` |
+| Developer                          | Writes the Technical spec, accepts ADRs, sets `feature:ready`                                           | `spec` agent: the console's Specs tab, or `/spec <n> technical` |
 | Maintainer                         | Triage judgments, parked PRs, native builds, closing features                                           | GitHub, `/triage`, `/review` |
 | Agents                             | Implement, test, review, verify, merge                                                                  | `factory` agent, `/deliver` |
 | Automation                         | Label invariants, task readiness, stale claims, request closing                                         | `issue-state.yml`           |
@@ -144,8 +144,7 @@ their report blocks.
    the device is always released. Two tasks can be at this stage at once:
    simlock queues, and a build slot keeps Xcode builds apart. No device within
    30 minutes, or a machine that cannot run it → `needs-simulator`. The
-   implementer may already have checked its own UI on a leased device; this
-   run is still the gate. See [ADR 0007](adr/0007-device-lane-simlock-agent-device.md).
+   implementer never leases a device; this run is the only simulator check. See [ADR 0007](adr/0007-device-lane-simlock-agent-device.md).
 6. **Native.** A native change gets `needs-native-build` and is parked for the
    maintainer.
 7. **Merge.** The factory fills the PR's `## Review` section, marks it ready,
@@ -307,9 +306,13 @@ repository's automation, never on a pull request, and checks out `main`.
 Runs for one issue queue behind each other (concurrency group per issue);
 the job times out after 90 minutes, and `factory-run.sh`'s watchdog stops a
 run with no progress for 15 minutes, restarts it once from the branch, and
-otherwise leaves the handoff. The job summary links the issue and the PR;
-the full run logs stay on the laptop under the runner's checkout,
-`.worktrees/factory-runs/`.
+otherwise leaves the handoff. The job summary links the issue and the PR.
+Every attempt leaves a run record (ADR 0016): a digest of each stage on the
+`factory-memory` branch (`.agents/scripts/memory.sh runs --issue <n>`), and
+the logs, journals and transcripts in the job's artifact
+`factory-run-<issue>-<run id>-<attempt>`; the next job's checkout wipes
+`.worktrees/factory-runs/`. The `retro` agent reads them from any machine:
+[MEMORY.md](MEMORY.md).
 
 Runner setup (once per runner directory, as the maintainer's user):
 
@@ -326,8 +329,8 @@ Runner setup (once per runner directory, as the maintainer's user):
   `SIMLOCK_HOME` must be the one the running simlock daemon uses
   (`/tmp/apex-slk` on the dev Mac). Without `SIMLOCK_BIN` the job warns and
   simulator checks report `unavailable`.
-- **OpenCode**: `~/.opencode/bin/opencode`, with the provider config in
-  `~/.config/opencode/opencode.json` and the login in
+- **OpenCode**: `~/.opencode/bin/opencode`, with the provider definition in
+  the repository's `opencode.json` (ADR 0014) and the login in
   `~/.local/share/opencode/auth.json` — the runner runs as the same user, so
   the maintainer's login applies. The run uses `--standalone`, so it inherits
   the job's environment.
@@ -350,11 +353,13 @@ Runner setup (once per runner directory, as the maintainer's user):
   `opencode.json`
 - Scripts: `.agents/scripts/` — `worktree.sh`, `review-inputs.sh`,
   `native-check.sh`, `device-lane.sh`, `merge-pr.sh`, `factory-run.sh`,
-  `prewarm.sh`, `check-agent-permissions.sh`, `ensure-pnpm.sh`; the native
+  `run-record.sh`, `memory.sh`, `prewarm.sh`, `check-agent-permissions.sh`,
+  `ensure-pnpm.sh`; the native
   build cache in `tools/expo-build-cache/`
 - Workflows: `.github/workflows/` — `ci.yml`, `ota-publish.yml`,
   `factory.yml`, `issue-state.yml`, `labels.yml`; their helpers are in
   `scripts/ci/`
 - OTA: [OTA.md](OTA.md)
+- Memory, run records and the retro: [MEMORY.md](MEMORY.md)
 - Devices (simlock, agent-device, appduct, Rozenite host setup): [DEVICES.md](DEVICES.md),
   [ADR 0007](adr/0007-device-lane-simlock-agent-device.md)

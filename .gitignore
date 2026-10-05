@@ -21,3 +21,5 @@ infra/data/
 .rozenite/
 .agent-device/
 .apex/
+# The factory console's built page
+apps/console/dist/

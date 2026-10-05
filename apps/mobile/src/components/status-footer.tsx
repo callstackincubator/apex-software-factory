@@ -1,7 +1,7 @@
 import type { ApiClient } from "@apex/contract";
 import Constants from "expo-constants";
 import type { ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 
 import { LiveDot } from "@/components/live-dot";
 import { UpdateInfo } from "@/components/update-info";
@@ -37,6 +37,18 @@ function describe(health: ApiHealth, theme: Theme) {
   }
 }
 
+/** `ios` reads "iOS" and `android` "Android"; any other value is shown as it is. */
+function platformName(os: string) {
+  switch (os) {
+    case "ios":
+      return "iOS";
+    case "android":
+      return "Android";
+    default:
+      return os;
+  }
+}
+
 type Props = {
   /** Defaults to the app's API client; injectable for tests. */
   client?: Pick<ApiClient, "health">;
@@ -44,12 +56,13 @@ type Props = {
   now?: () => number;
 };
 
-/** API health, app version and running bundle — what a booth demo needs at a glance. */
+/** API health, app version and platform, running bundle — what a booth demo needs at a glance. */
 export function StatusFooter({ client = api, now }: Props) {
   const theme = useTheme();
   const { health, refresh } = useApiHealth(client, now);
   const status = describe(health, theme);
   const appVersion = Constants.expoConfig?.version ?? "unknown";
+  const platform = platformName(Platform.OS);
   // The row's label carries the round trip too, so an agent reads the time
   // from the row itself; only an "ok" answer has one.
   const apiLabel =
@@ -96,14 +109,18 @@ export function StatusFooter({ client = api, now }: Props) {
           ) : null}
         </Row>
       </Pressable>
-      <View testID="status-app" accessible accessibilityLabel={`App version ${appVersion}`}>
+      <View
+        testID="status-app"
+        accessible
+        accessibilityLabel={`App version ${appVersion} on ${platform}`}
+      >
         <Row label="App">
           <Text
             selectable
             maxFontSizeMultiplier={1.6}
             style={{ fontFamily: fonts.mono, fontSize: 12, color: theme.text }}
           >
-            v{appVersion}
+            {`v${appVersion} · ${platform}`}
           </Text>
         </Row>
       </View>

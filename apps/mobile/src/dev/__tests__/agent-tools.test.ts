@@ -67,6 +67,29 @@ function makeDeps(overrides: Partial<AgentToolDeps> = {}) {
       preview: jest.fn(() => true),
     },
     defer: jest.fn((task: () => void) => task()),
+    nativeCapabilities: jest.fn(() => ({
+      platform: "ios",
+      allLinked: false,
+      missing: ["maps"],
+      libraries: [
+        {
+          id: "skia",
+          package: "@shopify/react-native-skia",
+          version: "2.6.2",
+          status: "linked" as const,
+          missingModules: [],
+          enables: "2D drawing",
+        },
+        {
+          id: "maps",
+          package: "react-native-maps",
+          version: "1.27.2",
+          status: "missing" as const,
+          missingModules: ["turbo:RNMapsAirModule"],
+          enables: "map views",
+        },
+      ],
+    })),
     ...overrides,
   };
   return deps satisfies AgentToolDeps;
@@ -242,6 +265,25 @@ describe("agent tools", () => {
       state: "offline",
       apiUrl: "http://192.168.1.20:3001",
     });
+  });
+
+  it("native_capabilities passes on the probe's report of what the binary links", async () => {
+    const deps = makeDeps();
+
+    const result = await call(deps, "native_capabilities");
+
+    expect(deps.nativeCapabilities).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      platform: "ios",
+      allLinked: false,
+      missing: ["maps"],
+      libraries: [
+        { id: "skia", status: "linked", version: "2.6.2" },
+        { id: "maps", status: "missing", missingModules: ["turbo:RNMapsAirModule"] },
+      ],
+    });
+    const registration = createAgentTools(deps).find((tool) => tool.name === "native_capabilities");
+    expect(registration?.annotations).toMatchObject({ readOnlyHint: true, idempotentHint: true });
   });
 
   it("every tool has a unique name, a group and an object output schema an agent can read", () => {

@@ -19,6 +19,7 @@ every tool.
 | `apps/mobile`       | Expo app (expo-router, hot-updater, Jest). `@apex/mobile`                |
 | `apps/api`          | Product HTTP API, Hono on Node. `@apex/api`                              |
 | `apps/ota-server`   | Self-hosted hot-updater server — release infrastructure, not product     |
+| `apps/console`      | The factory console: local web page, host tooling. `@apex/console`       |
 | `packages/contract` | Every wire shape as zod schemas, plus the typed client. `@apex/contract` |
 | `docs/internal/`    | ADRs, agent rules, delivery manual, spec templates                       |
 | `.agents/`          | Skills (`skills/<name>/SKILL.md`) and helper scripts (`scripts/`)        |
@@ -85,29 +86,37 @@ blind to the rules — keep it that way.
 10. Agents act only on `bug:triage`, `bug:ready`, `feature:ready`, `task:ready`.
 
 The full manual is [docs/internal/DELIVERY.md](docs/internal/DELIVERY.md);
-the OTA side is [docs/internal/OTA.md](docs/internal/OTA.md).
+the OTA side is [docs/internal/OTA.md](docs/internal/OTA.md); how runs are
+recorded, remembered and reviewed is
+[docs/internal/MEMORY.md](docs/internal/MEMORY.md). An overview
+with diagrams is [docs/FACTORY.md](docs/FACTORY.md); setting up a machine
+from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
 
 ## Skills, agents, commands
 
 - **Skills** (`.agents/skills/`, loaded with the `skill` tool): `intent`,
   `spec-session`, `deliver`, `implement`, `review`, `triage-bug`,
-  `verify-mobile`, `verify-ota`; and the device tools `agent-device`,
+  `verify-mobile`, `verify-ota`, `retro`; and the device tools `agent-device`,
   `appduct`, `rozenite` (vendored upstream skills, each with a `SOURCE.md`).
 - **Primary agents** (`.opencode/agent/`): `factory` (unattended delivery),
-  `intake` (the booth front door). The default `build` agent is for people.
+  `intake` (the booth front door), `spec` (spec sessions with a product
+  owner or a developer), `retro` (looks back at runs and proposes
+  improvements). The default `build` agent is for people.
 - **Subagents** (started with the `task` tool, fresh context, fixed report
   block): `implementer`, `spec-reviewer`, `code-reviewer`, `review-verifier`,
   `triager`, `mobile-verifier`, `ota-verifier`, `spec-checker`. Subagents
   never start subagents.
 - **Commands** (`.opencode/command/`): `/intent`, `/spec <n> [mode]`,
-  `/deliver <n>`, `/triage <n>`, `/review <pr>`.
+  `/deliver <n>`, `/triage <n>`, `/review <pr>`, `/retro [scope]`.
 - **Scripts** (`.agents/scripts/`): `worktree.sh` (create a worktree under
   `.worktrees/` and install), `merge-pr.sh` (the merge gate),
   `review-inputs.sh` (blind review inputs), `native-check.sh` (can this ship
   over the air?), `device-lane.sh` (a simlock-leased device driven with
   agent-device, appduct and Rozenite; reuses a cached native build for a
   JS-only change), `factory-run.sh` (one unattended run with a watchdog),
-  `prewarm.sh` (the booth laptop's morning warm-up),
+  `prewarm.sh` (the booth laptop's morning warm-up), `memory.sh` (the
+  factory's memory: recall and leave lessons, journal lines, run records),
+  `run-record.sh` (an attempt's digest and transcript, for the retro),
   `check-agent-permissions.sh` (no agent can reach "ask"), `ensure-pnpm.sh`.
 - **Devices**: simulators and emulators are leased through simlock and driven
   through agent-device, only via `.agents/scripts/device-lane.sh`. The

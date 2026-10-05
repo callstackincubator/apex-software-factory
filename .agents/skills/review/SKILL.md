@@ -77,9 +77,16 @@ only its inputs:
 - `code-reviewer`:
   `Rules and diff: <CODE>. Repository: <WORKTREE>, checked out at the reviewed commit.`
 
-Nothing else goes in either prompt. A reviewer that returns narration instead
-of findings in the required form is run once more with the same prompt plus
-"Report in the required form only."
+Nothing else goes in either prompt. A reviewer that returns anything but
+findings in the required form — narration, garbled text, an empty answer, or
+"No findings." missing — has failed, whatever it says; usually the model
+endpoint failed, not the reviewer. Run it again with the same prompt plus
+"Report in the required form only.", and if that fails, a third time with the
+original prompt alone. If the third run fails too, stop the review: report
+`Spec needs: none`, the Fix line
+`review: the <spec|code> reviewer returned no report three times`, and the
+orchestrator parks the issue with that under Blocked on. Never pass a failed
+report to the verifier, and never treat it as "No findings.".
 
 ## 3. Verify the findings
 

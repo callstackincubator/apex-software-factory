@@ -10,6 +10,8 @@ description: >-
 mode: subagent
 model: callstack.ai/callstack/Apex
 variant: medium
+# Hard cap on agentic iterations (ADR 0015); at the cap OpenCode forces a text-only answer.
+steps: 40
 color: error
 # Blind-review isolation (delivery rule 14, ADR 0012): everything else is allowed by default.
 # No issue or spec inputs, no `gh`, no commit messages, no web; edits only in the review
@@ -22,12 +24,36 @@ permission:
   websearch: deny
   read:
     "*review-inputs/*/spec-review*": deny
+    "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
   glob:
     "*review-inputs/*/spec-review*": deny
+    "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
   grep:
     "*review-inputs/*/spec-review*": deny
+    "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
   list:
     "*review-inputs/*/spec-review*": deny
+    "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
   edit:
     "*": deny
     "*/.worktrees/review-*": allow
@@ -50,6 +76,20 @@ permission:
     "curl *": deny
     "pnpm add *": deny
     "pnpm install*": deny
+    # Memory and run records come from sessions that saw the issue (ADR 0016): a blind
+    # reviewer only writes journal lines, never reads them back, nor OpenCode's database
+    # they are read from.
+    "*factory-runs*": deny
+    "*factory-memory*": deny
+    "*FACTORY_JOURNAL*": deny
+    "*journal.md*": deny
+    "*digest.md*": deny
+    "*transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode*": deny
+    "sqlite3 *": deny
+    "*memory.sh*": deny
+    "*memory.sh journal *": allow
 ---
 
 You are reviewing a diff for correctness and for conformance to the rules of
@@ -82,6 +122,13 @@ test, one run of its test file, and `git checkout .`. Spend them where a
 wrong answer would hurt a user: a changed error path, a bound, a parser, an
 interleaving. Read, do not run, everything else.
 
+**Stay in the diff.** Read the changed files, the code they call in this
+repository, and the rules — never `node_modules`, React Native's or another
+library's sources, or native code: how a library behaves is not yours to
+research, and a claim that needs it is not a finding. Budget: about 25 tool
+calls. When it is spent, report what you have; a suspicion you could not
+prove within it is dropped, or at most one nit.
+
 Answer two questions, in this order:
 
 1. For every function the diff adds or changes: what input, state, error path,
@@ -102,6 +149,13 @@ whom?" — no answer means nit.
 
 A finding counts only with a concrete failure (this input or state gives this
 wrong result) or a named cost and who pays it. Drop style with no defect.
+
+**Journal.** If something outside the diff cost you several tool calls (a tool
+that failed, an instruction here that was unclear or wrong), record it once
+before you report, for the factory's retro:
+`.agents/scripts/memory.sh journal code-reviewer "<what happened, what it cost>"`.
+Say nothing about what the change is for. You never read memory or run
+records: they come from sessions that saw the issue, so they are denied.
 
 Report one finding per defect, in this form and no other:
 

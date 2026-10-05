@@ -9,3 +9,7 @@ allowBuilds:
   # never run); its postinstall downloads an Electron binary. Denied explicitly
   # so `pnpm install` neither downloads it nor fails on an unapproved build.
   electron: false
+  # Its postinstall only copies the prebuilt Skia libraries from its own npm
+  # dependencies (react-native-skia-apple-*, react-native-skia-android) into
+  # libs/; it downloads nothing. The native build needs them.
+  "@shopify/react-native-skia": true

@@ -29,6 +29,11 @@ agent that inherits the top-level model gets no variant: verified with
     script);
   - `medium`: `implementer`, `code-reviewer`, `spec-reviewer`,
     `mobile-verifier`, `triager`, `spec-checker`.
+- A primary agent started with `opencode run --agent <name>` does not get its
+  `variant` (OpenCode 2.0.22 sent the model's default, `medium`, for the
+  `factory` agent's `low`; checked with a logging proxy). `factory-run.sh`
+  therefore passes the agent file's `model` and `variant` as
+  `-m <model>#<variant>`. Subagents the run starts keep their own variants.
 - `intake` and the `build` agent keep the top-level default. The model id in
   an agent file must equal `opencode.json`'s `model`; switching the model
   changes those lines too.

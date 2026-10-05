@@ -1,13 +1,23 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { createApiClient } from "@apex/contract";
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { Platform } from "react-native";
 
 import { StatusFooter } from "@/components/status-footer";
 
-// jest-expo's expo-constants mock carries no app config.
+// jest-expo's expo-constants mock carries no app config; the render tests
+// below assert against this fixed version. The real app version lives in
+// app.json, and the tie test at the bottom keeps app.json and the version
+// pinned in e2e/app-platform.ad in step, so a bump fails here, not on a
+// simulator run.
 jest.mock("expo-constants", () => ({
   __esModule: true,
   default: { expoConfig: { version: "1.0.0" } },
 }));
+
+const appJsonVersion: string = require("../../../app.json").expo.version;
 
 function clientReturning(response: () => Promise<Response>) {
   return createApiClient({ baseUrl: "http://api.test", fetch: response });
@@ -20,6 +30,13 @@ function stepClock(...readings: number[]): () => number {
 }
 
 describe("StatusFooter", () => {
+  // The footer names the platform it runs on, read from Platform.OS at render.
+  const platform = Platform as { OS: string };
+  const realOS = platform.OS;
+  afterEach(() => {
+    platform.OS = realOS;
+  });
+
   it("reports the API as offline when the request fails", async () => {
     const client = clientReturning(() => Promise.reject(new TypeError("Network request failed")));
     await render(<StatusFooter client={client} />);
@@ -96,11 +113,52 @@ describe("StatusFooter", () => {
   });
 
   it("shows the app version and the running bundle", async () => {
+    platform.OS = "ios";
     const client = clientReturning(() => Promise.reject(new Error("down")));
     await render(<StatusFooter client={client} />);
 
-    expect(screen.getByText("v1.0.0")).toBeOnTheScreen();
+    expect(screen.getByText("v1.0.0 · iOS")).toBeOnTheScreen();
     expect(screen.getByText("embedded · production")).toBeOnTheScreen();
     await screen.findByText("offline");
+  });
+
+  it('the footer shows the app version and "iOS" on iOS, with the label "App version 1.0.0 on iOS"', async () => {
+    platform.OS = "ios";
+    const client = clientReturning(() => Promise.reject(new Error("down")));
+    await render(<StatusFooter client={client} />);
+
+    expect(screen.getByText("v1.0.0 · iOS")).toBeOnTheScreen();
+    expect(screen.getByTestId("status-app")).toHaveAccessibleName("App version 1.0.0 on iOS");
+  });
+
+  it('the footer shows the app version and "Android" on Android', async () => {
+    platform.OS = "android";
+    const client = clientReturning(() => Promise.reject(new Error("down")));
+    await render(<StatusFooter client={client} />);
+
+    expect(screen.getByText("v1.0.0 · Android")).toBeOnTheScreen();
+    expect(screen.getByTestId("status-app")).toHaveAccessibleName("App version 1.0.0 on Android");
+  });
+
+  it("shows any other platform value as it is", async () => {
+    platform.OS = "web";
+    const client = clientReturning(() => Promise.reject(new Error("down")));
+    await render(<StatusFooter client={client} />);
+
+    expect(screen.getByText("v1.0.0 · web")).toBeOnTheScreen();
+    expect(screen.getByTestId("status-app")).toHaveAccessibleName("App version 1.0.0 on web");
+  });
+
+  it("pins the same app version the e2e script checks on the device", () => {
+    // e2e/app-platform.ad asserts the label "App version <version> on iOS" on
+    // the real app. Read the version pinned in that file and compare it to
+    // app.json: drift on either side fails here, not on the device lane.
+    const adSource = readFileSync(join(__dirname, "../../../e2e/app-platform.ad"), "utf8");
+    const pinned = [...adSource.matchAll(/App version ([0-9][^\s"]*) on iOS/g)].map(
+      (match) => match[1],
+    );
+    // The .ad must pin a version at all, and every pin must be app.json's.
+    expect(pinned.length).toBeGreaterThan(0);
+    expect([...new Set(pinned)]).toEqual([appJsonVersion]);
   });
 });

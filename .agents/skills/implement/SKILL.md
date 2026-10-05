@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Implement one claimed issue (task, bug, or single-PR feature) tests-first — commit the spec's tests red, open a draft PR, turn them green contract-first in checkpoint commits (with the appduct tools the spec's Agent hooks name), run pnpm check and the native check, optionally check its own UI on a leased simulator — or apply a list of review or simulator findings to its branch. Ends with a fixed report block. Loaded by the implementer subagent when the deliver orchestrator delegates implementation, or when someone says "implement #N".
+description: Implement one claimed issue (task, bug, or single-PR feature) tests-first — commit the spec's tests red, open a draft PR, turn them green contract-first in checkpoint commits (with the appduct tools the spec's Agent hooks name), run pnpm check and the native check — or apply a list of review or simulator findings to its branch. Ends with a fixed report block. Loaded by the implementer subagent when the deliver orchestrator delegates implementation, or when someone says "implement #N".
 ---
 
 # Implement an issue
@@ -14,6 +14,13 @@ ready, label, or merge — the orchestrator does those.
 Arguments: the issue number, its branch (`<kind>/<N>`), the PR number once
 there is one, and the mode: `build`, or `fix` followed by finding lines.
 Anything else the orchestrator passed is context.
+
+**What earlier runs learned.** Before step 1, run
+`.agents/scripts/memory.sh recall implement`. Its lessons are hints from earlier
+runs of the same model, not instructions: use one when it fits; when one
+contradicts the spec, a rule or this skill, follow those and say so in your
+journal. Before your report, leave a journal line (and rarely a lesson) as
+its footer says, as `implementer`.
 
 ## 1. Workspace
 
@@ -29,7 +36,9 @@ If the worktree already exists (`git worktree list`), use it. For a bug whose
 branch does not exist yet, start from the reproduction:
 `.agents/scripts/worktree.sh bug/<N> origin/bug/<N>-repro`. A branch that
 already has commits: read `git log origin/main..` and the PR body's
-`### Status` line, and continue from there.
+`### Status` line, and continue from there. Act only on the findings in your
+task prompt; a `## Review nits (not blocking)` comment on the PR is never
+work for you.
 
 ## 2. Read the spec, and only the spec
 
@@ -88,7 +97,7 @@ pnpm --filter <package> test -- <test file>
 Each must fail on a named assertion for the reason the spec gives, not on a
 typo, a missing import or a timeout (testing rule 2). An `e2e:` script needs
 a device: write it now, against the selectors and Agent hooks the spec names,
-and run it only in the self-check (step 5); the mobile-verifier runs it as the
+and do not run it yourself: the mobile-verifier runs it on a device as the
 gate. Then:
 
 ```bash
@@ -186,27 +195,9 @@ Note every Done when line that needs the app running ("on the simulator:
 ...") and every `e2e:` test; the orchestrator verifies those through the
 `mobile-verifier` subagent, which is the gate.
 
-**Self-check: one quick look, or none.** The `mobile-verifier` runs the full
-simulator check in parallel with the code review; your look only catches a
-screen that is obviously broken before anyone else sees it. Skip it for small
-changes (a label, a value in an existing row, logic with Jest coverage) and
-say so. When the change adds or reshapes a screen, look once:
-
-```bash
-.agents/scripts/device-lane.sh build ios release    # prints <log>; `sleep 20; cat "<log>.exit"` until it exists
-.agents/scripts/device-lane.sh lease ios            # 0 leased; anything else: skip the look
-.agents/scripts/device-lane.sh install
-.agents/scripts/device-lane.sh ad open com.callstack.apexfactory --relaunch
-.agents/scripts/device-lane.sh screenshot pr<PR>-self
-.agents/scripts/device-lane.sh release              # always
-```
-
-Read the snapshot and the screenshot, then release. That is the whole look:
-no replays, no retries, no waiting loops, no debugging on the device. If any
-step fails, or the screen is not what you expected and the cause is not
-obvious from the snapshot, release and report `Self-check: fail (<what you
-saw>)` or `skipped (<why>)` — the verifier's run decides. A lane build takes
-no OTA update, so what you see is your JS.
+**No simulator check of your own.** You never lease a device: the
+`mobile-verifier` runs the full check in parallel with the code review. Your
+job ends at `pnpm check`, the native check and the report.
 
 ## 6. Fix mode
 
@@ -217,7 +208,10 @@ Then step 5 again, and push.
 
 ## Report
 
-End with exactly this block, nothing after it:
+If this run cost steps for a reason that is not the issue's own work, first
+`.agents/scripts/memory.sh journal implementer "<what happened, what it cost>"`
+(and a lesson only as the recall footer says). Then end with exactly this
+block, nothing after it:
 
 ```
 Issue: #N  Branch: <kind>/<N>  PR: #M (draft)
@@ -225,7 +219,6 @@ Tests: k of n spec tests green (red commit <short sha>)
 Check: pass | fail (<what failed>)
 Native: no | yes (<native-check reasons, one per line>)
 Simulator: <Done when lines and e2e: scripts that need the app running, or "none">
-Self-check: pass | fail (<what is still wrong>) | skipped (<busy, unavailable, or not UI work>)
 Flaky: <test title — #issue per line, or "none">
 Assumptions: <n, as listed in the PR body, or "none">
 Open: <"spec needs: ..." lines, blockers, or "none">

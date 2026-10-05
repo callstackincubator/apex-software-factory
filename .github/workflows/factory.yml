@@ -109,17 +109,29 @@ jobs:
             [ -d "$dir" ] && echo "$dir" >>"$GITHUB_PATH"
           done
 
-      - name: Install
+      # Run the factory from the newest main, not the commit that was main when the label
+      # event fired: a run that waited in the queue, or a re-run of an old run, would otherwise
+      # deliver with yesterday's skills and scripts. The checkout above cleans the directory,
+      # so worktrees left by an earlier run are pruned here.
+      - name: Newest main, clean worktree list
         if: steps.what.outputs.mode != 'none'
         run: |
-          git worktree prune
-          pnpm install --frozen-lockfile
-          # The agents' pushes authenticate as the maintainer through gh's own login (the
-          # checkout above left no token behind); local config only, shared by every worktree.
+          # The agents' fetches and pushes authenticate as the maintainer through gh's own login
+          # (the checkout above left no token behind); local config only, shared by every worktree.
           git remote set-url origin "https://github.com/$GITHUB_REPOSITORY.git"
           git config --local credential.https://github.com.helper ""
           git config --local --add credential.https://github.com.helper "!$(command -v gh) auth git-credential"
           (unset GH_TOKEN GITHUB_TOKEN; gh auth status >/dev/null) || { echo "::error::gh is not logged in for the runner's user"; exit 1; }
+          (unset GH_TOKEN GITHUB_TOKEN; git fetch --quiet origin main)
+          git checkout --quiet --detach origin/main
+          git worktree prune
+          echo "factory code: main at $(git rev-parse --short HEAD)"
+          echo "- Factory code: \`main\` at \`$(git rev-parse --short HEAD)\`" >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Install
+        if: steps.what.outputs.mode != 'none'
+        run: |
+          pnpm install --frozen-lockfile
           command -v opencode >/dev/null || { echo "::error::opencode not found on the runner"; exit 1; }
           opencode --version
           # simlock is not on npm yet: the lanes run the CLI named by SIMLOCK_BIN, set in the
@@ -141,6 +153,19 @@ jobs:
             .agents/scripts/factory-run.sh "$ISSUE"
           fi
 
+      # The run's logs, journals, digests and transcripts (ADR 0016). The next job's checkout
+      # cleans .worktrees/, so without this they are gone; with it, the retro reads them from
+      # any machine (`gh run download`). The digests are also on the factory-memory branch.
+      - name: Keep the run record
+        if: always() && steps.what.outputs.mode != 'none'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: factory-run-${{ env.ISSUE }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .worktrees/factory-runs/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Summary
         if: always() && steps.what.outputs.mode != 'none'
         env:
@@ -160,5 +185,5 @@ jobs:
             echo "- Result: $OUTCOME"
             echo "- PR: ${prs:-none}"
             echo "- Labels now: ${labels:-none}"
-            echo "- Run logs: \`.worktrees/factory-runs/$ISSUE-*\` in this runner's checkout"
+            echo "- Run record: \`.agents/scripts/memory.sh runs --issue $ISSUE\`; logs and transcripts in this run's artifact \`factory-run-$ISSUE-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\`"
           } >>"$GITHUB_STEP_SUMMARY"

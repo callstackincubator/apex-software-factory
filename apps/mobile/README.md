@@ -192,6 +192,7 @@ pairing link never navigates the app (`src/app/+native-intent.tsx`).
 | `hide_update_banner`                   | hide the banner                                                                                                                   |
 | `reload_app`                           | restart into the staged bundle, like tapping the banner (destructive)                                                             |
 | `api_health`                           | call `/health` through the contract client, as the footer does, including the round trip in `latencyMs` (read-only)               |
+| `native_capabilities`                  | every native library in the binary: `linked`, `missing` or `not-on-platform`, checked without permission prompts (read-only)      |
 | event `ota.update_staged`              | posted when a real bundle has downloaded                                                                                          |
 
 A shipped feature adds its own tools in `src/features/<id>/agent-tools.ts`
@@ -219,10 +220,11 @@ Release and OTA bundles contain no Rozenite code.
 
 ## Environment
 
-| Variable              | Default                             | Purpose                                                                                                                               |
-| --------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `EXPO_PUBLIC_API_URL` | `http://localhost:3001`             | Origin of `apps/api`. `localhost` works on the iOS simulator; on a phone or Android emulator use the laptop's LAN IP (or `10.0.2.2`). |
-| `EXPO_PUBLIC_OTA_URL` | `http://localhost:3002/hot-updater` | The OTA server (`apps/ota-server`). Same rule: the laptop's LAN IP for a phone.                                                       |
+| Variable                      | Default                             | Purpose                                                                                                                               |
+| ----------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `EXPO_PUBLIC_API_URL`         | `http://localhost:3001`             | Origin of `apps/api`. `localhost` works on the iOS simulator; on a phone or Android emulator use the laptop's LAN IP (or `10.0.2.2`). |
+| `EXPO_PUBLIC_OTA_URL`         | `http://localhost:3002/hot-updater` | The OTA server (`apps/ota-server`). Same rule: the laptop's LAN IP for a phone.                                                       |
+| `GOOGLE_MAPS_ANDROID_API_KEY` | none (placeholder: empty map)       | Google Maps key for `react-native-maps` on Android, written into the manifest at prebuild. Native build input only; never committed.  |
 
 `EXPO_PUBLIC_*` variables are inlined when the bundle is built. Put them in
 `apps/mobile/.env.local` (git-ignored) or pass them on the command line. For a
@@ -254,11 +256,13 @@ format for the whole repo.
 
 ```
 src/
-  app/                 routes (Expo Router) — screens only
+  app/                 routes (Expo Router) — screens only; _capabilities is a hidden dev route
   components/          UI building blocks
+  dev/                 agent tools (appduct), the native capabilities probe and its screen
   features/registry.ts the list of features shipped at the booth
-  lib/                 API client, OTA updates (hot-updater) and hooks
+  lib/                 API client, OTA updates (hot-updater), root providers and hooks
   theme.ts             colour, spacing and font tokens (dark first)
+plugins/               local config plugins (local-only notifications, Android maps key, Gradle heap)
 ```
 
 ## Shipping a feature
@@ -272,10 +276,37 @@ src/
 3. Talk to the API only through `api` from `src/lib/api.ts`; request and response
    shapes live in `@apex/contract`.
 4. Prefer JS-only changes. A new native module changes the binary's fingerprint
-   and cannot ship over the air (ADR 0003). The binary already includes Expo
-   Router, Reanimated, Gesture Handler, `expo-image`, `expo-haptics`,
-   `expo-glass-effect`, `expo-symbols`, `@expo/ui` and friends — check
-   `package.json` before adding anything.
+   and cannot ship over the air (ADR 0003). The binary already carries the
+   native libraries booth features are likely to need — Skia, MMKV, SQLite,
+   VisionCamera (QR scanning), local notifications, calendar, image picker,
+   sharing, media library, maps, location, SVG, gradient, blur, sensors,
+   keyboard-controller, clipboard, speech, WebView, plus Reanimated, Gesture
+   Handler, `expo-image`, `expo-haptics`, `expo-glass-effect`, `expo-symbols`
+   and `@expo/ui`. The list with permissions and platform limits (Android maps
+   need a key at build time; notifications are local only) is
+   [docs/internal/NATIVE-CAPABILITIES.md](../../docs/internal/NATIVE-CAPABILITIES.md);
+   anything not on it needs a native build. JS-only packages such as
+   FlashList v2, `@gorhom/bottom-sheet` or `victory-native` can ship over the
+   air — confirm with `ota:fingerprint` that the fingerprint did not change.
+
+### Native capabilities
+
+<p>
+  <img src="docs/native-capabilities/ios-capabilities-top.png" alt="The hidden /_capabilities screen: every native library linked, live smokes" width="260">
+</p>
+
+What the running binary links: the appduct tool `native_capabilities`, or the
+hidden route `/_capabilities` (`open_route {"path":"/_capabilities"}`; not
+linked from the home screen), which adds a live smoke per library — Skia
+draws, MMKV and SQLite round-trip, SVG, gradient, blur, WebView and map views
+render, sensors and permissions are read without prompting. The probe list is
+`src/dev/native-capabilities.ts`; keep it in step with
+`docs/internal/NATIVE-CAPABILITIES.md`.
+
+Android maps: Google Maps needs an API key in the manifest. Build the Android
+binary with `GOOGLE_MAPS_ANDROID_API_KEY=<key>` in the environment (never
+commit it); without it the map shows an empty grid. iOS uses Apple Maps and
+needs no key.
 
 ## Monorepo notes
 

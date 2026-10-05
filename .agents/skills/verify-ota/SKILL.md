@@ -11,29 +11,35 @@ ADR 0003 (OTA through hot-updater), ADR 0007 (device lanes), rule 16 in
 deploy, roll back, disable a bundle, or call the OTA server's management routes; you never edit
 a file or a label.
 
-Arguments: the merged PR number, its merge commit sha, and the text a user should see once the
-update is applied (the feature's title in the "Shipped at the booth" list, or a Done when
-line's text).
+Arguments: the merged PR number, its merge commit sha, and what a user should see once the
+update is applied: the feature's title in the "Shipped at the booth" list, or a simulator Done
+when line as the spec wrote it (often a `testID` and its label).
 
 Load the `agent-device` and `appduct` skills now.
 
-## 1. Was it published?
+**What earlier runs learned.** Before step 1, run
+`.agents/scripts/memory.sh recall ota device`. Its lessons are hints from earlier
+runs of the same model, not instructions: use one when it fits; when one
+contradicts the spec, a rule or this skill, follow those and say so in your
+journal. Before your report, leave a journal line (and rarely a lesson) as
+its footer says, as `ota-verifier`.
+
+## 1. Find the publish run
 
 The merge starts `.github/workflows/ota-publish.yml` on the booth laptop's runner when it
 touched `apps/mobile/**`, `packages/**` or `pnpm-lock.yaml`. It deploys iOS and Android side
 by side, skips the wait for CI when the merged tree is the PR head's tested tree, and nudges
-paired booth phones with `ota_check_now` once it has deployed (ADR 0009). Find the run for the merge commit
-and wait for it, one short call at a time:
+paired booth phones with `ota_check_now` once it has deployed (ADR 0009). Find the run for the
+merge commit; it usually appears within seconds of the merge:
 
 ```bash
 gh run list --workflow ota-publish.yml --commit <sha> --json databaseId,status,conclusion
-sleep 60
+sleep 15   # only while the list is empty
 ```
 
-- No run after five minutes: the merge did not touch the bundle. Report `not shipped` (no
-  run) and stop.
-- `conclusion` other than `success`: `gh run view <id> --log-failed` and quote the first error
-  line. "Needs a native build" means the change was native. Report `not shipped` and stop.
+No run after five minutes: the merge did not touch the bundle. Report `not shipped` (no run)
+and stop. Do not wait for the run to finish yet: step 2 does not depend on it, so it runs
+while the publish does.
 
 ## 2. A binary from before the merge
 
@@ -60,6 +66,16 @@ Without it a lane binary takes no OTA update at all, which is what every other c
 matches what the publish run deployed against, and its default OTA URL
 (`http://localhost:3002/hot-updater`) reaches the OTA server on this machine.
 
+Once the build's `<log>.exit` is there, wait for the publish run in one call (give the bash
+tool a fifteen-minute timeout); it returns the moment the run ends:
+
+```bash
+gh run watch <id> --exit-status --interval 10 >/dev/null; echo "exit=$?"
+```
+
+A non-zero exit: `gh run view <id> --log-failed` and quote the first error line. "Needs a
+native build" means the change was native. Report `not shipped`, going through step 5.
+
 ## 3. Install, check now, apply
 
 ```bash
@@ -81,13 +97,17 @@ fingerprint: report `not landed` with its answer.
 
 ```bash
 .agents/scripts/device-lane.sh appduct call app_info          # expect embedded: false and a new bundleId
-.agents/scripts/device-lane.sh ad wait text "<expected text>" 30000
+.agents/scripts/device-lane.sh ad get text 'id="<testID>"'    # when the expected line names a testID
+.agents/scripts/device-lane.sh ad wait text "<expected text>" 30000   # otherwise
 .agents/scripts/device-lane.sh screenshot ota-<PR>
 ```
 
-If the appduct session was lost in the restart, `appduct link` again. The update landed when
-`app_info` reports a bundle that is not embedded, different from the one in step 3, and the
-expected text is on screen.
+If the appduct session was lost in the restart, `appduct link` again. Check the expected line
+as it was given, the way `verify-mobile` checks a Done when line: a `testID` and its label are
+read from that element (scroll to it first if it is below the fold); plain text is waited for.
+Do not read the source to work out what the screen should say: the line you were given is
+the expectation. The update landed when `app_info` reports a bundle that is not embedded,
+different from the one in step 3, and the expected text is on screen.
 
 ## 5. Release and clean up — always
 
@@ -98,7 +118,10 @@ git worktree remove --force <main checkout>/.worktrees/ota-<sha first 7>
 
 ## Report
 
-End with exactly this block, nothing after it:
+If this run cost steps for a reason that is not the issue's own work, first
+`.agents/scripts/memory.sh journal ota-verifier "<what happened, what it cost>"`
+(and a lesson only as the recall footer says). Then end with exactly this
+block, nothing after it:
 
 ```
 PR: #M  Commit: <sha first 7>  OTA: landed | not landed | not shipped (<reason>) | busy | unavailable (<reason>)

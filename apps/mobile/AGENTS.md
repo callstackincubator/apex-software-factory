@@ -24,6 +24,21 @@ https://docs.expo.dev/llms.txt.
 - OTA updates use hot-updater (ADR 0003), not EAS Update. A change that adds or
   upgrades native code changes the fingerprint and needs a new native build —
   avoid it for booth features.
+- The native libraries in the booth binary, with their permissions and
+  platform limits, are listed in
+  [docs/internal/NATIVE-CAPABILITIES.md](../../docs/internal/NATIVE-CAPABILITIES.md)
+  (Skia, MMKV, SQLite, VisionCamera, local notifications, maps, location,
+  calendar, sensors, WebView and more). Build booth features from those; a
+  feature that needs a native library, permission or plugin not listed there
+  is "needs native build". JS-only packages (FlashList v2,
+  `@gorhom/bottom-sheet`, `victory-native`, …) can ship over the air. The
+  appduct tool `native_capabilities` and the hidden `/_capabilities` route
+  show what the running binary links.
+- `GestureHandlerRootView` and the keyboard-controller provider
+  (`AppKeyboardProvider`, `src/lib/keyboard.tsx`) wrap the app in
+  `src/app/_layout.tsx`; screens do not add them again. Ask for a permission
+  only when the visitor uses the feature that needs it, never at start, and
+  keep working if the answer is no.
 - Colours, spacing and fonts come from `src/theme.ts`; support light and dark,
   safe areas, Dynamic Type and accessibility labels.
 - Run `pnpm check` from the repo root before declaring a task done.

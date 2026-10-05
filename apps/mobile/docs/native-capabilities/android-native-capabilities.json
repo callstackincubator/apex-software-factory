@@ -1,0 +1,263 @@
+{
+  "platform": "android",
+  "allLinked": true,
+  "missing": [],
+  "libraries": [
+    {
+      "id": "skia",
+      "package": "@shopify/react-native-skia",
+      "version": "2.6.2",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "2D drawing, shaders, image filters"
+    },
+    {
+      "id": "nitro-modules",
+      "package": "react-native-nitro-modules",
+      "version": "0.37.1",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "runtime for the Nitro libraries below"
+    },
+    {
+      "id": "mmkv",
+      "package": "react-native-mmkv",
+      "version": "4.3.2",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "fast synchronous key-value storage"
+    },
+    {
+      "id": "sqlite",
+      "package": "expo-sqlite",
+      "version": "~57.0.3",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "on-device SQL database"
+    },
+    {
+      "id": "vision-camera",
+      "package": "react-native-vision-camera",
+      "version": "5.2.3",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "camera preview, photos, QR/barcode scanning (iOS object output)"
+    },
+    {
+      "id": "nitro-image",
+      "package": "react-native-nitro-image",
+      "version": "0.15.2",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "in-memory images for VisionCamera photos"
+    },
+    {
+      "id": "barcode-scanner",
+      "package": "react-native-vision-camera-barcode-scanner",
+      "version": "5.2.3",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "QR/barcode scanning on Android (MLKit)"
+    },
+    {
+      "id": "notifications",
+      "package": "expo-notifications",
+      "version": "~57.0.21",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "local notifications (no push)"
+    },
+    {
+      "id": "calendar",
+      "package": "expo-calendar",
+      "version": "~57.0.5",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "read and add calendar events"
+    },
+    {
+      "id": "image-picker",
+      "package": "expo-image-picker",
+      "version": "~57.0.20",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "pick a photo, or take one with the system camera"
+    },
+    {
+      "id": "sharing",
+      "package": "expo-sharing",
+      "version": "~57.0.22",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "system share sheet for files"
+    },
+    {
+      "id": "media-library",
+      "package": "expo-media-library",
+      "version": "~57.0.5",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "save images to the photo library"
+    },
+    {
+      "id": "maps",
+      "package": "react-native-maps",
+      "version": "1.27.2",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "map views (Apple Maps on iOS; Google Maps on Android needs a key)"
+    },
+    {
+      "id": "location",
+      "package": "expo-location",
+      "version": "~57.0.20",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "location while the app is open"
+    },
+    {
+      "id": "svg",
+      "package": "react-native-svg",
+      "version": "15.15.4",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "SVG shapes and icons"
+    },
+    {
+      "id": "linear-gradient",
+      "package": "expo-linear-gradient",
+      "version": "~57.0.2",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "gradient backgrounds"
+    },
+    {
+      "id": "blur",
+      "package": "expo-blur",
+      "version": "~57.0.3",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "blurred translucent views"
+    },
+    {
+      "id": "sensors",
+      "package": "expo-sensors",
+      "version": "~57.0.3",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "accelerometer, gyroscope, magnetometer, barometer, device motion, pedometer"
+    },
+    {
+      "id": "keyboard-controller",
+      "package": "react-native-keyboard-controller",
+      "version": "1.21.9",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "keyboard-aware layouts and animations"
+    },
+    {
+      "id": "clipboard",
+      "package": "expo-clipboard",
+      "version": "~57.0.2",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "copy and paste"
+    },
+    {
+      "id": "speech",
+      "package": "expo-speech",
+      "version": "~57.0.3",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "text to speech"
+    },
+    {
+      "id": "webview",
+      "package": "react-native-webview",
+      "version": "13.16.1",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "embedded web content"
+    },
+    {
+      "id": "gesture-handler",
+      "package": "react-native-gesture-handler",
+      "version": "~2.32.0",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "native gestures"
+    },
+    {
+      "id": "reanimated",
+      "package": "react-native-reanimated",
+      "version": "4.5.1",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "UI-thread animations"
+    },
+    {
+      "id": "worklets",
+      "package": "react-native-worklets",
+      "version": "0.10.1",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "worklet runtime for Reanimated, Skia, keyboard-controller"
+    },
+    {
+      "id": "haptics",
+      "package": "expo-haptics",
+      "version": "~57.0.3",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "haptic feedback"
+    },
+    {
+      "id": "image",
+      "package": "expo-image",
+      "version": "~57.0.5",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "fast cached images"
+    },
+    {
+      "id": "symbols",
+      "package": "expo-symbols",
+      "version": "~57.0.3",
+      "status": "not-on-platform",
+      "missingModules": [],
+      "enables": "SF Symbols"
+    },
+    {
+      "id": "glass-effect",
+      "package": "expo-glass-effect",
+      "version": "~57.0.4",
+      "status": "not-on-platform",
+      "missingModules": [],
+      "enables": "Liquid Glass views"
+    },
+    {
+      "id": "expo-ui",
+      "package": "@expo/ui",
+      "version": "~57.0.21",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "SwiftUI and Jetpack Compose components"
+    },
+    {
+      "id": "web-browser",
+      "package": "expo-web-browser",
+      "version": "~57.0.3",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "in-app browser sheet"
+    },
+    {
+      "id": "device",
+      "package": "expo-device",
+      "version": "~57.0.2",
+      "status": "linked",
+      "missingModules": [],
+      "enables": "device model and OS facts"
+    }
+  ]
+}

@@ -30,7 +30,9 @@
 #   device-lane.sh screenshot <name>            <main checkout>/.worktrees/sim-shots/<name>.png
 #   device-lane.sh renew                        push the lease's deadline out by its TTL
 #   device-lane.sh status                       this lane, simlock's queue, the build slots
-#   device-lane.sh release                      metro stop, agent-device close, simlock release
+#   device-lane.sh release                      metro stop, agent-device close, simlock release;
+#                                               without a lease, closes the lane's leftover
+#                                               agent-device session (frees a stale device)
 #
 # Exit codes: 0 done; 1 failed; 2 still queued for a device (run `lease` again to keep
 # waiting); 64 usage; 69 unavailable (this machine cannot do it: no simlock, no Xcode, no
@@ -242,12 +244,21 @@ write_grant() {
   [ -n "$id" ] || die "simlock answered without a lease: $grant"
   # Until the lane's state names the lease, a failure here must not strand the device.
   trap 'simlock release "$id" >/dev/null 2>&1 || true' EXIT
+  # What agent-device drives: the simulator's UDID (driverDeviceId) on iOS; on Android the
+  # emulator's adb serial, which simlock reports as the device's address (its driverDeviceId
+  # there is the AVD name, which no adb command accepts).
+  device=$(json_field "$grant" device.driverDeviceId)
+  if [ "$platform" = android ]; then
+    address=$(json_field "$grant" device.address)
+    [ -n "$address" ] || die "simlock granted an Android device without an adb serial: $grant"
+    device=$address
+  fi
   state_set \
     platform "$platform" \
     leaseId "$id" \
     agentId "$agent_id" \
     session "$session" \
-    device "$(json_field "$grant" device.driverDeviceId)" \
+    device "$device" \
     model "$(json_field "$grant" device.spec.model)" \
     os "$(json_field "$grant" device.spec.osVersion)" \
     mode "$(json_field "$grant" device.mode)" \
@@ -256,6 +267,17 @@ write_grant() {
     ttlMs "$(json_field "$grant" lease.ttlMs)" \
     ttlDeadline "$(json_field "$grant" lease.ttlDeadline)"
   trap - EXIT
+  # The lane's agent-device session name is reused across leases; one left over from a lease
+  # that died (or another device) would refuse this device ("owned by session"). Close it.
+  close_stale_session
+}
+
+# Closes this lane's agent-device session wherever it is, without needing a lease: the way to
+# free a device agent-device still thinks this lane holds after a crash.
+close_stale_session() {
+  pnpm exec agent-device close --session "$session" >/dev/null 2>&1 || true
+  [ -z "${AGENT_DEVICE_SIMLOCK_STATE_DIR:-}" ] \
+    || AGENT_DEVICE_STATE_DIR=$AGENT_DEVICE_SIMLOCK_STATE_DIR pnpm exec agent-device close --session "$session" >/dev/null 2>&1 || true
 }
 
 lease_summary() {
@@ -432,7 +454,7 @@ build_job() {
   # A lane binary takes no OTA update unless APEX_LANE_OTA=on (the OTA check): its embedded JS
   # talks to an OTA URL nothing listens on, so a check always runs the JS under test.
   if [ "${APEX_LANE_OTA:-off}" != on ] && [ "$profile" = release ]; then
-    EXPO_PUBLIC_OTA_URL=$(node -p 'require(process.argv[1]).OTA_OFF_URL' "$cache_cli")
+    EXPO_PUBLIC_OTA_URL=$(node -p 'require(process.argv[1]).OTA_OFF_URL' "$root/tools/expo-build-cache/lib.js")
     export EXPO_PUBLIC_OTA_URL
   fi
   case $platform in
@@ -492,8 +514,20 @@ cmd_build() {
     *) usage ;;
   esac
   case $profile in release | debug) ;; *) usage ;; esac
+  # One build per worktree at a time. A second one would recompute the fingerprint, and loading
+  # hot-updater's config restores node_modules files that a running pod install or native step
+  # writes (docs/internal/NATIVE-CAPABILITIES.md): it would corrupt the build in flight.
+  running=$(cat "$state_dir/build.running" 2>/dev/null || true)
+  if [ -n "$running" ] && [ ! -f "$running.exit" ] && alive "$(cat "$running.pid" 2>/dev/null)"; then
+    die "a build of this worktree is still running: wait for $running.exit (cat it), then build again"
+  fi
   log="$state_dir/logs/build-$platform-$profile-$(date +%Y%m%d-%H%M%S).log"
-  detach "$log" "$self" __build "$platform" "$profile" "$log"
+  mkdir -p "$state_dir"
+  echo "$log" >"$state_dir/build.running"
+  # The detached build runs from a copy of this script: sh reads a script as it runs, so a
+  # checkout or merge that rewrites device-lane.sh mid-build would derail the build.
+  cp "$self" "$state_dir/device-lane.build.sh"
+  detach "$log" sh "$state_dir/device-lane.build.sh" __build "$platform" "$profile" "$log"
   echo "$log"
 }
 
@@ -815,7 +849,9 @@ cmd_release() {
   fi
   id=$(state_get leaseId)
   if [ -z "$id" ]; then
-    echo "released: nothing held by $agent_id"
+    # No lease, but agent-device may still hold this lane's session from a lease that died.
+    close_stale_session
+    echo "released: no lease held by $agent_id; closed its agent-device session ($session) if any"
     return 0
   fi
   cmd_metro stop >/dev/null

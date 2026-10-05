@@ -10,3 +10,18 @@ declare namespace NodeJS {
     EXPO_PUBLIC_OTA_URL?: string;
   }
 }
+
+// Hand-shimmed slice of the Node built-ins, same style as the ProcessEnv
+// shim above: the repo keeps @types/node out of the app's type space on
+// purpose, so only the surface a Jest test needs to read e2e/*.ad from disk
+// is declared here (status-footer.test.tsx's version-tie test). App code
+// must not use these; Metro-bundled code has no `__dirname`.
+declare module "node:fs" {
+  export function readFileSync(path: string, encoding: "utf8"): string;
+}
+
+declare module "node:path" {
+  export function join(...paths: string[]): string;
+}
+
+declare const __dirname: string;

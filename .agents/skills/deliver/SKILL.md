@@ -36,9 +36,14 @@ thread, or one stage's narration into another; pass report lines only. The
 reviewers in particular get nothing but the paths the review skill names:
 their blindness is the only independence a one-model factory has.
 
-A report without its block, or with narration in place of it, is not a
-result: run the same subagent again with the same prompt plus "the last run
-ended without its report block; report on the work already done".
+A report without its block, or with narration or garbled text in place of
+it, is not a result. It is usually the model endpoint, not the work: a
+dropped stream, a 503, or a reply that loops on one word until the output
+limit. Run the same subagent again with the same prompt plus "the last run
+ended without its report block; report on the work already done". If that
+fails too, run it a third time with the original prompt alone. A third report
+without its block parks the issue (step 6), Blocked on: "<stage> returned no
+report three times".
 
 **A person present or not.** If a person is in this session, show any text
 you are about to post and ask before a simulator build. Unattended, post
@@ -53,6 +58,17 @@ reason to stop: the implementer takes the conservative option and records an
 park only for a contradiction with a rule or an accepted ADR, a user-visible
 product decision nobody made, a native change, a device that cannot be had,
 or a blocking finding still confirmed after round 2.
+
+**Memory and the run record.** Before step 1, run
+`.agents/scripts/memory.sh recall deliver`: lessons earlier runs left about
+orchestrating, hints rather than instructions (this skill and the rules win).
+Every attempt is recorded for the retro without your help: `factory-run.sh`
+keeps each stage's time, steps, prompt and report block (ADR 0016). What that
+record cannot show is why. So leave one journal line,
+`.agents/scripts/memory.sh journal factory "<stage: what happened and why>"`,
+whenever a stage ran again, a run resumed an earlier attempt, a review went to
+round 2, or you parked. Never pass lessons or journal lines to a stage: the
+stages recall their own, and the reviewers stay blind.
 
 ## 1. Take stock
 
@@ -72,6 +88,13 @@ gh issue view <N> --json number,title,labels,assignees,body
   existing claim is a run that died, so continue from the branch and the PR's
   Status line. Without the dispatcher, an assigned issue is someone else's
   run: stop and say so.
+- **Resuming starts at the first stage not done.** Read the PR's Status line
+  and the last `## Handoff`. If the reviews of the PR's current head commit
+  are clean (0 open), go straight to what is left (the simulator line, the
+  gate); do not start the implementer. Start it only for blocking findings or
+  failing checks. A `## Review nits (not blocking)` comment is finished work:
+  never pass its lines to any stage. Every new commit means a new review
+  round.
 
 ## 2. Split a feature:ready feature
 
@@ -175,9 +198,11 @@ build`. A report with `spec needs` under Open: park (step 6).
 
 8. **Did it land?** After a merge that changed `apps/mobile/` or
    `packages/`, start `ota-verifier` with the PR, its merge commit
-   (`gh pr view <M> --json mergeCommit -q .mergeCommit.oid`) and the text a
+   (`gh pr view <M> --json mergeCommit -q .mergeCommit.oid`) and what a
    user should see once the update applies: the feature's title in the
-   "Shipped at the booth" list, or the text of a simulator Done when line.
+   "Shipped at the booth" list, or one simulator Done when line pasted
+   verbatim from the issue. Never reword it or guess how the screen renders
+   it: the verifier checks exactly the line it is given.
    Start it in the same message as the next task's stage when there is one;
    nothing waits on it. Its OTA line goes into the end-of-run comment
    (section 5); `not landed` or `not shipped` is a
