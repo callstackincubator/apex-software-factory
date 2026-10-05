@@ -5,7 +5,9 @@
 #   .agents/scripts/factory-run.sh --triage <issue>    triage #<issue> (the triager agent)
 #
 # Wraps `opencode run --standalone --auto` (a private server: the run inherits this shell's
-# environment, SIMLOCK_BIN included) and watches it:
+# environment, SIMLOCK_BIN included) and watches it. `opencode run --agent` ignores the agent's
+# own `variant` (it sent the model's default effort), so the script passes the agent file's
+# `model` and `variant` as `-m <model>#<variant>` (ADR 0008):
 #   - hard timeout: FACTORY_TIMEOUT_MIN (default 80) minutes for the whole run;
 #   - no progress: FACTORY_STALL_MIN (default 15) minutes in which no session this run started
 #     (the run's own or a subagent's) wrote to OpenCode's database
@@ -21,7 +23,7 @@
 # stopped too, and is restarted the same way after a short backoff.
 #
 # Exit: 0 the run ended on its own (merged, parked or reported — read the issue); 1 gave up
-# after the restart; 64 usage; 69 opencode or sqlite3 missing.
+# after the restart; 64 usage; 69 opencode or sqlite3 missing, or the agent file names no model.
 # Logs: <checkout>/.worktrees/factory-runs/<issue>-<attempt>-<time>.log
 set -uo pipefail
 
@@ -32,7 +34,7 @@ if [ "${1:-}" = --triage ]; then
 fi
 issue=${1:-}
 case $issue in '' | *[!0-9]*)
-  sed -n '2,20p' "$0" >&2
+  sed -n '2,22p' "$0" >&2
   exit 64
   ;;
 esac
@@ -58,6 +60,13 @@ else
   first="triage #$issue"
 fi
 
+# The agent file's `model:` and `variant:`, as `-m` takes them: provider/model#variant.
+frontmatter() { sed -n "/^---\$/,/^---\$/s/^$1: *//p" ".opencode/agent/$agent.md" | head -n 1; }
+model=$(frontmatter model)
+variant=$(frontmatter variant)
+[ -n "$model" ] || { echo "unavailable: no model in .opencode/agent/$agent.md" >&2; exit 69; }
+model_arg=$model${variant:+#$variant}
+
 now_ms() { echo $(($(date +%s) * 1000)); }
 
 # Newest write by any session created since $1 (ms) in this checkout or below it.
@@ -79,8 +88,8 @@ run_attempt() {
   local n=$1 prompt=$2 log pid since last_ms last_size last_seen now size w reason
   log="$logs/$issue-$n-$(date +%Y%m%d-%H%M%S).log"
   since=$(now_ms)
-  echo "factory-run: #$issue $mode attempt $n, log $log" >&2
-  opencode run --standalone --agent "$agent" --auto --title "factory $mode #$issue (attempt $n)" \
+  echo "factory-run: #$issue $mode attempt $n ($model_arg), log $log" >&2
+  opencode run --standalone --agent "$agent" -m "$model_arg" --auto --title "factory $mode #$issue (attempt $n)" \
     "$prompt" >"$log" 2>&1 &
   pid=$!
   last_seen=$(date +%s)
