@@ -320,8 +320,9 @@ agent uses each tool: [apps/mobile/README.md, Agent tooling](../apps/mobile/READ
   the merge commit's tree equals the tested PR head's tree. iOS and Android
   deploy at the same time, and paired phones are nudged to check at once.
 - **Retries on endpoint faults.** `factory-run.sh` restarts a run once when
-  it stalls, times out or its turn ends on a provider error (after a 60 s
-  pause). The `deliver` skill runs a subagent up to three times when it returns
+  it stalls, times out, its turn ends on a provider error, or its last turn
+  comes back garbled (hits the output limit or has no text), after a 60 s
+  pause. The `deliver` skill runs a subagent up to three times when it returns
   no report block (a dropped stream or a 503).
 - **Morning warm-up.** `.agents/scripts/prewarm.sh` fills the pnpm store and
   the native build cache, and boots simlock's simulators before the first
@@ -429,7 +430,9 @@ maintainer decides:
 ### The model endpoint is down
 
 A turn that ends on a provider error (a 503, "no upstreams available") counts
-as a stopped run. `factory-run.sh` waits 60 s and restarts once. If the second
+as a stopped run, and so does a last turn that came back garbled: one that ran
+to the output limit or ended with no text, which OpenCode still records as a
+success. `factory-run.sh` waits 60 s and restarts once. If the second
 attempt fails too, it posts a `## Handoff` and moves the issue to
 `<kind>:blocked`. When the endpoint answers again, restore the ready label.
 A quick probe from the checkout:
