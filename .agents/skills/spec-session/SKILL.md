@@ -100,6 +100,11 @@ remain; the feature does not leave `feature:spec` until it is empty.
 code first, so your recommended answers name real files. Cover, in order:
 
 1. Packages and modules touched, contract first (architecture rule 2).
+   When the feature adds or changes a dependency between feature modules or
+   packages, draw it as a Mermaid flowchart under Diagrams; when the order
+   of actions, requests or domain events matters, draw a sequenceDiagram.
+   Only where a picture says it faster than prose, with the real names from
+   the spec; otherwise Diagrams reads "none".
 2. Contract changes: each schema in `packages/contract` and its fields.
 3. Native change: does any part need a new app dependency with native code,
    an `app.json` plugin, or a permission? Check
@@ -159,7 +164,7 @@ out with these gaps comes back as a parked run.
 
 **`split`.** For each slice under the feature's Tasks, write a body from
 `docs/internal/templates/task.md`: Scope from the slice, a Technical spec cut
-from the feature's (only what this slice needs), Done when, Out of scope and
+from the feature's (only what this slice needs, diagrams included), Done when, Out of scope and
 Depends on. Before creating anything, check every task body, and fix it when
 one of these holds:
 

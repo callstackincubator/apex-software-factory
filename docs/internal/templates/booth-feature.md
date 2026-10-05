@@ -52,6 +52,15 @@ A visitor at the Callstack booth, holding the booth phone.
 - `apps/mobile`: <files>
 - <`packages/contract`, `apps/api` when it crosses the wire, contract first>
 
+### Diagrams
+
+<!-- Mermaid, only where a picture says it faster than prose. A flowchart of
+which feature modules and packages depend on which, when this adds or changes
+a dependency (architecture rules). A sequenceDiagram when order matters: the
+user's actions, requests, responses and domain events, in the order they
+happen. Name the real modules, routes, schemas and events this spec names; a
+diagram never adds what the text does not say. "none" otherwise. -->
+
 ### Contract changes
 
 none <!-- or every schema and field, with its bound (defaults 9) -->
