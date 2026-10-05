@@ -187,9 +187,11 @@ build`. A report with `spec needs` under Open: park (step 6).
 
 8. **Did it land?** After a merge that changed `apps/mobile/` or
    `packages/`, start `ota-verifier` with the PR, its merge commit
-   (`gh pr view <M> --json mergeCommit -q .mergeCommit.oid`) and the text a
+   (`gh pr view <M> --json mergeCommit -q .mergeCommit.oid`) and what a
    user should see once the update applies: the feature's title in the
-   "Shipped at the booth" list, or the text of a simulator Done when line.
+   "Shipped at the booth" list, or one simulator Done when line pasted
+   verbatim from the issue. Never reword it or guess how the screen renders
+   it: the verifier checks exactly the line it is given.
    Start it in the same message as the next task's stage when there is one;
    nothing waits on it. Its OTA line goes into the end-of-run comment
    (section 5); `not landed` or `not shipped` is a
