@@ -16,6 +16,15 @@ after this PR merges that they could not after the previous one. -->
 
 ### Packages and modules touched
 
+### Diagrams
+
+<!-- Mermaid, only where a picture says it faster than prose. A flowchart of
+which feature modules and packages depend on which, when this adds or changes
+a dependency (architecture rules). A sequenceDiagram when order matters: the
+user's actions, requests, responses and domain events, in the order they
+happen. Name the real modules, routes, schemas and events this spec names; a
+diagram never adds what the text does not say. "none" otherwise. -->
+
 ### Contract changes
 
 <!-- Every schema added or changed in packages/contract. "none" otherwise. -->

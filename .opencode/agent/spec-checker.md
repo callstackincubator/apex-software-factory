@@ -46,7 +46,8 @@ a finding, not a reason to read more.
 Report a finding for each of these, and nothing else:
 
 1. **Contradiction**: a line that breaks an agent rule or an accepted ADR, or
-   two lines of the spec that cannot both hold. Cite both.
+   two lines of the spec that cannot both hold, a diagram among them (a
+   module, call, event or order the text says otherwise). Cite both.
 2. **Untestable**: a Done when line or completion condition no reviewer could
    check from the diff, the suite, a named command, or a device check by
    `testID`, label or visible text ("looks nice", "fast", "intuitive").
