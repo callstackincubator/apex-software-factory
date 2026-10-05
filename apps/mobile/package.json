@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@apex/contract": "workspace:*",
+    "@apex/event-bus": "workspace:*",
     "@appduct/react-native": "0.14.0",
     "@expo/ui": "~57.0.21",
     "@hot-updater/react-native": "0.36.17",

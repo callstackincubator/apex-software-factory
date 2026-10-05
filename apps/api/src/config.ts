@@ -14,7 +14,6 @@ const ConfigSchema = z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
       .default("info"),
     APP_VERSION: z.string().min(1).default(packageJson.version),
-    // How long SIGTERM waits for in-flight requests before forcing exit.
     SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(0).default(10_000),
   })
   .transform((env) => ({
@@ -34,7 +33,6 @@ export class ConfigError extends Error {
   }
 }
 
-/** Parses configuration from environment variables; throws `ConfigError` listing every problem. */
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   const result = ConfigSchema.safeParse(env);
   if (!result.success) {

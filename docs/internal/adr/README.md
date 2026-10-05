@@ -29,3 +29,4 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0021](0021-repository-automation-acts-as-the-factory-app.md) | Repository automation acts as the factory app too | Accepted |
 | [0022](0022-implementer-only-mobile-guides.md) | Expo and React Native guides for the implementer only, loaded by name | Accepted |
 | [0023](0023-simulator-evidence-as-pr-attachments.md) | Simulator screenshots and a recording go on the PR as attachments | Accepted |
+| [0024](0024-feature-modules-events-and-ports.md) | Feature modules, a domain event bus, ports and adapters; rules are files | Accepted |

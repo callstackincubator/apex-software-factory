@@ -41,7 +41,7 @@ records it as an `Assumption:` line in the PR body (delivery rule 3).
    ("Talk: Hermes internals, 14:00"), and buttons have
    `accessibilityRole="button"`. Text respects Dynamic Type
    (`maxFontSizeMultiplier` 1.6 on dense rows), and colours come from
-   `src/theme.ts` in light and dark.
+   the `ui` module's tokens in light and dark.
 
 6. **Copy is short, plain and friendly.** Sentence case, no exclamation
    marks, no jargon a visitor would not use ("Couldn't load", not "Request
@@ -52,13 +52,13 @@ records it as an `Assumption:` line in the PR body (delivery rule 3).
 
 7. **It is reachable and testable by an agent.** A new screen has a route
    under `src/app/`, a deep link (`apexfactory:///<route>`), and an appduct
-   tool under `src/features/<id>/agent-tools.ts` that opens it or seeds its
+   tool under `src/modules/<id>/agent-tools.ts` that opens it or seeds its
    state (`apps/mobile/AGENTS.md`). It has at least one `e2e:` agent-device
    replay script (`apps/mobile/e2e/<id>.ad`) whose first comment line is
    the claim it proves.
 
 8. **A shipped feature is listed.** A feature a booth visitor proposed gets
-   an entry in `shippedFeatures` (`src/features/registry.ts`): id, title,
+   an entry in `shippedFeatures` (`src/modules/registry/index.ts`): id, title,
    one-sentence summary, issue number, merge date, and `href` when it has a
    screen. A maintenance change to the app's own chrome (the footer, the
    banner) is not a shipped feature and gets no entry.

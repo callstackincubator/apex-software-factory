@@ -385,7 +385,7 @@ green where simlock has orange. Summary of what to carry over:
   | `--status-error` | `#b91c1c` | `#f87171` |
   | `--status-idle` | `#57534e` | `#a8a29e` |
 
-  The greens are the Apex app's own (`apps/mobile/src/theme.ts`). **Green is
+  The greens are the Apex app's own (`apps/mobile/src/modules/ui/theme.ts`). **Green is
   for brand and interaction only**: the wordmark block, the current tab's
   underline, primary buttons, links, focus ring, chart marks. Never for
   state. A state is a word with an 8px square of its status colour.

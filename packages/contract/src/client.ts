@@ -3,21 +3,17 @@ import { ErrorResponse } from "./errors.ts";
 import { HealthResponse } from "./health.ts";
 
 export type ApiClientOptions = {
-  /** Origin of the API, e.g. `http://localhost:3001`. No trailing slash needed. */
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
 };
 
-/** Error bodies longer than this (in bytes) are not read or parsed, per safety rule 3. */
+// Safety rule 3: an error body over this many bytes is never read or parsed.
 const MAX_ERROR_BODY_BYTES = 16384;
 
 export class ApiError extends Error {
   readonly status: number;
-  /** The `error.code` of a JSON body that matches `ErrorResponse`, else undefined. */
   readonly code: string | undefined;
-  /** The body's `error.requestId`, else the `x-request-id` header, else undefined. */
   readonly requestId: string | undefined;
-  /** The `error.details` of a JSON body that matches `ErrorResponse`, else undefined. */
   readonly details: unknown;
 
   constructor(
@@ -34,7 +30,6 @@ export class ApiError extends Error {
   }
 }
 
-/** What an error response's body says, as far as it can be trusted. */
 function parseErrorBody(text: string): ErrorResponse | undefined {
   try {
     const parsed = ErrorResponse.safeParse(JSON.parse(text));
@@ -44,14 +39,8 @@ function parseErrorBody(text: string): ErrorResponse | undefined {
   }
 }
 
-/**
- * The error response's body as UTF-8 text, bounded at the read itself (safety
- * rule 3): refuse on a content-length over the cap, otherwise read the stream
- * and cancel it as soon as more than the cap has arrived. Returns undefined
- * when the body is too large, so it is never parsed. A body whose stream
- * errors while it is read has no usable body: also undefined, so the caller
- * falls back. The caller never sees a stream error.
- */
+// Read by hand, not res.text(), so the cap holds at the read itself and a stream error
+// becomes "no body" instead of reaching the caller.
 async function readErrorBody(response: Response): Promise<string | undefined> {
   try {
     const declared = Number(response.headers.get("content-length"));
@@ -85,7 +74,6 @@ async function readErrorBody(response: Response): Promise<string | undefined> {
   }
 }
 
-/** A typed client for the API. Every response is parsed with its contract schema. */
 export function createApiClient({ baseUrl, fetch = globalThis.fetch }: ApiClientOptions) {
   const origin = baseUrl.replace(/\/+$/, "");
 

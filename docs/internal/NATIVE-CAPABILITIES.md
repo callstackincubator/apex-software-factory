@@ -30,8 +30,9 @@ package with no native code can be added over the air (see
   keyboard-controller provider is found, and camera, notification, calendar,
   location and photo permissions are **read, never requested**. testIDs:
   `capabilities-summary`, `capability-<id>`, `smoke-<id>`.
-- Code: `apps/mobile/src/dev/native-capabilities.ts` (the probe list — keep it
-  in step with this page) and `apps/mobile/src/dev/capabilities/`.
+- Code: `apps/mobile/src/modules/capabilities/native-capabilities.ts` (the
+  probe list — keep it in step with this page) and the rest of
+  `apps/mobile/src/modules/capabilities/`.
 
 Evidence of the first binary with this set (Release builds, iOS simulator
 and Android emulator): `apps/mobile/docs/native-capabilities/` — the
@@ -216,7 +217,7 @@ ota:fingerprint` must still match the fingerprint embedded in the binary.
 
 Adding, removing or upgrading a native library, or changing a permission, is
 a native change: update `apps/mobile/package.json` (with `expo install`),
-`app.json`, `src/dev/native-capabilities.ts` and this page in one PR,
+`app.json`, `src/modules/capabilities/native-capabilities.ts` and this page in one PR,
 regenerate `fingerprint.json` (a prebuild writes it; `pnpm --filter
 @apex/mobile run ota:fingerprint` must then match it), and build and install a new binary on every booth phone
 ([OTA.md](OTA.md#fingerprints-how-a-bundle-finds-its-binary)).

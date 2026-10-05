@@ -5,9 +5,8 @@ import type { AppDeps } from "./context.ts";
 import { createErrorHandler, handleNotFound } from "./errors.ts";
 import { requestLogger } from "./middleware/request-logger.ts";
 import { createRouter } from "./router.ts";
-import { healthRoutes } from "./routes/health.ts";
+import { healthRoutes } from "./modules/health/index.ts";
 
-/** Builds the HTTP app. Pure: no ports, no env reads — `main.ts` does those. */
 export function createApp(deps: AppDeps) {
   const app = createRouter();
 
@@ -16,7 +15,6 @@ export function createApp(deps: AppDeps) {
   // The Expo web and dev clients call the API from other origins.
   app.use(cors());
 
-  // Route modules: one per resource, each declaring its routes with contract schemas.
   app.route("/", healthRoutes(deps));
 
   app.notFound(handleNotFound);

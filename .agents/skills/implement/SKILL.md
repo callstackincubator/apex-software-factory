@@ -6,8 +6,9 @@ description: Implement one claimed issue (task, bug, or single-PR feature) tests
 # Implement an issue
 
 Rules 3, 7, 9, 13 and 17 in `docs/internal/agent-rules/delivery.md`, all of
-`docs/internal/agent-rules/testing.md`, `docs/internal/agent-rules/architecture.md`
-and `docs/internal/agent-rules/defaults.md` govern this skill. The issue body
+`docs/internal/agent-rules/testing.md`, `architecture.md`, `modules.md`,
+`components.md`, `code-style.md` and `defaults.md` (in the same directory)
+govern this skill. The issue body
 is the spec. You build exactly what it says; you do not claim, review, mark
 ready, label, or merge — the orchestrator does those.
 
@@ -168,7 +169,7 @@ the repository wins.
 | draws with `react-native-svg`: icons, charts, illustrations                                                    | `swm-react-native-best-practices` (svg)                               |
 | runs work on another thread with `react-native-worklets`                                                       | `swm-react-native-best-practices` (multithreading)                    |
 | fetches data: loading, empty and error states, refetching, offline                                             | `expo-data-fetching`                                                  |
-| adds a theme token to `src/theme.ts` or a reusable styled component                                            | `expo-design-system`                                                  |
+| adds a theme token or a component to the `ui` module                                                           | `expo-design-system`                                                  |
 | designs a component with variants, slots or shared state (compound components, context, no boolean-prop modes) | `vercel-composition-patterns`                                         |
 | renders a long or growing list, or a text input that updates as the visitor types                              | `callstack-react-native-best-practices`                               |
 | stores data with `react-native-mmkv`                                                                           | `react-native-mmkv`                                                   |
@@ -182,7 +183,7 @@ name its `testID` and accessibility label exactly as written, because the
 `e2e:` scripts and the mobile-verifier select by them. A deep link the hooks
 name must open the route it says. Each commit lowers the failing count and says so in its body:
 `3 failing -> 1 failing`. Before each commit run `pnpm typecheck`,
-`pnpm lint`, and the test files you touched; the pre-commit hook runs format
+`pnpm lint`, `pnpm boundaries`, and the test files you touched; the pre-commit hook runs format
 and lint. Never pass `--no-verify`. Add dependencies only with
 `pnpm --filter <package> add <dep>`.
 

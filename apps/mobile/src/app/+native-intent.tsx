@@ -1,10 +1,4 @@
-/**
- * Not a screen: Expo Router's hook for rewriting incoming deep links
- * (`+native-intent`). appduct pairs an agent with the app through a one-time
- * link, `apexfactory:///?appduct=<payload>&pin=sha256/…`, which appduct's own
- * listener consumes. Without this, Expo Router would also treat it as a
- * navigation to `/` and yank the app off whatever screen it is on.
- */
+// Not a screen: appduct's pairing link must not also navigate to "/" and yank the app off its screen.
 export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }) {
   try {
     if (isAppductPairingLink(path)) {
@@ -17,7 +11,6 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
   return path;
 }
 
-/** True for appduct's pairing link: an `appduct` query parameter, on any path. */
 export function isAppductPairingLink(path: string): boolean {
   const query = path.split("#")[0]?.split("?")[1];
   if (!query) return false;
