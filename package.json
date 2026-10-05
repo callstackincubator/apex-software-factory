@@ -10,6 +10,7 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test",
+    "console": "pnpm --filter @apex/console start",
     "prepare": "lefthook install"
   },
   "devDependencies": {
