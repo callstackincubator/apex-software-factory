@@ -6,6 +6,7 @@
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --if-present run test && pnpm run test:tools",
     "test:tools": "node --test \"tools/**/*.test.js\"",
+    "boundaries": "node tools/module-boundaries/cli.js",
     "lint": "oxlint .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",

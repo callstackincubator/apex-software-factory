@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@apex/contract": "workspace:*",
+    "@apex/event-bus": "workspace:*",
     "@hono/node-server": "^2.1.3",
     "@hono/zod-openapi": "^1.6.3",
     "@scalar/hono-api-reference": "^0.12.9",

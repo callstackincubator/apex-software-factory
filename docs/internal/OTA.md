@@ -122,24 +122,26 @@ and `android/` are generated):
   `HotUpdater.bundleURL()` in release, and writes `HOT_UPDATER_CHANNEL` and
   `HOT_UPDATER_FINGERPRINT_HASH` into `Info.plist` / `AndroidManifest.xml`
   meta-data. The channel must match `deploy -c`.
-- `src/lib/ota.ts` calls `HotUpdater.init({ baseURL })` once (configures the
+- The `updater` port module (`src/modules/updater/hot-updater.ts`) is the
+  only code that imports hot-updater. `initOta()` calls `HotUpdater.init({ baseURL })` once (configures the
   client and reports each healthy launch, which arms the native crash
   rollback). `baseURL` is `EXPO_PUBLIC_OTA_URL`, default
   `http://localhost:3002/hot-updater`.
-- `src/lib/use-ota-update.ts` + `src/components/update-banner.tsx`: our own
+- The `ota` module (`src/modules/ota/`), `useOtaUpdate` and `UpdateBanner`: our own
   check loop instead of `HotUpdater.wrap`'s automatic flow — on start, on
   every return to the foreground and every 30 s. A new bundle downloads in the
   background; the banner "New feature landed — tap to reload" shows the deploy
   message (the merge commit subject); tapping reloads. A staged bundle also
   applies on the next cold start. A force update (`deploy -f`) or a
-  server-side rollback (bundle disabled) reloads at once.
+  server-side rollback (bundle disabled) reloads at once. A staged bundle is
+  announced as the domain event `ota/update-staged`.
   *Why a banner, not auto-reload:* a visitor may be mid-tap or mid-scroll when
   the merge lands — the banner never yanks the screen away, it makes "your
   feature just arrived" a visible moment the facilitator can narrate, and a
   missed tap costs nothing (next cold start applies it). Polling, not push:
   nothing to keep alive on the laptop, and 30 s is well inside the "minutes
   later" the demo promises.
-- `src/components/update-info.tsx`: the status footer's **Bundle** row,
+- `UpdateInfo` (`src/modules/ota/update-info.tsx`): the status footer's **Bundle** row,
   `embedded · production` or `ota 0199b111…7777 · production`.
 - appduct (agent shortcuts, [DEVICES.md](DEVICES.md)) is **in the booth
   binary and in every OTA bundle**: `["@appduct/react-native", { "trust":

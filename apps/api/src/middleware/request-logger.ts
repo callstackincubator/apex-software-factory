@@ -2,10 +2,7 @@ import type { MiddlewareHandler } from "hono";
 import type { Logger } from "pino";
 import type { AppEnv } from "../context.ts";
 
-/**
- * Binds a per-request child logger to `c.var.logger` and logs one line per
- * request once the response is ready. Must run after `requestId()`.
- */
+// Must run after requestId().
 export function requestLogger(logger: Logger): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const log = logger.child({ requestId: c.var.requestId });

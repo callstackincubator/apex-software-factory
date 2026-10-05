@@ -163,7 +163,7 @@ time: `close` before a `replay` on the same simulator.
 
 ### appduct
 
-The app registers its tools at startup (`src/dev/agent-tools.ts`). Pair once
+The app registers its tools at startup (`src/modules/agent-tools`). Pair once
 per app launch, from `apps/mobile` (the scheme comes from
 `.appduct/config.json`):
 
@@ -195,9 +195,9 @@ pairing link never navigates the app (`src/app/+native-intent.tsx`).
 | `native_capabilities`                  | every native library in the binary: `linked`, `missing` or `not-on-platform`, checked without permission prompts (read-only)      |
 | event `ota.update_staged`              | posted when a real bundle has downloaded                                                                                          |
 
-A shipped feature adds its own tools in `src/features/<id>/agent-tools.ts`
-and lists them in `src/features/agent-tools.ts`; they appear under the group
-`features/<id>`.
+A shipped feature adds its own tools in `src/modules/<id>/agent-tools.ts`
+and lists them in `src/modules/agent-tools/features.ts`; they appear under the
+group `features/<id>`.
 
 ### Rozenite
 
@@ -256,25 +256,37 @@ format for the whole repo.
 
 ```
 src/
-  app/                 routes (Expo Router) — screens only; _capabilities is a hidden dev route
-  components/          UI building blocks
-  dev/                 agent tools (appduct), the native capabilities probe and its screen
-  features/registry.ts the list of features shipped at the booth
-  lib/                 API client, OTA updates (hot-updater), root providers and hooks
-  theme.ts             colour, spacing and font tokens (dark first)
-plugins/               local config plugins (local-only notifications, Android maps key, Gradle heap)
+  app/                    routes (Expo Router): each re-exports a screen from a module
+  modules/<name>/         one feature per directory; index.ts is its only public API
+    ui/                   design system: theme tokens, Card, LiveDot, SectionLabel, providers
+    home/                 the home screen: hero, how it lands, shipped features
+    status/               the status footer and the API health check
+    ota/                  the OTA check loop, the update banner, the running bundle
+    registry/             the list of features shipped at the booth
+    agent-tools/          appduct tools and the navigation mirror they read
+    capabilities/         the native capabilities probe and its hidden screen
+    devtools/             Rozenite plugins (debug builds only)
+    updater/  api/        port modules: hot-updater and the API client, each with a fake
+plugins/                  local config plugins (local-only notifications, Android maps key, Gradle heap)
 ```
+
+Modules talk through each other's `index.ts` and through domain events on
+`@apex/event-bus`. Third-party SDKs are reached only through port modules.
+`pnpm boundaries` (from the repo root) checks both.
 
 ## Shipping a feature
 
-1. Build the feature: a route in `src/app/` if it needs a screen, components in
-   `src/components/` (or `src/features/<id>/` when it has several parts).
+1. Build the feature as a module, `src/modules/<id>/`, with its screens,
+   components and tests, and an `index.ts` exporting what the rest of the app
+   uses. Add a route in `src/app/` that re-exports its screen. Shared UI
+   comes from `@/modules/ui`.
 2. Append an entry to `shippedFeatures` in
-   [`src/features/registry.ts`](src/features/registry.ts) — id, title, summary,
-   issue number, ship date and (optionally) the route. The home screen's
-   "Shipped at the booth" list picks it up, newest first.
-3. Talk to the API only through `api` from `src/lib/api.ts`; request and response
-   shapes live in `@apex/contract`.
+   [`src/modules/registry/index.ts`](src/modules/registry/index.ts): a
+   kebab-case id, title, one-sentence summary, the spec's issue number, the
+   merge date (`YYYY-MM-DD`) and, if it has a screen, the route. The home
+   screen's "Shipped at the booth" list picks it up, newest first.
+3. Talk to the API only through `getApiClient()` from `@/modules/api`;
+   request and response shapes live in `@apex/contract`.
 4. Prefer JS-only changes. A new native module changes the binary's fingerprint
    and cannot ship over the air (ADR 0003). The binary already carries the
    native libraries booth features are likely to need — Skia, MMKV, SQLite,
@@ -300,7 +312,7 @@ hidden route `/_capabilities` (`open_route {"path":"/_capabilities"}`; not
 linked from the home screen), which adds a live smoke per library — Skia
 draws, MMKV and SQLite round-trip, SVG, gradient, blur, WebView and map views
 render, sensors and permissions are read without prompting. The probe list is
-`src/dev/native-capabilities.ts`; keep it in step with
+`src/modules/capabilities/native-capabilities.ts`; keep it in step with
 `docs/internal/NATIVE-CAPABILITIES.md`.
 
 Android maps: Google Maps needs an API key in the manifest. Build the Android

@@ -53,7 +53,7 @@ session id (two paired apps make a bare `appduct tools ls` fail with `ambiguous_
 | event `ota.update_staged`              | posted when a real bundle has downloaded                                                         |
 
 A shipped feature adds its own tools under the group `features/<id>`
-(`src/features/<id>/agent-tools.ts`, listed in `src/features/agent-tools.ts`). Read the live
+(`src/modules/<id>/agent-tools.ts`, listed in `src/modules/agent-tools/features.ts`). Read the live
 list with `appduct ls --groups`; the app, not this table, is the source of truth.
 
 ## Output and errors
@@ -75,9 +75,10 @@ When a spec's **Agent hooks** names a tool the app does not have yet, add it in 
 following `apps/mobile/AGENTS.md` ("Agent tooling rules") and
 `references/writing-tools.md`:
 
-- A feature's tools live in `src/features/<id>/agent-tools.ts` and are appended to
-  `featureAgentTools` in `src/features/agent-tools.ts`; core tools are in
-  `src/dev/agent-tools.ts`. Nothing else imports `@appduct/react-native`.
+- A feature's tools live in `src/modules/<id>/agent-tools.ts`, exported from the module's
+  `index.ts` and appended to `featureAgentTools` in `src/modules/agent-tools/features.ts`;
+  core tools are in `src/modules/agent-tools/`. Nothing else imports `@appduct/react-native`
+  (`pnpm boundaries` checks it).
 - Name by intent (`seed_cart`, not `set_state`); a zod `inputSchema` with `.describe()` on every
   field; an object `outputSchema`; `readOnlyHint` on observers; a mutation returns the new state
   and has an observer; `destructiveHint: true` on anything that deletes, resets or restarts.

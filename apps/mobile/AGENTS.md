@@ -14,9 +14,18 @@ https://docs.expo.dev/llms.txt.
 
 ## Rules
 
-- Routes live in `src/app/`; every file there is a screen, except
-  `+native-intent.tsx` (Expo Router's deep-link hook; it keeps appduct's
-  pairing link from navigating). Keep components, hooks and tests out of it.
+- Code lives in feature modules under `src/modules/<name>/`, each with one
+  public API, its `index.ts`. Modules call each other's public API for
+  actions and react to each other's domain events (`@apex/event-bus`) for
+  side effects. A third-party SDK is reached only through its port module
+  (`updater` is the reference, with a real adapter and a fake). Components
+  used by one feature live in it, and reusable ones live in `ui`, as compound
+  components. The rules are `docs/internal/agent-rules/modules.md` and
+  `components.md`; `pnpm boundaries` checks the import rules.
+- Routes live in `src/app/`; every file there re-exports a screen from a
+  module, except `+native-intent.tsx` (Expo Router's deep-link hook; it
+  keeps appduct's pairing link from navigating) and `_layout.tsx`, the
+  composition root. Keep components, hooks and tests out of it.
 - Add dependencies with `pnpm exec expo install <package>` (from `apps/mobile`)
   so versions match the SDK.
 - `ios/` and `android/` are generated (Continuous Native Generation). Never
@@ -35,11 +44,11 @@ https://docs.expo.dev/llms.txt.
   appduct tool `native_capabilities` and the hidden `/_capabilities` route
   show what the running binary links.
 - `GestureHandlerRootView` and the keyboard-controller provider
-  (`AppKeyboardProvider`, `src/lib/keyboard.tsx`) wrap the app in
+  (`AppKeyboardProvider` from `@/modules/ui`) wrap the app in
   `src/app/_layout.tsx`; screens do not add them again. Ask for a permission
   only when the visitor uses the feature that needs it, never at start, and
   keep working if the answer is no.
-- Colours, spacing and fonts come from `src/theme.ts`; support light and dark,
+- Colours, spacing and fonts come from `@/modules/ui`; support light and dark,
   safe areas, Dynamic Type and accessibility labels.
 - Run `pnpm check` from the repo root before declaring a task done.
 
@@ -54,11 +63,13 @@ How agents drive the app is in [README.md](README.md#agent-tooling). How tests a
 - A device-level claim gets an agent-device replay script in `e2e/<name>.ad`
   that passes on a debug and a release build.
 - A feature that needs state, an event or a deep screen to test registers
-  appduct tools for it: `src/features/<id>/agent-tools.ts` exporting a
-  `FeatureAgentTools`, appended to `featureAgentTools` in
-  `src/features/agent-tools.ts`. Core tools live in `src/dev/agent-tools.ts`;
-  besides those, only `src/app/_layout.tsx` imports `@appduct/react-native`
-  (its `/auto` entry, which handles pairing).
+  appduct tools for it: `src/modules/<id>/agent-tools.ts` exporting
+  `agentTools: { featureId, register }` (`register` takes appduct's
+  `AppductToolGroupRegistrar`), re-exported from the module's `index.ts` and
+  appended to `featureAgentTools` in `src/modules/agent-tools/features.ts`.
+  Core tools live in `src/modules/agent-tools/`; besides those and a
+  feature's `agent-tools.ts`, only `src/app/_layout.tsx` imports
+  `@appduct/react-native` (its `/auto` entry, which handles pairing).
 - Tool design (appduct's `writing-tools.md`): name by intent
   (`seed_cart`, not `set_state`); a zod `inputSchema` with `.describe()` on
   every field; an object `outputSchema`; a first description line that says
@@ -71,7 +82,7 @@ How agents drive the app is in [README.md](README.md#agent-tooling). How tests a
   sets `destructiveHint: true` (the operator's policy denies those
   unattended). Handlers are plain functions over injected dependencies, with
   Jest tests next to them.
-- Rozenite stays a debug-only aid: plugin hooks only in `src/dev/devtools.tsx`
+- Rozenite stays a debug-only aid: plugin hooks only in `src/modules/devtools`
   (loaded by a `require` under `__DEV__`, so release and OTA bundles carry
   none of it), only JS-only plugins (no `performance-monitor`,
   no `react-navigation`), and `metro.config.js` keeps it behind

@@ -14,18 +14,19 @@ every tool.
 
 ## Layout
 
-| Path                | What                                                                     |
-| ------------------- | ------------------------------------------------------------------------ |
-| `apps/mobile`       | Expo app (expo-router, hot-updater, Jest). `@apex/mobile`                |
-| `apps/api`          | Product HTTP API, Hono on Node. `@apex/api`                              |
-| `apps/ota-server`   | Self-hosted hot-updater server — release infrastructure, not product     |
-| `apps/console`      | The factory console: local web page, host tooling. `@apex/console`       |
-| `packages/contract` | Every wire shape as zod schemas, plus the typed client. `@apex/contract` |
-| `docs/internal/`    | ADRs, agent rules, delivery manual, spec templates                       |
-| `.agents/`          | Skills (`skills/<name>/SKILL.md`) and helper scripts (`scripts/`)        |
-| `.opencode/`        | Subagents and primary agents (`agent/`), slash commands (`command/`)     |
-| `tools/`            | Host tooling: the native build cache (`expo-build-cache/`, ADR 0010)     |
-| `.worktrees/`       | Agent worktrees, one per branch (gitignored)                             |
+| Path                 | What                                                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/mobile`        | Expo app (expo-router, hot-updater, Jest). `@apex/mobile`                                                                        |
+| `apps/api`           | Product HTTP API, Hono on Node. `@apex/api`                                                                                      |
+| `apps/ota-server`    | Self-hosted hot-updater server — release infrastructure, not product                                                             |
+| `apps/console`       | The factory console: local web page, host tooling. `@apex/console`                                                               |
+| `packages/contract`  | Every wire shape as zod schemas, plus the typed client. `@apex/contract`                                                         |
+| `packages/event-bus` | The typed, synchronous domain event bus both apps use. `@apex/event-bus`                                                         |
+| `docs/internal/`     | ADRs, agent rules, delivery manual, spec templates                                                                               |
+| `.agents/`           | Skills (`skills/<name>/SKILL.md`) and helper scripts (`scripts/`)                                                                |
+| `.opencode/`         | Subagents and primary agents (`agent/`), slash commands (`command/`)                                                             |
+| `tools/`             | Host tooling: the native build cache (`expo-build-cache/`, ADR 0010), the module boundary check (`module-boundaries/`, ADR 0024) |
+| `.worktrees/`        | Agent worktrees, one per branch (gitignored)                                                                                     |
 
 ## Commands
 
@@ -35,6 +36,7 @@ pnpm check                           # typecheck, lint, format check, every pack
 pnpm format                          # fix formatting (oxfmt)
 pnpm --filter @apex/api test         # one package; also @apex/mobile, @apex/contract
 pnpm --filter <package> add <dep>    # never edit the lockfile by hand
+pnpm boundaries                      # module boundaries (also in pre-commit and pnpm check)
 ```
 
 Lefthook runs format and lint on commit. Never pass `--no-verify`.
@@ -46,8 +48,15 @@ Accepted ADRs in [docs/internal/adr/](docs/internal/adr/) and the rules in
 
 - [architecture.md](docs/internal/agent-rules/architecture.md) — monorepo
   boundaries and the contract-first order.
+- [modules.md](docs/internal/agent-rules/modules.md) — feature modules and
+  their public API, domain events versus actions, ports and adapters for
+  third-party APIs.
+- [components.md](docs/internal/agent-rules/components.md) — where a
+  component lives, the `ui` design system, compound components.
+- [code-style.md](docs/internal/agent-rules/code-style.md) — comments: none
+  unless the code would mislead without one.
 - [testing.md](docs/internal/agent-rules/testing.md) — what makes a test worth
-  keeping, and where each kind lives.
+  keeping, where each kind lives, user-visible behaviour over coverage.
 - [documentation.md](docs/internal/agent-rules/documentation.md) — end-user
   docs versus `docs/internal/`.
 - [safety.md](docs/internal/agent-rules/safety.md) — secrets, downloads, OTA,

@@ -55,7 +55,9 @@ though the suite is green — being green is exactly the failure mode.
    what it accepts and what it refuses). An API route is tested in
    `apps/api` with `app.request()` in-process — no port, no network. A screen
    is tested in `apps/mobile` with a Jest render test against what the user
-   sees, with the API client stubbed at the contract boundary. Only a claim
+   sees, with every port module on its fake (modules rule 11) and the API
+   client replaced at the contract boundary
+   (`setApiClient(createFakeApiClient(...))`). Only a claim
    that needs a running app on a device — navigation across native screens,
    an OTA update applying — becomes an agent-device replay script
    (`apps/mobile/e2e/<name>.ad`, an `e2e:` test), run on a leased device
@@ -64,3 +66,23 @@ though the suite is green — being green is exactly the failure mode.
    `get`), not on a timeout alone. It may reach its starting state through
    an appduct tool or a deep link the spec names instead of tapping there. A
    unit test never needs a device, the network, or a running service.
+
+7. **Test what the user can see, through the module's front door.** A screen
+   or component test renders it and acts the way a person does: it finds
+   elements by role, text, label or `testID`, presses and types, and asserts
+   on what appears. A logic test calls what the module exports and asserts
+   on what comes back or what it emitted. Neither asserts on internal state,
+   on which hook or function was called, on a component's props, or on a
+   snapshot. Those break on refactors that change nothing for the user and
+   pass on bugs that do. Mock only at the edges the app does not own: port
+   modules (through their fakes), timers, and the platform.
+
+8. **Aim for confidence, not coverage.** There is no coverage target, and a
+   line is not worth a test just because it exists. Spend tests where a
+   regression would hurt a visitor or a release most: what the user sees and
+   does, failure and empty states, the edges of a contract, the translation
+   a real adapter does, anything with a timeout or a retry. Do not write a
+   test for a type, a constant, a style, or a pass-through that the tests
+   above already exercise. One test that walks a real flow is worth more
+   than five that pin implementation details. When a test costs more to
+   keep than the bug it would catch, delete it.

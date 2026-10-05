@@ -63,7 +63,9 @@ none — JS only, ships over the air. <!-- checked against docs/internal/NATIVE-
 ### Rules in play
 
 - defaults.md — loading, errors, empty, offline, labels, copy, limits.
-- testing.md — tests as claims, each able to fail.
+- testing.md — tests as claims, each able to fail; what the user sees, not coverage.
+- modules.md — a feature module with one public API; events for side effects; ports for SDKs.
+- components.md — components in the feature, reusable ones in `ui` as compound components.
 - <architecture.md when it crosses the wire; safety.md when it takes input>
 
 ### Failure modes and limits

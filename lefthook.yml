@@ -10,3 +10,7 @@ pre-commit:
       glob: "*.{ts,tsx,js,mjs,mts,cts}"
       run: pnpm exec oxlint {staged_files}
       fail_text: "Run 'pnpm lint' to fix lint errors."
+    boundaries:
+      glob: "apps/*/src/**/*.{ts,tsx}"
+      run: node tools/module-boundaries/cli.js
+      fail_text: "Module boundary broken: see docs/internal/agent-rules/modules.md."

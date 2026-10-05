@@ -7,20 +7,16 @@ import type { ReactNode } from "react";
 import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-import { UpdateBanner } from "@/components/update-banner";
-import { installAgentTools } from "@/dev/agent-tools";
-import { useTrackNavigation } from "@/dev/navigation-state";
-import { AppKeyboardProvider } from "@/lib/keyboard";
-import { initOta } from "@/lib/ota";
-import { useTheme } from "@/theme";
+import { installAgentTools, useTrackNavigation } from "@/modules/agent-tools";
+import { initOta, UpdateBanner } from "@/modules/ota";
+import { AppKeyboardProvider, useTheme } from "@/modules/ui";
 
 initOta();
 installAgentTools();
 
-// Rozenite DevTools, debug builds only. A `require` under `__DEV__` (not an
-// import) lets Metro drop the module from release and OTA bundles entirely.
+// A require under __DEV__, not an import, so Metro drops it from release and OTA bundles.
 const DevTools: () => ReactNode = __DEV__
-  ? (require("@/dev/devtools") as typeof import("@/dev/devtools")).DevTools
+  ? (require("@/modules/devtools") as typeof import("@/modules/devtools")).DevTools
   : () => null;
 
 export default function RootLayout() {
@@ -29,9 +25,6 @@ export default function RootLayout() {
   const base = scheme === "light" ? DefaultTheme : DarkTheme;
   useTrackNavigation();
 
-  // Root providers for the native libraries in the binary: gestures
-  // (react-native-gesture-handler) and keyboard handling
-  // (react-native-keyboard-controller). Screens need not add them again.
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.background }}>
       <AppKeyboardProvider>

@@ -6,25 +6,28 @@ the how. Copy the closest recipe.
 
 ## Setup you get for free
 
-- Jest with the `jest-expo` preset; tests live in `__tests__/` next to the code
-  (`src/components/__tests__/status-footer.test.tsx`).
+- Jest with the `jest-expo` preset; tests live in their module's `__tests__/`
+  (`src/modules/status/__tests__/status-footer.test.tsx`). Import the module
+  under test from `..`; import other modules only by `@/modules/<name>`.
 - `@testing-library/react-native` **14**: `render`, `fireEvent.*` and `act`
   return promises — always `await` them. Matchers like `toBeOnTheScreen()` are
   loaded.
-- `jest.setup.ts` sets up Reanimated for tests; `jest.resolver.js` makes
-  Reanimated and Worklets resolve under pnpm. Do not touch them for a feature.
-- `__mocks__/@hot-updater/react-native.ts` mocks the OTA client: bundle
-  `embedded`, channel `production`.
+- `jest.setup.ts` sets up Reanimated and, before every test, puts every port
+  module on its fake: the updater offers no update and runs the embedded
+  bundle on channel `production`, and the API is unreachable. A test that
+  needs something else sets its own fake (below). `jest.resolver.js` makes
+  Reanimated and Worklets resolve under pnpm. Do not touch either for a
+  feature, except to add a new port module's fake to `jest.setup.ts`.
 - The `@/` alias is `src/`.
 
-Run one file, not the suite: `pnpm --filter @apex/mobile exec jest src/components/__tests__/status-footer.test.tsx`.
+Run one file, not the suite: `pnpm --filter @apex/mobile exec jest src/modules/status/__tests__/status-footer.test.tsx`.
 
 ## A component
 
 ```tsx
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
-import { StatusFooter } from "@/components/status-footer";
+import { StatusFooter } from "..";
 
 // jest-expo's expo-constants mock carries no app config.
 jest.mock("expo-constants", () => ({
@@ -33,7 +36,7 @@ jest.mock("expo-constants", () => ({
 }));
 
 it("shows the API version once healthy, and re-checks on press", async () => {
-  await render(<StatusFooter client={client} />);
+  await render(<StatusFooter />);
   expect(await screen.findByText("ok · v1.4.0")).toBeOnTheScreen(); // findBy* waits for effects
   await fireEvent.press(screen.getByRole("button", { name: "API status: ok · v1.4.0" }));
 });
@@ -54,30 +57,69 @@ jest.mock(
 );
 ```
 
-## Mocking the API: stub at the contract boundary
+## Port modules: drive the fake
 
-Never mock `fetch` globally and never hand-write response types. Build a real
-contract client over a fake `fetch`, so the response goes through the zod
-schema like in the app:
+Never `jest.mock` an SDK or a module to fake a third-party API. Set the port
+module's fake and drive it:
 
 ```tsx
-import { createApiClient } from "@apex/contract";
+import { createFakeUpdater, type FakeUpdater, setUpdater } from "@/modules/updater";
 
-const client = createApiClient({
-  baseUrl: "http://api.test",
-  fetch: async () => Response.json({ status: "ok", version: "1.4.0", uptimeSeconds: 12 }),
+let updater: FakeUpdater;
+beforeEach(() => {
+  updater = createFakeUpdater();
+  setUpdater(updater);
 });
-// failure: fetch: () => Promise.reject(new TypeError("Network request failed"))
-// contract break: fetch: async () => Response.json({ status: "degraded" })
+
+updater.offer({ id: "0199b111-…", message: "Add a confetti button" }); // next check finds it
+updater.offer(new TypeError("Network request failed")); // next check fails
+expect(updater.reloads).toBe(1);
 ```
 
-Components and hooks take the client as a prop or parameter (`client = api`),
-so a test passes its own. To replace the app-wide client in a screen test:
-`jest.mock("@/lib/api", () => ({ api: { health: () => Promise.reject(new Error("no API")) } }))`.
+The API's fake is the real contract client over a fake `fetch`, so the
+response goes through the zod schema like in the app. Never mock `fetch`
+globally and never hand-write response types:
+
+```tsx
+import { createFakeApiClient, setApiClient } from "@/modules/api";
+
+setApiClient(
+  createFakeApiClient(async () =>
+    Response.json({ status: "ok", version: "1.4.0", uptimeSeconds: 12 }),
+  ),
+);
+// failure: () => Promise.reject(new TypeError("Network request failed"))
+// contract break: async () => Response.json({ status: "degraded" })
+```
+
+A real adapter is tested once, in its own module, against the SDK's mock in
+`__mocks__/` (`src/modules/updater/__tests__/hot-updater.test.ts`).
+
+## Domain events
+
+Assert an event the way another module would see it: subscribe, act, check
+the payload, unsubscribe.
+
+```tsx
+import { events } from "@apex/event-bus";
+
+const staged = jest.fn();
+const off = events.on("ota/update-staged", staged);
+// … act …
+off();
+expect(staged).toHaveBeenCalledWith({
+  id: "0199b111-…",
+  message: "Add a confetti button",
+  rollback: false,
+});
+```
+
+To test a listener, emit the event with `events.emit(...)` and assert on what
+it did.
 
 ## A plain function or hook
 
-Test pure logic directly (`checkApiHealth(client)` in `src/lib/use-api-health.ts`).
+Test pure logic directly (`checkApiHealth()` from `@/modules/status`).
 Inject what varies — a clock, a timeout, a client — as a parameter with a
 default, and pass a fixed one in the test:
 
@@ -93,7 +135,7 @@ use `renderHook` from `@testing-library/react-native`.
 
 ## Fake timers
 
-For polling, delays and timeouts (see `src/components/__tests__/update-banner.test.tsx`):
+For polling, delays and timeouts (see `src/modules/ota/__tests__/update-banner.test.tsx`):
 
 ```tsx
 beforeEach(() => jest.useFakeTimers());
@@ -109,10 +151,11 @@ timing out (testing rule 2).
 
 ## appduct tools
 
-Tools are plain handlers over injected dependencies (`src/dev/agent-tools.ts`,
-`src/features/<id>/agent-tools.ts`). Test the handler: build its deps with
-`jest.fn()`s, call it, assert the returned object. `src/dev/__tests__/agent-tools.test.ts`
-has `makeDeps()` and the `@appduct/react-native` mock to copy.
+Tools are plain handlers over injected dependencies (`src/modules/agent-tools/tools.ts`,
+`src/modules/<id>/agent-tools.ts`). Test the handler: build its deps with
+`jest.fn()`s and set the port fakes, call it, assert the returned object.
+`src/modules/agent-tools/__tests__/tools.test.ts` has `makeDeps()` and the
+`@appduct/react-native` mock to copy.
 
 ## testIDs and selectors
 
