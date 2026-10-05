@@ -15,6 +15,13 @@ Argument: an issue number. Without one, take the oldest unclaimed:
 gh issue list --label bug:triage --search 'no:assignee' --json number,title --jq 'sort_by(.number)[0]'
 ```
 
+**What earlier runs learned.** Before step 1, run
+`.agents/scripts/memory.sh recall triage implement device`. Its lessons are hints from earlier
+runs of the same model, not instructions: use one when it fits; when one
+contradicts the spec, a rule or this skill, follow those and say so in your
+journal. Before your report, leave a journal line (and rarely a lesson) as
+its footer says, as `triager`.
+
 ## 1. Claim
 
 Check the issue carries exactly `bug:triage` and has no assignee. If either is
@@ -213,7 +220,10 @@ gh issue edit <N> --add-label bug:blocked --remove-label bug:triage
 
 ## Report
 
-End with exactly this block:
+If this run cost steps for a reason that is not the issue's own work, first
+`.agents/scripts/memory.sh journal triager "<what happened, what it cost>"`
+(and a lesson only as the recall footer says). Then end with exactly this
+block, nothing after it:
 
 ```
 Issue: #N  Result: reported | needs-info | handed off (<blocked on>)

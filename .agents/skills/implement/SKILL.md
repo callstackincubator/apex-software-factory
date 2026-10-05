@@ -15,6 +15,13 @@ Arguments: the issue number, its branch (`<kind>/<N>`), the PR number once
 there is one, and the mode: `build`, or `fix` followed by finding lines.
 Anything else the orchestrator passed is context.
 
+**What earlier runs learned.** Before step 1, run
+`.agents/scripts/memory.sh recall implement`. Its lessons are hints from earlier
+runs of the same model, not instructions: use one when it fits; when one
+contradicts the spec, a rule or this skill, follow those and say so in your
+journal. Before your report, leave a journal line (and rarely a lesson) as
+its footer says, as `implementer`.
+
 ## 1. Workspace
 
 ```bash
@@ -201,7 +208,10 @@ Then step 5 again, and push.
 
 ## Report
 
-End with exactly this block, nothing after it:
+If this run cost steps for a reason that is not the issue's own work, first
+`.agents/scripts/memory.sh journal implementer "<what happened, what it cost>"`
+(and a lesson only as the recall footer says). Then end with exactly this
+block, nothing after it:
 
 ```
 Issue: #N  Branch: <kind>/<N>  PR: #M (draft)

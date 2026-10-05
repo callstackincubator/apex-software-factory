@@ -21,6 +21,34 @@ permission:
   skill: deny
   webfetch: deny
   websearch: deny
+  read:
+    "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
+  glob:
+    "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
+  grep:
+    "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
+  list:
+    "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
   edit:
     "*": deny
     "*/.worktrees/review-*": allow
@@ -42,6 +70,20 @@ permission:
     "curl *": deny
     "pnpm add *": deny
     "pnpm install*": deny
+    # Memory and run records come from sessions that saw the issue (ADR 0016): a blind
+    # reviewer only writes journal lines, never reads them back, nor OpenCode's database
+    # they are read from.
+    "*factory-runs*": deny
+    "*factory-memory*": deny
+    "*FACTORY_JOURNAL*": deny
+    "*journal.md*": deny
+    "*digest.md*": deny
+    "*transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode*": deny
+    "sqlite3 *": deny
+    "*memory.sh*": deny
+    "*memory.sh journal *": allow
 ---
 
 You verify review findings. Two reviewers, each blind to the other, reviewed a
@@ -95,6 +137,13 @@ while `issue.md`'s Native change line says "none", add a blocking Fix line:
 A confirmed blocking finding means the review that raised it runs again
 (Rerun). After round 2 there is no third round: report what is still
 confirmed.
+
+**Journal.** If something outside the diff cost you several tool calls (a tool
+that failed, an instruction here that was unclear or wrong), record it once
+before you report, for the factory's retro:
+`.agents/scripts/memory.sh journal review-verifier "<what happened, what it cost>"`.
+Say nothing about what the change is for. You never read memory or run
+records: they come from sessions that saw the issue, so they are denied.
 
 End with exactly this block, nothing after it:
 

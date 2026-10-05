@@ -25,6 +25,13 @@ their worktree.
 Load the `agent-device` skill now; load `appduct` when the Agent hooks name a tool, and
 `rozenite` only for a failure (step 6).
 
+**What earlier runs learned.** Before step 1, run
+`.agents/scripts/memory.sh recall device`. Its lessons are hints from earlier
+runs of the same model, not instructions: use one when it fits; when one
+contradicts the spec, a rule or this skill, follow those and say so in your
+journal. Before your report, leave a journal line (and rarely a lesson) as
+its footer says, as `mobile-verifier`.
+
 **Why Release.** A Release build embeds the branch's JS bundle exactly as an OTA update would
 deliver it, with appduct linked as in the booth binary (`APPDUCT_ENABLED=1` everywhere). A
 debug build loads JS from Metro, so it proves less; it is for explaining a failure.
@@ -164,7 +171,10 @@ error midway. If you cannot run it, say so under Evidence: the lease then expire
 
 ## Report
 
-End with exactly this block, nothing after it:
+If this run cost steps for a reason that is not the issue's own work, first
+`.agents/scripts/memory.sh journal mobile-verifier "<what happened, what it cost>"`
+(and a lesson only as the recall footer says). Then end with exactly this
+block, nothing after it:
 
 ```
 PR: #M  Simulator: pass | fail | busy (<simlock line>) | unavailable (<reason>)
