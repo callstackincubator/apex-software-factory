@@ -111,7 +111,7 @@ select s.agent, x.name, substr(replace(replace(x.err, char(10), ' '), char(9), '
     case when c.type = 'object' then coalesce(json_extract(c.value, '$.tool'), json_extract(c.value, '$.name')) end as name,
     case when c.type = 'object' and (coalesce(json_extract(c.value, '$.state.status'), json_extract(c.value, '$.status')) = 'error'
                                      or json_extract(c.value, '$.error') is not null)
-      then coalesce(json_extract(c.value, '$.state.error'), json_extract(c.value, '$.error'), 'error') end as err
+      then coalesce(json_extract(c.value, '$.state.error.message'), json_extract(c.value, '$.state.error'), json_extract(c.value, '$.error'), 'error') end as err
   from session_message m join tree t on t.id = m.session_id, json_each(m.data, '$.content') c
 ) x join session_v2 s on s.id = x.sid
 where x.err is not null order by s.time_created, x.seq limit 25;
@@ -149,7 +149,8 @@ write_digest() {
     echo "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
     sql <<'SQL' | while IFS=$tab read -r id ag created updated title steps finish outcome out reas peak; do
 @TREE@
-select s.id, coalesce(s.agent, '?'), s.time_created, s.time_updated,
+select s.id, coalesce(s.agent, '?'), s.time_created,
+  coalesce((select max(m.time_updated) from session_message m where m.session_id = s.id), s.time_updated),
   substr(replace(replace(replace(coalesce(s.title, ''), char(9), ' '), char(10), ' '), '|', '/'), 1, 60),
   (select count(*) from session_message m where m.session_id = s.id and m.type = 'assistant'),
   coalesce((select group_concat(f || ' ' || n, ', ') from (

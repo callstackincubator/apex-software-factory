@@ -29,6 +29,8 @@ set -uo pipefail
 branch=${FACTORY_MEMORY_BRANCH:-factory-memory}
 remote=${FACTORY_MEMORY_REMOTE:-origin}
 ref=refs/remotes/$remote/$branch
+# A path or URL (a test's bare repository) does not make a valid ref name.
+git check-ref-format "$ref" 2>/dev/null || ref=refs/factory-memory/$branch
 topics="implement device ota triage deliver"
 max_text=600
 recent=10

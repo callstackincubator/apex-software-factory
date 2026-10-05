@@ -117,7 +117,8 @@ gh run download <run id> -n factory-run-<issue>-<run id>-<attempt> -D /tmp/run
 ```
 
 The tool-call sections read message fields OpenCode does not document
-(`content[].tool`, `.state.input`, `.state.status`); when an OpenCode upgrade
+(as of 2.0.22: `content[]` parts of `type` `tool`, with `.name`,
+`.state.input`, `.state.status` and `.state.error.message`); when an OpenCode upgrade
 changes them those sections say "not recorded" and the rest still works. The
 stage table uses the fields `factory-run.sh` already relies on.
 

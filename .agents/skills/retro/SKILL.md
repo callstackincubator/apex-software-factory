@@ -59,17 +59,17 @@ run end to end:
 ```bash
 gh run download <run id> -n factory-run-<issue>-<run id>-<attempt> -D .worktrees/retro/<date>/<run id>
 f=.worktrees/retro/<date>/<run id>/<file>.transcript.jsonl.gz
-zcat "$f" | jq -c 'select(.agent == "implementer") | {seq, type, finish: .data.finish}' | head -n 40
-zcat "$f" | jq -c 'select(.agent == "implementer") | .seq as $s | .data.content[]?
+gzip -dc "$f" | jq -c 'select(.agent == "implementer") | {seq, type, finish: .data.finish}' | head -n 40
+gzip -dc "$f" | jq -c 'select(.agent == "implementer") | .seq as $s | .data.content[]?
   | select(type == "object" and .type != "text" and .type != "reasoning")
   | {seq: $s, tool: (.tool // .name), input: ((.state.input // .input) | tostring | .[0:200])}'
-zcat "$f" | jq -r 'select(.agent == "implementer" and .seq == <n>) | .data.content[]?
+gzip -dc "$f" | jq -r 'select(.agent == "implementer" and .seq == <n>) | .data.content[]?
   | select(type == "object" and .type == "reasoning") | .text' | head -c 3000
 ```
 
 Each line is `{session, agent, parent, seq, type, time, data}`, where `data`
 is OpenCode's own message. If a filter comes back empty, look at the keys of
-one line first (`zcat "$f" | sed -n 2p | jq '[paths | join(".")]'`) rather
+one line first (`gzip -dc "$f" | sed -n 2p | jq '[paths | join(".")]'`) rather
 than guessing. At most about ten such queries in a retro.
 
 A person running the retro on the machine that ran the factory may also point
