@@ -707,21 +707,23 @@ export function demoAutomationsRead(now: number, dir: string): AutomationsRead {
     runs.set(
       file,
       Array.from({ length: count }, (_, i) => {
-        id += 1;
+        // Newest first, as GitHub lists them: the newest run has the highest id.
+        const runId = id + count - i;
         const startedAt = now - sinceMs - i * everyMs;
         const word = pick(i);
         const duration = (minMin + ((i * 7) % 5) * 0.4) * MIN;
         return {
-          id,
+          id: runId,
           event,
           status: word === "in_progress" ? "in_progress" : "completed",
           conclusion: word === "in_progress" ? null : word,
           startedAt,
           updatedAt: word === "in_progress" ? now - 2_000 : startedAt + duration,
-          url: `https://github.com/${REPO}/actions/runs/${id}`,
+          url: `https://github.com/${REPO}/actions/runs/${runId}`,
         };
       }),
     );
+    id += count;
   };
   history(
     "ci.yml",

@@ -113,6 +113,10 @@ next refresh.
   `src/server/derive/cron.ts` handles `*`, lists, ranges, steps, and names
   for months and weekdays; GitHub runs schedules late under load, so the
   page says "due". A disabled workflow has no next run.
+- **Refreshed at most once a minute**, not every 10 seconds: it costs one
+  request per workflow, and at 10 seconds the console would spend more than
+  GitHub's 5,000 requests an hour. For the same reason the repository is
+  resolved once, at start.
 
 ## 2. What the console works out
 

@@ -6,6 +6,11 @@ import { readStops } from "./run-logs.ts";
 import { readAutomations, type AutomationsRead } from "./workflows.ts";
 
 export const REFRESH_MS = 10_000;
+/**
+ * Automations read one request per workflow; at 10 s that alone would spend most of GitHub's
+ * 5,000 requests an hour. A minute is fresh enough for runs that take minutes.
+ */
+export const AUTOMATIONS_REFRESH_MS = 60_000;
 
 export interface Collector {
   /** The newest reading, refreshed at most every 10 s; concurrent callers share one refresh. */
@@ -92,7 +97,7 @@ export interface AutomationsCollector {
   collect(): Promise<AutomationsRead>;
 }
 
-/** The workflow files and GitHub's view of them, refreshed at most every 10 s, shared. */
+/** The workflow files and GitHub's view of them, refreshed at most every minute, shared. */
 export function createAutomationsCollector(deps: {
   now: () => number;
   gh: GhRunner;
@@ -100,7 +105,7 @@ export function createAutomationsCollector(deps: {
   workflowsDir: string;
   ttlMs?: number;
 }): AutomationsCollector {
-  const ttl = deps.ttlMs ?? REFRESH_MS;
+  const ttl = deps.ttlMs ?? AUTOMATIONS_REFRESH_MS;
   let last: { at: number; value: AutomationsRead } | null = null;
   let inflight: Promise<AutomationsRead> | null = null;
   return {

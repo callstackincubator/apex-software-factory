@@ -134,7 +134,7 @@ export function PipelineView() {
       />
       <Panel
         title="Deliveries"
-        description={`${rows.length} of ${snapshot.deliveries.length} shown`}
+        description={`${rows.length} of ${snapshot.deliveries.length} shown. Findings read raised / confirmed / rejected / nits.`}
       >
         <fieldset className="filter">
           <legend>State</legend>
