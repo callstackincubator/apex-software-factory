@@ -1,0 +1,19 @@
+# the footer shows the API round trip, and shows it again after tapping the API row
+# Needs the product API running on the laptop: the row shows no time when the API
+# is down, so the first wait would go on to fail on the missing element. The exact
+# format of the time ("43 ms", "1200 ms") is pinned in the Jest footer tests; on
+# the device the element's presence is what is checkable, since the time differs
+# every run.
+#
+#   .agents/scripts/device-lane.sh ad replay apps/mobile/e2e/api-latency.ad
+context platform=ios timeout=120000
+env APP_ID=com.callstack.apexfactory
+open ${APP_ID} --relaunch
+wait id="home-headline" 60000
+scroll bottom
+wait absent "label=\"API status: checking…\"" 15000
+is visible id="status-api-latency"
+press id="status-api"
+wait absent "label=\"API status: checking…\"" 15000
+is visible id="status-api-latency"
+close
