@@ -123,6 +123,7 @@ be delivered side by side. The job checks that the person who set the label
 has write access, checks out the newest `main`, and runs
 [`.agents/scripts/factory-run.sh`](../.agents/scripts/factory-run.sh). That
 script runs `opencode run --standalone --agent factory --auto "deliver #<n>"`
+(with `-m callstack.ai/callstack/Apex#low`, the agent's reasoning variant)
 under a watchdog. The `factory` agent loads the `deliver` skill. It never
 writes code or reads a diff: it starts subagents, each in a fresh context, and
 reasons over their fixed report blocks.
