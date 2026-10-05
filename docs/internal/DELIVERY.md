@@ -360,7 +360,7 @@ Runner setup (once per runner directory, as the maintainer's user):
 - Forms: `.github/ISSUE_TEMPLATE/`; PR body: `.github/pull_request_template.md`
 - Skills: `.agents/skills/`; agents and commands: `.opencode/`; config:
   `opencode.json`
-- Scripts: `.agents/scripts/` — `claim.sh`, `worktree.sh`, `review-inputs.sh`,
+- Scripts: `.agents/scripts/` — `claim.sh`, `attach.sh`, `worktree.sh`, `review-inputs.sh`,
   `native-check.sh`, `device-lane.sh`, `merge-pr.sh`, `factory-run.sh`,
   `run-record.sh`, `memory.sh`, `prewarm.sh`, `check-agent-permissions.sh`,
   `ensure-pnpm.sh`; the native

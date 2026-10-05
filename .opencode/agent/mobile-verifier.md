@@ -4,13 +4,15 @@ description: >-
   simlock-leased iOS simulator — Release build of the PR's worktree,
   agent-device checks, appduct shortcuts, Rozenite evidence on a failure — all
   through .agents/scripts/device-lane.sh, and reports pass, fail, busy or
-  unavailable. Always releases the device. Never edits the app or installs
+  unavailable. Posts the screenshots and a recording of the checks on the PR.
+  Always releases the device. Never edits the app or installs
   tools. Started with "PR #M, branch <kind>/<N>, lines: ...".
 mode: subagent
 model: callstack.ai/callstack/Apex
 variant: medium
 # Hard cap on agentic iterations (ADR 0015); at the cap OpenCode forces a text-only answer.
-steps: 40
+# 40, plus 4 for the recording and the evidence comment (ADR 0023).
+steps: 44
 color: secondary
 permission:
   # A question waits for a person, and nobody answers a subagent.

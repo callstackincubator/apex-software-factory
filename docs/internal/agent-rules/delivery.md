@@ -192,7 +192,8 @@ pull request is open, done means closed as completed.
     what the agent did or considered. Evidence goes in a code block or a link.
     Budgets, counted outside code blocks: a triage report 300 words, a handoff
     150, a PR body 200 plus its checklist, Status and Review sections, a "Spec
-    updated" comment one line. Do not restate the issue body. Every comment,
+    updated" comment one line, a simulator evidence comment one line per
+    checked line plus its media. Do not restate the issue body. Every comment,
     issue body and PR body an agent writes ends with the line
     `_Written by an agent._`, those exact characters — an agent in a person's
     session posts under that person's account (unattended runs post as the
