@@ -56,6 +56,12 @@ timeout_min=${FACTORY_TIMEOUT_MIN:-80}
 stall_min=${FACTORY_STALL_MIN:-15}
 logs="$root/.worktrees/factory-runs"
 mkdir -p "$logs"
+# ADR 0019: no global skills. OpenCode adds every skill under ~/.claude and ~/.agents to each
+# agent's system prompt (74 on this Mac, 31 KB), and that prompt shape made the endpoint garble
+# the mobile-verifier's first turn. OPENCODE_TEST_HOME moves only the home OpenCode searches;
+# auth, the database, ~/.config/opencode and the tools' own HOME are unchanged.
+export OPENCODE_TEST_HOME="$root/.worktrees/opencode-home"
+mkdir -p "$OPENCODE_TEST_HOME"
 started=$(date +%s)
 deadline=$((started + timeout_min * 60))
 
