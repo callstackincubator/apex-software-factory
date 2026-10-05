@@ -109,7 +109,7 @@ turns `task:ready`. Three labels sit outside the scheme and mark pull requests
 or tests: `needs-simulator` (parked: the simulator check could not run),
 `needs-native-build` (parked: cannot ship over the air) and `flaky-test`.
 `issue-state.yml` keeps the labels consistent (one state label, task
-promotion, releasing stale claims); `labels.yml` keeps them equal to
+promotion); `labels.yml` keeps them equal to
 [`.github/labels.json`](../.github/labels.json). Full table and transitions:
 [DELIVERY.md, Labels](internal/DELIVERY.md#labels) and
 [agent-rules/delivery.md](internal/agent-rules/delivery.md).
@@ -147,7 +147,7 @@ sequenceDiagram
     GH->>FY: label feature:ready / task:ready / bug:ready
     FY->>FR: factory-run.sh N
     FR->>F: opencode run --agent factory, deliver issue N
-    F->>GH: claim (assign), branch kind/N
+    F->>GH: claim: create branch kind/N
     F->>I: build mode
     I-->>F: red tests, draft PR, green, pnpm check, native check
     par blind reviews and simulator, same commit
@@ -198,7 +198,7 @@ What each step means, in short:
    the new bundle and the feature on screen. A miss is a note for the
    maintainer, never a reason to park.
 
-An agent that stops early unassigns itself and leaves one `## Handoff` comment
+An agent that stops early releases its claim and leaves one `## Handoff` comment
 (Done, Not done, Findings, Blocked on). If it names a blocker, the issue moves
 to `<kind>:blocked`. The walkthroughs are in
 [DELIVERY.md](internal/DELIVERY.md#walkthrough-4-unattended-delivery).
@@ -359,12 +359,17 @@ agent uses each tool: [apps/mobile/README.md, Agent tooling](../apps/mobile/READ
 - **The dispatcher trusts little.** `factory.yml` acts only on a label set by
   someone with write access or by this repository's automation, never on a
   pull request, and always runs code from `main`.
-- **Claims and handoffs.** The assignee is the lock on an issue. A run that
-  stops leaves one `## Handoff` comment and releases the claim. A claim with no
-  activity for six hours is released by `issue-state.yml`.
+- **Unattended runs act as the factory's GitHub App.** Their comments, pushes,
+  PRs and merges come from its bot, with a token that works only on this
+  repository and expires after an hour.
+- **Claims and handoffs.** The issue's branch (`<kind>/<n>`) is the lock on
+  it: GitHub refuses to create a branch twice. A run that stops leaves one
+  `## Handoff` comment. Its branch stays when it has work on it, and the next
+  run continues from there. To start an issue over, delete its branch.
 - **Watchdog.** `factory-run.sh` stops a run after 80 minutes, or after 15
-  minutes with no progress, and restarts it once from the branch. The job
-  itself times out after 90 minutes.
+  minutes with no progress, and restarts it once from the branch. Under the
+  dispatcher it also stops five minutes before the app's token expires, which
+  is about 50 minutes into the run. The job itself times out after 75 minutes.
 
 The full list: [agent-rules/safety.md](internal/agent-rules/safety.md).
 

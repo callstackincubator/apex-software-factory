@@ -108,7 +108,8 @@ from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
   never start subagents.
 - **Commands** (`.opencode/command/`): `/intent`, `/spec <n> [mode]`,
   `/deliver <n>`, `/triage <n>`, `/review <pr>`, `/retro [scope]`.
-- **Scripts** (`.agents/scripts/`): `worktree.sh` (create a worktree under
+- **Scripts** (`.agents/scripts/`): `claim.sh` (claim an issue by creating
+  its branch on origin, or release it), `worktree.sh` (create a worktree under
   `.worktrees/` and install), `merge-pr.sh` (the merge gate),
   `review-inputs.sh` (blind review inputs), `native-check.sh` (can this ship
   over the air?), `device-lane.sh` (a simlock-leased device driven with

@@ -24,8 +24,8 @@ proposes changes that a person accepts or not.
 commit hooks have nothing to check) and pushes it as a fast-forward,
 retrying when the other runner won a race. Nobody needs to create it: the
 first write does, with a README. If the repository's rules restrict who may
-create or push branches, the maintainer's login must be allowed to push
-`factory-memory`; force pushes stay denied, and the script never needs one.
+create or push branches, the factory's GitHub App (ADR 0020) must be allowed
+to push `factory-memory`; force pushes stay denied, and the script never needs one.
 
 | Path                      | What                                                    | Written by       |
 | ------------------------- | ------------------------------------------------------- | ---------------- |

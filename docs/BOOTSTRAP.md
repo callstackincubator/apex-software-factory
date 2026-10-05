@@ -116,8 +116,10 @@ Turn on corepack, so `pnpm` follows the repository's pin:
 corepack enable
 ```
 
-Log in to GitHub. The agents push, open PRs and comment through this login,
-as the maintainer:
+Log in to GitHub. You need this login for the setup below. Agents in a
+person's own session (the console, the `build` agent) also act through it.
+Unattended runs act as the factory's GitHub App instead
+([section 9](#9-point-github-at-this-mac)):
 
 ```bash
 gh auth login
@@ -581,6 +583,32 @@ grep '^S3_ACCESS_KEY_ID=' infra/.env | cut -d= -f2- | tr -d '\n' | gh secret set
 grep '^S3_SECRET_ACCESS_KEY=' infra/.env | cut -d= -f2- | tr -d '\n' | gh secret set S3_SECRET_ACCESS_KEY
 ```
 
+Unattended runs act on GitHub as the factory's GitHub App (ADR 0020). It
+belongs to the repository, not to a Mac, so a switchover changes nothing here.
+Check that both of its secrets are listed below: `FACTORY_APP_ID` and
+`FACTORY_APP_PRIVATE_KEY`. If they are missing, an organization owner creates
+the app:
+
+- No webhook.
+- Repository permissions: Contents, Issues and Pull requests read and write;
+  Actions, Checks and Commit statuses read. Metadata is always read.
+- Not Workflows: an unattended run must not change `.github/workflows/`
+  (safety rule 6).
+- Installed on this repository only.
+
+Then store its ID and a private key it generated:
+
+```bash
+printf '%s' "<app id>" | gh secret set FACTORY_APP_ID
+```
+
+```bash
+gh secret set FACTORY_APP_PRIVATE_KEY < "<path to the downloaded .pem>"
+```
+
+Delete the downloaded `.pem` afterwards. The runners never need it: each
+factory job mints a one-hour token from the secrets.
+
 Check the names (values are never shown):
 
 ```bash
@@ -798,8 +826,9 @@ the run merges, the OTA publish ships, a phone shows the banner.
    gh run list --workflow ota-publish.yml --limit 3
    ```
 
-The run ends with a `## Delivery run` comment on the issue. A parked run
-leaves a `## Handoff` comment instead; see
+The run ends with a `## Delivery run` comment on the issue, posted by the
+factory app's bot (`<app slug>[bot]`), which also authored the PR and its
+commits. A parked run leaves a `## Handoff` comment instead; see
 [FACTORY.md, What to do when…](FACTORY.md#what-to-do-when).
 
 To take a test feature off the phones, a maintainer disables its bundle
