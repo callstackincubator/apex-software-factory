@@ -12,7 +12,9 @@
 # exits 1, or exits 2 when checks are still pending at the deadline (run it again to wait on).
 #
 # Agents may not run `gh pr merge` themselves (opencode.json denies it); this script is the one
-# place a delivery PR is merged from. It squash-merges, so main gets one commit per issue.
+# place a delivery PR is merged from. It squash-merges, so main gets one commit per issue, shaped
+# like a GitHub UI squash: "<PR title> (#<pr>)", then a plain-text body (delivery rule 15) made
+# from the PR body's Summary, its Assumption lines and its Closes line, wrapped at 72 columns.
 set -eu
 
 pr=${1:?usage: merge-pr.sh <pr> [minutes]}
@@ -79,5 +81,21 @@ for _ in 1 2 3 4 5 6; do
 done
 [ "$mergeable" = MERGEABLE ] || fail "GitHub reports PR #$pr as $mergeable"
 
-out=$(gh pr merge "$pr" --squash 2>&1) || fail "$out"
+# The commit body is plain text: markdown links become their text, images and HTML comments go.
+plain() { sed -e 's/!\[[^]]*\]([^)]*)//g' -e 's/\[\([^]]*\)\]([^)]*)/\1/g' -e 's/<!--.*-->//g' -e 's/\*\*//g'; }
+section() { printf '%s\n' "$body" | awk -v h="$1" '$0 == "## " h { on = 1; next } /^##/ { on = 0 } on'; }
+# fmt needs a UTF-8 locale, or macOS drops every non-ASCII character (·, —, …).
+wrap() { LC_ALL=C.UTF-8 fmt -w "$1"; }
+summary=$(section Summary | plain | awk 'NF { print; seen = 1; next } seen { exit }' | wrap 72)
+[ -n "$summary" ] || fail "PR #$pr has no text under ## Summary to use as the commit body"
+assumptions=$(section Assumptions | grep '^- Assumption:' | plain | while IFS= read -r line; do
+  printf '%s\n' "$line" | wrap 70 | sed '1!s/^/  /'
+done)
+closes=$(printf '%s\n' "$body" | grep -E '^(Closes|Fixes|Resolves) #[0-9]+' || true)
+title=$(view title .title)
+message=$summary
+[ -z "$assumptions" ] || message=$(printf '%s\n\n%s' "$message" "$assumptions")
+[ -z "$closes" ] || message=$(printf '%s\n\n%s' "$message" "$closes")
+
+out=$(gh pr merge "$pr" --squash --subject "$title (#$pr)" --body "$message" 2>&1) || fail "$out"
 echo "merged #$pr"
