@@ -98,6 +98,11 @@ from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
   `spec-session`, `deliver`, `implement`, `review`, `triage-bug`,
   `verify-mobile`, `verify-ota`, `retro`; and the device tools `agent-device`,
   `appduct`, `rozenite` (vendored upstream skills, each with a `SOURCE.md`).
+  Also vendored: eleven Expo and React Native guides (`expo-*`,
+  `swm-react-native-best-practices`, `callstack-react-native-best-practices`,
+  `vercel-composition-patterns`, `react-native-mmkv`,
+  `react-native-vision-camera`). They are in no agent's skill list, only the
+  implementer may load them, and the `implement` skill names them (ADR 0022).
 - **Primary agents** (`.opencode/agent/`): `factory` (unattended delivery),
   `intake` (the booth front door), `spec` (spec sessions with a product
   owner or a developer), `retro` (looks back at runs and proposes
