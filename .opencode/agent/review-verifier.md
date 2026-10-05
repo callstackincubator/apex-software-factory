@@ -23,12 +23,32 @@ permission:
   websearch: deny
   read:
     "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
   glob:
     "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
   grep:
     "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
   list:
     "*factory-runs*": deny
+    "*.journal.md": deny
+    "*.digest.md": deny
+    "*.transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode/*": deny
   edit:
     "*": deny
     "*/.worktrees/review-*": allow
@@ -51,10 +71,17 @@ permission:
     "pnpm add *": deny
     "pnpm install*": deny
     # Memory and run records come from sessions that saw the issue (ADR 0016): a blind
-    # reviewer only writes journal lines, never reads them back.
+    # reviewer only writes journal lines, never reads them back, nor OpenCode's database
+    # they are read from.
     "*factory-runs*": deny
     "*factory-memory*": deny
     "*FACTORY_JOURNAL*": deny
+    "*journal.md*": deny
+    "*digest.md*": deny
+    "*transcript.jsonl*": deny
+    "*opencode.db*": deny
+    "*share/opencode*": deny
+    "sqlite3 *": deny
     "*memory.sh*": deny
     "*memory.sh journal *": allow
 ---

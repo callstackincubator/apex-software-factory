@@ -72,9 +72,13 @@ under a header that frames them as hints: a spec, a rule, an ADR or the skill
 wins over any lesson, and a lesson that proved wrong goes in the journal.
 
 The three blind reviewers never recall: lessons come from sessions that saw
-the issue, so they would be a way around delivery rule 14. Their agent files
-deny `memory.sh` except `journal`, the memory branch, `$FACTORY_JOURNAL` and
-`.worktrees/factory-runs/`.
+the issue, so they would be a way around delivery rule 14. The spec reviewer
+has no shell, so it neither recalls nor journals. The code reviewer's and the
+review verifier's agent files deny `memory.sh` except `journal`, the memory
+branch, `$FACTORY_JOURNAL`, `.worktrees/factory-runs/`, the journal, digest
+and transcript files by name, and OpenCode's database (`sqlite3`,
+`opencode.db`). Their shell denies match command text, not the files a
+command ends up reading; the read, grep and glob tools match the path.
 
 ## Journal lines
 
@@ -104,8 +108,9 @@ to the log:
   is OpenCode's own message.
 
 Both pass through a redaction filter for anything shaped like a GitHub,
-OpenAI-style, AWS or Slack token, a private key, or a `token=`/`Bearer`
-value. Redaction is a backstop: the rule is that no secret reaches an agent.
+OpenAI-style, AWS or Slack token, an AWS secret key, a private key, a
+`token=`/`Bearer` value, or an email address (`[email]`, which also catches
+`git@github.com`). Redaction is a backstop: the rule is that no secret reaches an agent.
 
 Under the dispatcher, `factory.yml` uploads `.worktrees/factory-runs/` as the
 job's artifact `factory-run-<issue>-<run id>-<run attempt>`, kept 30 days.

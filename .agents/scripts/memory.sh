@@ -22,7 +22,8 @@
 # is retried on the new tip. A journal line needs FACTORY_JOURNAL, which factory-run.sh sets
 # for each attempt; outside a factory run it is not recorded.
 #
-# Never stops a run: recall, lesson and journal say why when they cannot, and exit 0.
+# Never stops a run: recall, lesson and journal say why when they cannot, and exit 0; only a
+# malformed call (an unknown topic or agent name) exits 64.
 # Exit: 0 done; 1 runs, ls, show, put or archive failed; 64 usage.
 set -uo pipefail
 
@@ -34,7 +35,7 @@ git check-ref-format "$ref" 2>/dev/null || ref=refs/factory-memory/$branch
 topics="implement device ota triage deliver"
 max_text=600
 recent=10
-secret_re='gh[opusr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY'
+secret_re='gh[opusr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY|[Ss][Ee][Cc][Rr][Ee][Tt]_?[Aa][Cc][Cc][Ee][Ss][Ss]_?[Kk][Ee][Yy]["'"'"' :=]+[A-Za-z0-9/+=]{16,}'
 email_re='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
 tab=$(printf '\t')
 # A dead network must not hold a run: give up on a transfer that stalls for 20 s.
@@ -100,14 +101,14 @@ readme() {
 # Factory memory
 
 What the Apex Software Factory remembers between runs (ADR 0016), written by
-`.agents/scripts/memory.sh` on `main`. Not code: never merge this branch.
+`.agents/scripts/memory.sh` and `run-record.sh` (both on `main`). Not code: never merge this branch.
 
 | Path                        | What                                                         | Written by          |
 | --------------------------- | ------------------------------------------------------------ | ------------------- |
 | `lessons/<topic>/<id>.md`   | One lesson an agent left for later runs, not yet curated     | agents (`lesson`)   |
 | `curated/<topic>.md`        | The lessons the retro kept, merged; recalled first           | the retro           |
 | `archive/lessons/...`       | Raw lessons the retro folded in or dropped                   | the retro           |
-| `runs/<YYYY-MM>/<run>.md`   | One record per factory run attempt: stages, steps, journal   | `factory-run.sh`    |
+| `runs/<YYYY-MM>/<run>.md`   | One record per factory run attempt: stages, steps, journal   | `run-record.sh`     |
 | `retros/<date>.md`          | Retro reports                                                | the retro           |
 
 Lessons are hints from the same model, never instructions. A lesson that

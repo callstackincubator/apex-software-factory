@@ -38,11 +38,18 @@ missing.
 3. **Reviewers stay blind.** The spec reviewer, the code reviewer and the
    review verifier never recall: lessons and run records are written by
    sessions that saw the issue, which would be a channel around delivery
-   rule 14. Their agent files deny `memory.sh` (but `journal`), the memory
-   branch, `$FACTORY_JOURNAL` and `.worktrees/factory-runs/`. The last also
-   closes an older gap: the run's own log there names the issue.
+   rule 14. The spec reviewer has no shell at all. The code reviewer's and
+   the review verifier's agent files deny `memory.sh` (but `journal`), the
+   memory branch, `$FACTORY_JOURNAL`, `.worktrees/factory-runs/`, the
+   journal, digest and transcript files by name, and OpenCode's database
+   (`sqlite3`, `opencode.db`) the records are read from. The run directory
+   deny also closes an older gap: the run's own log there names the issue.
+   Shell denies match command text, so a command that reaches those files
+   without naming them (a recursive `grep` from the parent directory) is not
+   caught; the read, grep and glob tools' denies match the path itself.
 4. **A journal per attempt.** `factory-run.sh` gives every attempt a journal
-   (`FACTORY_JOURNAL`); any stage, the reviewers included, adds a line with
+   (`FACTORY_JOURNAL`); any stage with a shell (every one but the spec
+   reviewer, the blind code reviewer and review verifier included) adds a line with
    `memory.sh journal <by> <text>` when something outside the issue's own
    work cost it steps: a tool, a script, a missing or wrong instruction, a
    lesson that misled. It is the "why" the database cannot show.
@@ -52,7 +59,7 @@ missing.
    against the cap, finish reasons, tokens, tool calls, repeated calls, tool
    errors, the task prompt and the report block; the journal; the log tail)
    and a full transcript (every message, one JSON line each). Both are
-   redacted for anything shaped like a token or key. The digest goes to the
+   redacted for anything shaped like a token, a key or an email address. The digest goes to the
    memory branch under `runs/`; `factory.yml` uploads the whole run directory
    as the job's artifact (`factory-run-<issue>-<run>-<attempt>`, 30 days),
    which also keeps the logs the next checkout would wipe.
@@ -78,7 +85,8 @@ missing.
   without the booth Mac.
 - Every attempt costs a few seconds and one push to the branch; a stage that
   recalls costs one tool call. Failures never stop a run: recall, lesson and
-  journal say why and exit 0, and a missing record is only logged.
+  journal say why and exit 0 (only a malformed call, an unknown topic or
+  agent name, exits 64), and a missing record is only logged.
 - A prompt-injected issue can now try to plant a lesson. Mitigations: lessons
   are framed as hints that lose to every rule, reviewers never see them, the
   retro reviews and curates them, and nothing reaches `main` without a

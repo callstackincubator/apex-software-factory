@@ -22,7 +22,7 @@ hours when there is none. Work in a scratch directory,
 
 ## 1. Gather
 
-**Run records**, one per attempt, written by `factory-run.sh` — the stage
+**Run records**, one per attempt, written by `run-record.sh` after each attempt — the stage
 table (time, steps against the cap, finish reasons, tokens, task), tool calls,
 repeated calls, tool errors, each stage's task prompt and report block, the
 attempt's journal and its log tail:

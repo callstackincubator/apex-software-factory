@@ -56,9 +56,9 @@ branch=${1:?usage: worktree.sh <branch> [base] | --prepare <dir>}
 base=${2:-origin/main}
 
 case $branch in
-  bug/* | feature/* | task/* | bootstrap/* | docs/*) ;;
+  bug/* | feature/* | task/* | bootstrap/* | docs/* | retro/*) ;;
   *)
-    echo "branch must be <kind>/<n> (task/12, bug/7, feature/3, bug/7-repro): got $branch" >&2
+    echo "branch must be <kind>/<n> (task/12, bug/7, feature/3, bug/7-repro, retro/2026-10-09): got $branch" >&2
     exit 1
     ;;
 esac

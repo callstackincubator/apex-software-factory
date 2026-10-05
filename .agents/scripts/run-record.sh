@@ -43,7 +43,19 @@ redact() {
     -e 's/sk-[A-Za-z0-9_-]{20,}/[redacted]/g' \
     -e 's/AKIA[0-9A-Z]{16}/[redacted]/g' \
     -e 's/xox[abposr]-[A-Za-z0-9-]{10,}/[redacted]/g' \
-    -e 's/((Bearer|bearer|[Tt]oken|TOKEN|[Ss]ecret|SECRET|[Pp]assword|PASSWORD|[Aa]pi[_-]?[Kk]ey|API[_-]?KEY)[\\"'"'"' :=]+)[A-Za-z0-9._\/+=-]{16,}/\1[redacted]/g'
+    -e 's/((Bearer|bearer|[Tt]oken|TOKEN|[Ss]ecret[_-]?[Aa]ccess[_-]?[Kk]ey|SECRET_ACCESS_KEY|[Ss]ecret|SECRET|[Pp]assword|PASSWORD|[Aa]pi[_-]?[Kk]ey|API[_-]?KEY)[\\"'"'"' :=]+)[A-Za-z0-9._\/+=-]{16,}/\1[redacted]/g' \
+    -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[email]/g' |
+    # A private key: within one line (a transcript's JSON, newlines escaped), or over several
+    # lines of base64 (the digest), up to its END line or the first line that is not base64.
+    awk '
+      k && /^[A-Za-z0-9+\/= ]*$/ { next }
+      k && /-----END [A-Z ]*PRIVATE KEY-----/ { sub(/.*-----END [A-Z ]*PRIVATE KEY-----/, ""); k = 0; if ($0 == "") next }
+      { k = 0 }
+      match($0, /-----BEGIN [A-Z ]*PRIVATE KEY-----[A-Za-z0-9+\/=\\ ]*(-----END [A-Z ]*PRIVATE KEY-----)?/) {
+        k = RSTART + RLENGTH - 1 == length($0) && substr($0, RSTART + RLENGTH - 5) != "KEY-----"
+        $0 = substr($0, 1, RSTART - 1) "[redacted]" substr($0, RSTART + RLENGTH)
+      }
+      { print }'
 }
 
 # Seconds since the epoch as UTC text; BSD date first (the booth Macs), then GNU.
@@ -128,7 +140,7 @@ write_digest() {
   echo
   echo "- Started: $(utc "$start_s" '%Y-%m-%d %H:%M:%S') UTC"
   if [ -n "$stopped" ]; then
-    echo "- Ended: stopped by the watchdog: $stopped"
+    echo "- Ended: stopped: $stopped"
   else
     echo "- Ended: on its own (the issue and the PR say how)"
   fi
