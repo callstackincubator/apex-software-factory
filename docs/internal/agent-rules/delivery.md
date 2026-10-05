@@ -256,6 +256,14 @@ pull request is open, done means closed as completed.
     agent also checks what the script cannot read: no blocking finding is
     open. Anything short of that parks the issue with a handoff and leaves the
     PR for the maintainer.
+    Every commit on `main` reads like a GitHub UI squash: the title is the
+    PR title and ` (#<pr>)`, nothing else — the PR title itself never
+    carries an issue number, and neither does any commit title. The body is
+    plain text, no markdown headings, checkboxes, tables, images or links:
+    what landed and why, then any `- Assumption:` lines, then `Closes #<n>`.
+    The script builds it from the PR body; a person squashing in the UI
+    writes it into the empty body field GitHub offers (the repository
+    proposes none).
 
 16. **Devices are leased, one lane per lease, through the script.** Every
     simulator or emulator an agent uses is leased from simlock and driven

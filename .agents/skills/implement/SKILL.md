@@ -102,7 +102,7 @@ and do not run it yourself: the mobile-verifier runs it on a device as the
 gate. Then:
 
 ```bash
-git add <test files> && git commit -m "test: <issue title, imperative> (#<N>)"
+git add <test files> && git commit -m "test: <issue title, imperative>"
 git push -u origin <kind>/<N>
 gh pr create --draft --title "<type>(<scope>): <summary>" --body-file - <<'EOF'
 <the body>
