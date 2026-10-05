@@ -89,6 +89,31 @@ plus `<repo root>/.worktrees/factory-runs`. A file named
 `<issue>-<attempt>-<YYYYmmdd-HHMMSS>.log.stopped` is one watchdog stop; its
 content is the reason.
 
+### 1.4 Workflows (automations)
+
+Future automations are GitHub workflows, most on a schedule, so the console
+lists **every workflow** in `.github/workflows/` of the repository root as an
+automation. Nothing has to register one: a new workflow file shows up on the
+next refresh.
+
+- **From the file** (read from disk, parsed with the `yaml` package): `name`,
+  the file name, the triggers under `on:` (each `schedule` cron, and the
+  event names: `workflow_dispatch`, `push`, `issues`, …), the
+  `workflow_dispatch` inputs (name, required, description), the jobs' `runs-on`
+  (to tell `self-hosted` from GitHub-hosted), and the **description**: the
+  file's leading comment block, without the `#`, up to the first blank or
+  non-comment line (`factory.yml` already has one). An automation that wants a
+  description gets one by starting with a comment.
+- **From GitHub**: `repos/{repo}/actions/workflows` (id, state: `active`,
+  `disabled_manually`, `disabled_inactivity`) and the last 20 runs of each
+  (`…/workflows/{file}/runs?per_page=20`: event, status, conclusion,
+  `run_started_at`, `updated_at`, `html_url`).
+- **Next run** of a scheduled one: the earliest next time over its crons,
+  computed from the cron in UTC, as GitHub reads it. A small cron reader in
+  `src/server/derive/cron.ts` handles `*`, lists, ranges, steps, and names
+  for months and weekdays; GitHub runs schedules late under load, so the
+  page says "due". A disabled workflow has no next run.
+
 ## 2. What the console works out
 
 ### 2.1 Workers
@@ -189,6 +214,18 @@ start time: runs started, merged, parked, blocked, failed; watchdog stops
 the reason's first words); median and longest time per phase across finished
 runs; findings as in 2.4; total cost and tokens when the database has them.
 
+### 2.6 Automations
+
+Per workflow: triggers as words (`every day at 06:00 UTC` when the cron is a
+plain daily, weekly or hourly one; else the cron itself in mono), next run,
+state, last run (status word, when, duration), and over its last 20 runs: the
+success rate (`success` over completed, skipping `skipped` and `cancelled`)
+and the median duration. Status words for a run: `success` ok; `failure`,
+`timed_out`, `startup_failure` error; `cancelled`, `skipped` idle;
+`in_progress`, `queued`, `waiting` idle. A workflow's own status: `failing`
+(error) when its last completed run failed, `disabled` (idle), else `healthy`
+(ok).
+
 ## 3. HTTP
 
 All JSON. Every response shape is a zod schema in `src/shared/schema.ts`; the
@@ -200,6 +237,9 @@ server validates what it sends in its tests, the page parses what it gets.
 | `GET /api/deliveries/:issue` | one delivery with every attempt, its subagent intervals, rounds and their parsed report blocks, the watchdog stops, the Assumption lines and the Rejected list |
 | `POST /api/runs` `{ "issue": n }` | dispatches `factory.yml` with `issue=n` (`gh workflow run factory.yml --repo … -f issue=n`). Refuses (409, with the reason) an issue that is closed, carries no ready or triage label, or already has a queued or running factory run. 202 on success. |
 | `POST /api/opencode` | runs `opencode pair` (`execFile`, 30 s timeout, in the repository root). In v2 that starts OpenCode's background service if it is not running (loopback by default) and prints one-time links of the form `http://127.0.0.1:<port>/auth/connect/<code>`, which sign a browser in once and expire within minutes. Answers `{ url, expiresInMinutes }` with the first link on a loopback host (any other link is ignored). 503 with OpenCode's own message when `opencode` is not on `PATH`, the service is disabled, or no link comes back. The console never sees or stores OpenCode's server password. |
+| `GET /api/automations` | every workflow (1.4, 2.6), scheduled ones first by next run, then the rest by name |
+| `GET /api/automations/:file` | one workflow with its last 20 runs |
+| `POST /api/automations/:file/dispatch` | `gh workflow run <file> --ref <default branch>`; only for a workflow that has `workflow_dispatch` and no required input, else 409 with the reason; `factory.yml` is started from the Pipeline tab only (it needs an issue). 202 on success. |
 | `GET /*` | the built page; a path with no extension serves `index.html`; a missing asset is 404 |
 
 **Guard, for every request:** the `Host` header must be
@@ -270,10 +310,10 @@ green where simlock has orange. Summary of what to carry over:
 - **Header.** "APEX FACTORY" wordmark, `--on-accent` on an `--accent` block,
   then a "By Callstack" chip. Right: each source as a status (`github ok`,
   `opencode unavailable`, or `demo`), and "updated 4 s ago" in mono.
-- **Tabs** under the header: Overview, Pipeline, Stats, OpenCode. Current tab
+- **Tabs** under the header: Overview, Pipeline, Stats, Automations, OpenCode. Current tab
   `--text` with a 2px `--accent` underline and `aria-current="page"`. The
   URL carries the tab (`/`, `/pipeline`, `/pipeline/42`, `/stats`,
-  `/opencode`), so a reload keeps it.
+  `/automations`, `/automations/:file`, `/opencode`), so a reload keeps it.
 - **Page header**: title, one muted line under it, actions on the right.
 - **Stat cards**: label, big mono number, muted caption; at least 200px wide,
   wrapping.
@@ -343,6 +383,30 @@ green where simlock has orange. Summary of what to carry over:
 - **Watchdog** table: when, issue, attempt, reason.
 - Cost and tokens, when the database has them.
 
+### Automations (`/automations`)
+
+- Subtitle: "Every GitHub workflow in this repository. Scheduled ones are the
+  factory's automations."
+- Stat cards: **Automations**, **Scheduled**, **Failing**, **Next run** (the
+  soonest, as "in 12 m").
+- **Scheduled** panel: a table — name (link to its page), schedule in words,
+  next run, status, last run, success rate, median duration, and **Run now**
+  (secondary, same confirm dialog as Start run) where 3 allows it.
+- **On events** panel: the same table for the rest, with its triggers as
+  words instead of the schedule.
+- An empty Scheduled panel says "No scheduled automations yet. A workflow
+  with `on: schedule` appears here."
+
+### Automation (`/automations/:file`)
+
+- Header: name, file name in mono, status, link to the workflow on GitHub.
+- The description, as text.
+- Facts as label and value pairs: triggers, schedule and next run, inputs,
+  runs on, state.
+- **Recent runs** table: status, event, started, duration, link to the run.
+- A **Runs** chart: duration per run as columns, oldest left, failed runs
+  told apart by a pattern as well as the status word in the table.
+
 ### OpenCode (`/opencode`)
 
 - **Open OpenCode**: a primary button. It calls `POST /api/opencode`, then
@@ -377,6 +441,7 @@ apps/console/
   src/server/github.ts    gh wrapper (injectable runner) and the GitHub reads
   src/server/opencode-db.ts  schema detection and the queries
   src/server/run-logs.ts  the .stopped files
+  src/server/workflows.ts the workflow files and their runs
   src/server/derive/*.ts  pure: state (2.2), phases (2.3), report parser (2.4), stats (2.5), Status line and Review section parsers
   src/server/demo.ts      the demo snapshot
   src/ui/…                React page
@@ -403,6 +468,12 @@ Vitest, in `apps/console`. Each claim at its cheapest level (testing rule 6):
   v2.0.22), yielding a run, its subagents, its outcome and the verifier's
   text; a database with only a 1.x `session` table, and one whose
   `session_v2` lacks `parent_id`, are each "unavailable" with that reason.
+- **Automations**: a workflow file's triggers, inputs and leading comment
+  are read (fixtures, including one with `on: [push]` and one with
+  `on: { schedule: [...] }`); the cron reader's next run for `*/15 * * * *`,
+  `0 6 * * 1-5` across a weekend, `30 2 1 * *`, and names (`MON`, `JAN`);
+  the dispatch route refuses a workflow with a required input and dispatches
+  one without, with the exact `gh` arguments.
 - **Pairing**: `opencode pair` output (stubbed) yields its loopback link;
   output with no link, and a missing binary, are 503s.
 - **Routes** with `app.request()`: the snapshot validates against its

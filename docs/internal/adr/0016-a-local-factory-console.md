@@ -48,11 +48,14 @@ hosted.
      `review-verifier`'s report block gives the findings.
    - The run logs' `.stopped` files under `.worktrees/factory-runs/`: the
      watchdog's stops.
+   - The workflow files in `.github/workflows/` and their runs. Automations
+     the factory gains later are scheduled GitHub workflows; the console lists
+     every workflow, so a new one needs no change to the console.
 
    No skill, agent, script or workflow changes for it. A console that is down
    or wrong cannot stop a delivery.
 
-5. **It writes in exactly two ways, both ones a person already has.**
+5. **It writes in exactly three ways, each one a person already has.**
    - **Start a factory run** dispatches `factory.yml` for an issue
      (`gh workflow run`), which is what `issue-state.yml` does; the workflow's
      own "Check who asked" step still decides.
@@ -60,6 +63,9 @@ hosted.
      it: OpenCode starts its own background service on loopback and prints a
      one-time sign-in link, which the console opens. The console never holds
      OpenCode's password.
+
+   - **Run now** dispatches a workflow that takes no required input, as the
+     Actions tab's button does.
 
    Nothing else: no labels, comments, merges, or simlock operations.
 
