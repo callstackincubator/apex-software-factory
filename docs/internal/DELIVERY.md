@@ -303,7 +303,7 @@ running as the maintainer's user — so two issues are delivered side by side.
 | `feature:ready`, `task:ready` or `bug:ready` added | `factory-run.sh <n>`: the `factory` agent delivers it |
 | `bug:triage` added | `factory-run.sh --triage <n>`: the `triager` agent |
 | `workflow_dispatch` with `issue` | either, by the issue's current label |
-| `issue-state.yml` promoting a task or a bug | a `workflow_dispatch` (labels set with the workflow token start no workflow) |
+| `issue-state.yml` promoting a task or a bug | the label, set as the factory app (ADR 0021) |
 
 A run acts only when the label's sender has write access or is this
 repository's automation, never on a pull request, and checks out `main`.
