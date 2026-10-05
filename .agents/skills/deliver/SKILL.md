@@ -73,7 +73,8 @@ stages recall their own, and the reviewers stay blind.
 ## 1. Take stock
 
 ```bash
-gh issue view <N> --json number,title,labels,assignees,body
+gh issue view <N> --json number,title,labels,body
+git ls-remote --heads origin <kind>/<N>   # the claim (rule 2): the branch exists or not
 ```
 
 - `task:ready`, `bug:ready`: one issue; go to step 3.
@@ -82,12 +83,12 @@ gh issue view <N> --json number,title,labels,assignees,body
 - `feature:ready` with a Tasks list: split it (step 2).
 - `feature:planned`: walk its open sub-issues (step 4).
 - Anything else: stop and say why (rule 1).
-- An assignee: agents share one account, so an assignee is "you" by login. A
-  run started by the dispatcher (`printenv APEX_DISPATCH` prints `1`) is the
-  only run for this issue (its concurrency group holds the others back): an
-  existing claim is a run that died, so continue from the branch and the PR's
-  Status line. Without the dispatcher, an assigned issue is someone else's
-  run: stop and say so.
+- A branch `<kind>/<N>` on origin: the issue is claimed. A run started by the
+  dispatcher (`printenv APEX_DISPATCH` prints `1`) is the only run for this
+  issue (its concurrency group holds the others back): the branch is an
+  earlier run's work, so continue from it and the PR's Status line. Without
+  the dispatcher, it is someone else's claim or parked work: stop and say so,
+  unless the person asked you to continue it.
 - **Resuming starts at the first stage not done.** Read the PR's Status line
   and the last `## Handoff`. If the reviews of the PR's current head commit
   are clean (0 open), go straight to what is left (the simulator line, the
@@ -116,7 +117,9 @@ with `Waiting:` listing the tasks. Without the dispatcher, walk the tasks
 
 ## 3. Deliver one issue
 
-Claim it: `gh issue edit <N> --add-assignee @me`. Its branch is `<kind>/<N>`.
+Claim it: `.agents/scripts/claim.sh <kind>/<N>` creates the branch
+`<kind>/<N>` on origin; a bug's starts at `bug/<N>-repro`, so the triage test
+is on it. Exit 3 means the branch exists: step 1 says whether you continue.
 
 1. **Implement.** `implementer` with `issue #N, branch <kind>/<N>, mode
 build`. A report with `spec needs` under Open: park (step 6).
@@ -226,10 +229,11 @@ gh api graphql -F owner='{owner}' -F repo='{repo}' -F number=<N> -f query='
   query($owner:String!,$repo:String!,$number:Int!){
     repository(owner:$owner,name:$repo){ issue(number:$number){
       subIssues(first:50){nodes{number title state
-        labels(first:5){nodes{name}} assignees(first:3){nodes{login}}}}}}}'
+        labels(first:5){nodes{name}}}}}}}'
 ```
 
-Runnable means open, `task:ready`, and unassigned; the issue-state workflow
+Runnable means open, `task:ready`, and unclaimed (no `task/<n>` branch on
+origin); the issue-state workflow
 makes a task ready only once everything under its Depends on is closed, so
 readiness already encodes the order. Deliver up to two runnable tasks at
 once: start each stage for both with `task` calls in the same message, and
@@ -262,7 +266,8 @@ _Written by an agent._
 
 Leave exactly one `## Handoff` comment (Done, Not done, Findings, Blocked on;
 150 words; rule 2) — the implementer has already pushed the branch — and
-release the claim:
+release the claim. The script deletes the branch only when nothing was pushed
+to it; a branch with work stays claimed, and the next run continues from it:
 
 ```bash
 gh issue comment <N> --body-file - <<'EOF'
@@ -270,7 +275,7 @@ gh issue comment <N> --body-file - <<'EOF'
 ...
 _Written by an agent._
 EOF
-gh issue edit <N> --remove-assignee @me
+.agents/scripts/claim.sh --release <kind>/<N>
 ```
 
 You edit no files: every body you post goes through `--body-file -` and a

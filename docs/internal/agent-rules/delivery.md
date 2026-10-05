@@ -67,8 +67,8 @@ Transitions per kind:
   label it came from.
 
 Everything after `ready` is read from GitHub itself, not from a label: in
-progress means an assignee is set, in review means a linked pull request is
-open, done means closed as completed.
+progress means its branch exists on origin (rule 2), in review means a linked
+pull request is open, done means closed as completed.
 
 ## Rules
 
@@ -84,11 +84,17 @@ open, done means closed as completed.
    ready. A new decision that needs an ADR, or a comment that would change the
    spec, is not covered: the agent stops and hands off.
 
-2. **The assignee is the claim, and a handoff is how a claim is released.**
-   Before doing anything on an issue an agent assigns itself, and it never
-   touches an issue that already has an assignee. This is the one cross-agent
-   lock in the model. An agent that stops before the PR is merged unassigns
-   itself and leaves exactly one comment headed `## Handoff` with four
+2. **The branch is the claim, and a handoff is how a claim is released.**
+   Before doing anything on an issue an agent claims it with
+   `.agents/scripts/claim.sh`, which creates the issue's branch on origin:
+   `<kind>/<n>`, or `bug/<n>-repro` for a triage. GitHub refuses to create a
+   branch that exists, so this is the one cross-agent lock in the model. An
+   agent never touches an issue whose branch exists, unless the dispatcher
+   started it for that issue (the branch is then an earlier run's work) or a
+   person asked it to continue. An agent that stops before the PR is merged
+   releases the claim (the script deletes the branch only when nothing was
+   pushed to it; a branch with work stays, for the next run to continue) and
+   leaves exactly one comment headed `## Handoff` with four
    sections: _Done_ (what is on the branch and how it was verified), _Not
    done_ (what remains, in the spec's own terms), _Findings_ (what was learned
    that is not in the spec and the next agent would otherwise rediscover),
@@ -156,7 +162,8 @@ open, done means closed as completed.
    found on the way is its own `bug:new` issue. The failing test goes to a
    `bug/<number>-repro` branch with no pull request. If the agent cannot
    reproduce, it moves the issue to `bug:needs-info` and says exactly what is
-   missing. Either way it unassigns itself.
+   missing. Either way it releases the claim; a branch carrying the failing
+   test stays.
 
 9. **Done is defined per kind.** A task or bug is done when the pull request
    that closes it is merged; for a bug the failing test from triage is the
@@ -187,8 +194,9 @@ open, done means closed as completed.
     150, a PR body 200 plus its checklist, Status and Review sections, a "Spec
     updated" comment one line. Do not restate the issue body. Every comment,
     issue body and PR body an agent writes ends with the line
-    `_Written by an agent._`, those exact characters — agents post under a
-    maintainer's account, and people and automation use the line to tell the
+    `_Written by an agent._`, those exact characters — an agent in a person's
+    session posts under that person's account (unattended runs post as the
+    factory app's bot), and people and automation use the line to tell the
     two apart.
 
 13. **Assume every agent is in a worktree.** Several agents share one clone
@@ -280,13 +288,14 @@ open, done means closed as completed.
 **Claiming work.**
 
 ```bash
-gh issue list --search 'label:bug:ready,feature:ready,task:ready no:assignee'
-gh issue edit <n> --add-assignee @me
-.agents/scripts/worktree.sh task/<n>    # or bug/<n>, feature/<n>; resumes origin/<branch>
+gh issue list --search 'label:bug:ready,feature:ready,task:ready'   # unclaimed: no <kind>/<n> on origin
+.agents/scripts/claim.sh task/<n>       # or bug/<n>, feature/<n>; exit 3: already claimed
+.agents/scripts/worktree.sh task/<n>    # tracks origin/<branch>
+.agents/scripts/claim.sh --release task/<n>   # when stopping; keeps a branch with work
 ```
 
-The PR body contains `Closes #<n>`. For a bug, branch from `bug/<n>-repro`
-when it exists so the triage test is carried forward.
+The PR body contains `Closes #<n>`. A bug's claim starts at `bug/<n>-repro`
+when it exists, so the triage test is carried forward.
 
 **Moving a label.** Add the new one and remove the old one in the same
 command, so the one-label invariant never breaks in between:
@@ -313,8 +322,8 @@ works with a device.
 - A `task:draft` issue becomes `task:ready` when its approval box is ticked,
   its Technical spec is filled in, and every issue under Depends on is closed.
   It is re-evaluated when its body changes and when a dependency closes.
-- A `task:ready` issue with no assignee goes back to `task:draft` when that
-  stops being true. A claimed task is left alone.
+- A `task:ready` issue with no `task/<n>` branch goes back to `task:draft`
+  when that stops being true. A claimed task is left alone.
 - A reporter's comment on a `bug:needs-info` issue moves it back to
   `bug:triage`, reopening it if needed. Two weeks of silence closes it.
 - When the last sub-issue of a `feature:planned` issue closes, the workflow
@@ -323,10 +332,10 @@ works with a device.
   line, with a comment pointing at the feature.
 - An issue closed as completed loses its assignee and its `<kind>:<state>`
   label.
-- A pull request closed without merging releases the claim on every issue its
-  body closes. A claim on a `*:ready` or `bug:triage` issue with no comment,
-  label change, or commit on its branch for six hours is released (the booth
-  runs for three days; a crashed agent must not hold an issue through it).
+- Nothing releases a claim automatically. When a run dies or its PR closes
+  unmerged, the branch keeps the work and the next run on the issue continues
+  from it; the dispatcher never waits on a claim. To start an issue over, a
+  person deletes its branch.
 - A pull request from a `<kind>/<n>` branch fails its check unless its body
   closes `#<n>` and nothing else.
 

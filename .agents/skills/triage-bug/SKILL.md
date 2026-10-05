@@ -9,10 +9,13 @@ You produce a report, not a fix. Rule 8 in
 `docs/internal/agent-rules/delivery.md` defines the report;
 `docs/internal/agent-rules/testing.md` defines what a reproduction is worth.
 
-Argument: an issue number. Without one, take the oldest unclaimed:
+Argument: an issue number. Without one, take the oldest unclaimed, the first
+with no `bug/<n>-repro` branch on origin:
 
 ```bash
-gh issue list --label bug:triage --search 'no:assignee' --json number,title --jq 'sort_by(.number)[0]'
+for n in $(gh issue list --label bug:triage --json number --jq 'sort_by(.number)[].number'); do
+  git ls-remote --exit-code --heads origin "bug/$n-repro" >/dev/null || { echo "$n"; break; }
+done
 ```
 
 **What earlier runs learned.** Before step 1, run
@@ -24,12 +27,17 @@ its footer says, as `triager`.
 
 ## 1. Claim
 
-Check the issue carries exactly `bug:triage` and has no assignee. If either is
-false, stop and say so. Otherwise:
+Check the issue carries exactly `bug:triage`. If not, stop and say so.
+Otherwise claim it; the claim is the branch `bug/<N>-repro` on origin:
 
 ```bash
-gh issue edit <N> --add-assignee @me
+.agents/scripts/claim.sh bug/<N>-repro
 ```
+
+Exit 3 means the branch exists. Under the dispatcher (`printenv
+APEX_DISPATCH` prints `1`) that is an earlier triage of this issue: continue
+from it. Without the dispatcher it is someone else's claim: stop and say so,
+unless the person asked you to continue it.
 
 Then look for a previous attempt and continue from it rather than repeating
 it:
@@ -108,7 +116,8 @@ gh issue comment <N> --body-file - <<'EOF'
 
 _Written by an agent._
 EOF
-gh issue edit <N> --add-label bug:needs-info --remove-label bug:triage --remove-assignee @me
+gh issue edit <N> --add-label bug:needs-info --remove-label bug:triage
+.agents/scripts/claim.sh --release bug/<N>-repro
 ```
 
 and stop.
@@ -164,7 +173,7 @@ List each one as a link under Side findings.
 
 ## 6. Report and release
 
-Post one comment with exactly these sections, then unassign. If a report
+Post one comment with exactly these sections, then release the claim. If a report
 already exists on the thread, yours replaces it: make the first line
 `Supersedes the report above.`
 
@@ -200,10 +209,11 @@ The report exists for one decision: `bug:ready` or not. Rule 12 applies: 300
 words outside code blocks, conclusion first, evidence in code blocks.
 
 ```bash
-gh issue edit <N> --remove-assignee @me
+.agents/scripts/claim.sh --release bug/<N>-repro
 ```
 
-Leave the label at `bug:triage`. Moving it to `bug:ready` is the maintainer's
+It keeps a branch that carries the failing test: that branch is the
+reproduction `bug:ready` builds on. Leave the label at `bug:triage`. Moving it to `bug:ready` is the maintainer's
 decision after reading the report.
 
 ## Stopping early
@@ -211,7 +221,7 @@ decision after reading the report.
 If you stop before the report is posted — out of context, told to stop,
 needing a simulator run — push whatever is on `bug/<N>-repro`, leave one
 comment headed `## Handoff` with Done, Not done, Findings and Blocked on, and
-unassign yourself. If you are waiting on the maintainer, also move the issue
+release the claim (`.agents/scripts/claim.sh --release bug/<N>-repro`). If you are waiting on the maintainer, also move the issue
 to `bug:blocked`; the maintainer re-adds `bug:triage` when the answer is in:
 
 ```bash

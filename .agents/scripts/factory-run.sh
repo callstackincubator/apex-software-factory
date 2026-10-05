@@ -8,7 +8,9 @@
 # environment, SIMLOCK_BIN included) and watches it. `opencode run --agent` ignores the agent's
 # own `variant` (it sent the model's default effort), so the script passes the agent file's
 # `model` and `variant` as `-m <model>#<variant>` (ADR 0008):
-#   - hard timeout: FACTORY_TIMEOUT_MIN (default 80) minutes for the whole run;
+#   - hard timeout: FACTORY_TIMEOUT_MIN (default 80) minutes for the whole run, and never later
+#     than five minutes before FACTORY_TOKEN_EXPIRES (epoch seconds; factory.yml sets it), so the
+#     last attempt's record and the handoff still go out with the run's GitHub token;
 #   - no progress: FACTORY_STALL_MIN (default 15) minutes in which no session this run started
 #     (the run's own or a subagent's) wrote to OpenCode's database
 #     (~/.local/share/opencode/opencode.db: session_v2 / session_message time_updated) and the
@@ -23,13 +25,17 @@
 # or came back with no text (a garbled reply; OpenCode exits 0 for both) counts as stopped too,
 # and is restarted the same way after a short backoff.
 #
+# Under the dispatcher, FACTORY_APP_SLUG names the factory's GitHub App (ADR 0020): GH_TOKEN is
+# its installation token, and every commit of the run is authored by its bot.
+#
 # After every attempt, run-record.sh writes the attempt's record (ADR 0016): a digest of every
 # stage from OpenCode's database, pushed to the memory branch, and the redacted transcript next
 # to the log, which factory.yml uploads as the run's artifact. FACTORY_JOURNAL points the
 # attempt's agents at <log>.journal.md for `memory.sh journal`.
 #
 # Exit: 0 the run ended on its own (merged, parked or reported — read the issue); 1 gave up
-# after the restart; 64 usage; 69 opencode or sqlite3 missing, or the agent file names no model.
+# after the restart; 64 usage; 69 opencode or sqlite3 missing, the agent file names no model, or
+# the app's bot user could not be looked up.
 # Logs: <checkout>/.worktrees/factory-runs/<issue>-<attempt>-<time>.log, with .journal.md,
 # .digest.md and .transcript.jsonl.gz beside it.
 set -uo pipefail
@@ -64,6 +70,19 @@ export OPENCODE_TEST_HOME="$root/.worktrees/opencode-home"
 mkdir -p "$OPENCODE_TEST_HOME"
 started=$(date +%s)
 deadline=$((started + timeout_min * 60))
+if [ -n "${FACTORY_TOKEN_EXPIRES:-}" ] && [ $((FACTORY_TOKEN_EXPIRES - 300)) -lt "$deadline" ]; then
+  deadline=$((FACTORY_TOKEN_EXPIRES - 300))
+fi
+budget_min=$(((deadline - started) / 60))
+
+# The bot's commit identity: its login and the noreply address GitHub links to it.
+if [ -n "${FACTORY_APP_SLUG:-}" ]; then
+  bot="$FACTORY_APP_SLUG[bot]"
+  bot_id=$(gh api "users/$bot" -q .id) || { echo "unavailable: no GitHub user $bot" >&2; exit 69; }
+  GIT_AUTHOR_NAME=$bot GIT_AUTHOR_EMAIL="$bot_id+$bot@users.noreply.github.com"
+  GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
+  export GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+fi
 
 if [ "$mode" = deliver ]; then
   agent=factory
@@ -129,7 +148,7 @@ run_attempt() {
       last_size=$size
     fi
     reason=
-    [ "$now" -ge "$deadline" ] && reason="hard timeout (${timeout_min} min for the run)"
+    [ "$now" -ge "$deadline" ] && reason="hard timeout (${budget_min} min for the run)"
     [ $((now - last_seen)) -ge $((stall_min * 60)) ] && reason="no progress for ${stall_min} min"
     if [ -n "$reason" ]; then
       echo "factory-run: #$issue attempt $n stopped: $reason" >&2
@@ -224,13 +243,14 @@ _Written by an agent._
 EOF
 )
 if [ -n "$kind" ] && gh issue comment "$issue" --body "$body" >/dev/null 2>&1; then
-  gh issue edit "$issue" --remove-assignee @me >/dev/null 2>&1 || true
   if [ "$mode" = deliver ]; then
+    "$root/.agents/scripts/claim.sh" --release "$kind/$issue" >&2 || true
     gh issue edit "$issue" --add-label "$kind:blocked" >/dev/null 2>&1 || true
   else
+    "$root/.agents/scripts/claim.sh" --release "bug/$issue-repro" >&2 || true
     gh issue edit "$issue" --add-label "bug:blocked" >/dev/null 2>&1 || true
   fi
-  echo "factory-run: gave up on #$issue; handoff posted, claim released, moved to blocked" >&2
+  echo "factory-run: gave up on #$issue; handoff posted, claim released unless the branch has work, moved to blocked" >&2
 else
   echo "factory-run: gave up on #$issue and could not post the handoff (gh failed or the issue has no state label); logs in $logs" >&2
 fi

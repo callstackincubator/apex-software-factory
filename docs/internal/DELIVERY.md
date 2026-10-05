@@ -30,7 +30,7 @@ PR and review → deploy record (ADR 0005).
 | Developer                          | Writes the Technical spec, accepts ADRs, sets `feature:ready`                                           | `spec` agent: the console's Specs tab, or `/spec <n> technical` |
 | Maintainer                         | Triage judgments, parked PRs, native builds, closing features                                           | GitHub, `/triage`, `/review` |
 | Agents                             | Implement, test, review, verify, merge                                                                  | `factory` agent, `/deliver` |
-| Automation                         | Label invariants, task readiness, stale claims, request closing                                         | `issue-state.yml`           |
+| Automation                         | Label invariants, task readiness, stale needs-info, request closing                                     | `issue-state.yml`           |
 
 ## Labels
 
@@ -113,7 +113,8 @@ their report blocks.
    each approval box (the developer's `feature:ready` was the approval); the
    automation promotes each to `task:ready` once its dependencies close, and
    each promotion starts its own factory run.
-2. **Claim.** The factory assigns itself. The branch is `<kind>/<n>`.
+2. **Claim.** The factory creates the branch `<kind>/<n>` on origin
+   (`claim.sh`); the branch is the claim.
 3. **Implement.** The `implementer` subagent makes a worktree under
    `.worktrees/`, commits the spec's tests red, opens a draft PR (so CI runs
    from the first push), turns them green contract → API → screen, runs
@@ -188,13 +189,15 @@ second model, the blind inputs stay; they are cheap and they work.
 ## Handoffs
 
 An agent that stops before its PR is merged — out of context, blocked, or told
-to stop — unassigns itself and leaves one `## Handoff` comment: Done, Not
+to stop — releases its claim and leaves one `## Handoff` comment: Done, Not
 done, Findings, Blocked on. The branch is the other half of the handoff:
 because it is always `<kind>/<n>`, the next agent knows where the commits are.
-A handoff that names a blocker also moves the issue to `<kind>:blocked`. A
-claim that goes silent for six hours, or whose PR is closed unmerged, is
-released by the automation. Every comment an agent writes ends with
-`_Written by an agent._`, because agents post under a maintainer's account.
+A handoff that names a blocker also moves the issue to `<kind>:blocked`.
+Releasing a claim deletes the branch only when nothing was pushed to it, so a
+branch with work stays claimed and the next run continues from it; a person
+deletes the branch to start over. Every comment an agent writes ends with
+`_Written by an agent._`, because an agent in a person's session posts under
+that person's account.
 
 ## What is automated and what is not
 
@@ -202,8 +205,9 @@ released by the automation. Every comment an agent writes ends with
 ↔ `task:ready` from approval, spec and dependencies; a reporter's reply moves
 `bug:needs-info` back to `bug:triage`; two silent weeks close it; a feature
 whose last task closed gets a note; a completed feature closes its request;
-an issue closed as completed loses its claim and its state label;
-stale or orphaned claims are released; a `<kind>/<n>` PR must close `#<n>`.
+an issue closed as completed loses its assignee and its state label; a
+`<kind>/<n>` PR must close `#<n>`. Claims are branches (ADR 0020), and nothing
+releases them automatically.
 `.github/workflows/labels.yml` keeps the labels equal to `.github/labels.json`.
 
 Manual on purpose: `bug:new` → `bug:triage`, `bug:triage` → `bug:ready`,
@@ -304,7 +308,8 @@ running as the maintainer's user — so two issues are delivered side by side.
 A run acts only when the label's sender has write access or is this
 repository's automation, never on a pull request, and checks out `main`.
 Runs for one issue queue behind each other (concurrency group per issue);
-the job times out after 90 minutes, and `factory-run.sh`'s watchdog stops a
+the job times out after 75 minutes. `factory-run.sh`'s watchdog ends the run
+five minutes before the GitHub App's token expires (about 50 minutes in), stops a
 run with no progress for 15 minutes, restarts it once from the branch, and
 otherwise leaves the handoff. The job summary links the issue and the PR.
 Every attempt leaves a run record (ADR 0016): a digest of each stage on the
@@ -334,10 +339,14 @@ Runner setup (once per runner directory, as the maintainer's user):
   `~/.local/share/opencode/auth.json` — the runner runs as the same user, so
   the maintainer's login applies. The run uses `--standalone`, so it inherits
   the job's environment.
-- **GitHub**: the agents post, push and open PRs as the maintainer, through
-  `gh`'s own login (`gh auth status` as that user); the workflow points the
-  checkout's git credential helper at `gh auth git-credential`. The workflow
-  token is never used for that: a push made with it would start no CI.
+- **GitHub**: the agents post, push, open PRs and merge as the factory's
+  GitHub App (ADR 0020). The job mints an installation token for this
+  repository from the secrets `FACTORY_APP_ID` and `FACTORY_APP_PRIVATE_KEY`
+  and hands it to the run as `GH_TOKEN`. The checkout's git credential helper
+  is `gh auth git-credential`, so git pushes use the same token, and the
+  run's commits are authored by the app's bot. Nothing on the runner needs a
+  GitHub login for this. The workflow token is never used for it: a push made
+  with that token would start no CI.
 - **Node, pnpm, gh** come from `scripts/ci/runner-env.sh`, as for the OTA
   runner.
 
@@ -351,7 +360,7 @@ Runner setup (once per runner directory, as the maintainer's user):
 - Forms: `.github/ISSUE_TEMPLATE/`; PR body: `.github/pull_request_template.md`
 - Skills: `.agents/skills/`; agents and commands: `.opencode/`; config:
   `opencode.json`
-- Scripts: `.agents/scripts/` — `worktree.sh`, `review-inputs.sh`,
+- Scripts: `.agents/scripts/` — `claim.sh`, `worktree.sh`, `review-inputs.sh`,
   `native-check.sh`, `device-lane.sh`, `merge-pr.sh`, `factory-run.sh`,
   `run-record.sh`, `memory.sh`, `prewarm.sh`, `check-agent-permissions.sh`,
   `ensure-pnpm.sh`; the native

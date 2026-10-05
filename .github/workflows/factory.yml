@@ -7,14 +7,15 @@ name: Factory
 #   - workflow_dispatch with an issue            -> either, by the issue's current label; this is
 #     how issue-state.yml starts a run, because labels set with the workflow token start nothing
 #
-# SECURITY: the runner runs as the maintainer's user, with OpenCode's provider credentials,
-# the maintainer's GitHub login (agents post under it) and the device pool. It runs only code
-# from main (this workflow checks out the default branch, never a PR), only for a label set by
-# someone with write access or by this repository's own automation, and never on
+# SECURITY: the runner runs as the maintainer's user, with OpenCode's provider credentials and
+# the device pool. On GitHub the agents act as the factory's GitHub App (ADR 0020): its
+# installation token, minted per job for this repository only, is the run's GH_TOKEN. It runs
+# only code from main (this workflow checks out the default branch, never a PR), only for a
+# label set by someone with write access or by this repository's own automation, and never on
 # pull_request or pull_request_target. Do not add such a trigger.
 #
-# Setup (runners, SIMLOCK_BIN, OpenCode auth): docs/internal/DELIVERY.md, "The factory
-# dispatcher".
+# Setup (runners, SIMLOCK_BIN, OpenCode auth, the app's secrets): docs/internal/DELIVERY.md,
+# "The factory dispatcher".
 
 on:
   issues:
@@ -45,7 +46,8 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       contains(fromJSON('["feature:ready","task:ready","bug:ready","bug:triage"]'), github.event.label.name)
     runs-on: [self-hosted, factory]
-    timeout-minutes: 90
+    # The app token lasts an hour; factory-run.sh ends the run five minutes before it expires.
+    timeout-minutes: 75
     permissions:
       contents: read
       issues: read
@@ -95,9 +97,8 @@ jobs:
         if: steps.what.outputs.mode != 'none'
         with:
           ref: ${{ github.event.repository.default_branch || 'main' }}
-          # The agents push and comment as the maintainer through the user's own git and gh
-          # login on this machine. The workflow token must not be left in the git config: a
-          # push made with it would start no CI on the PR.
+          # The agents push with the factory app's token (below). The workflow token must not be
+          # left in the git config: a push made with it would start no CI on the PR.
           persist-credentials: false
           fetch-depth: 0
 
@@ -109,20 +110,35 @@ jobs:
             [ -d "$dir" ] && echo "$dir" >>"$GITHUB_PATH"
           done
 
+      # The factory's GitHub identity (ADR 0020): an installation token of the factory app, for
+      # this repository only, revoked when the job ends. It expires after an hour, which bounds
+      # the run (factory-run.sh reads FACTORY_TOKEN_EXPIRES).
+      - name: Factory app token
+        id: app
+        if: steps.what.outputs.mode != 'none'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+
       # Run the factory from the newest main, not the commit that was main when the label
       # event fired: a run that waited in the queue, or a re-run of an old run, would otherwise
       # deliver with yesterday's skills and scripts. The checkout above cleans the directory,
       # so worktrees left by an earlier run are pruned here.
       - name: Newest main, clean worktree list
         if: steps.what.outputs.mode != 'none'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
-          # The agents' fetches and pushes authenticate as the maintainer through gh's own login
-          # (the checkout above left no token behind); local config only, shared by every worktree.
+          echo "FACTORY_TOKEN_EXPIRES=$(($(date +%s) + 3600))" >>"$GITHUB_ENV"
+          # The agents' fetches and pushes authenticate with GH_TOKEN, the app's token, through
+          # gh's credential helper. Local config only, shared by every worktree: not
+          # `gh auth setup-git`, which would rewrite the runner user's global git config.
           git remote set-url origin "https://github.com/$GITHUB_REPOSITORY.git"
           git config --local credential.https://github.com.helper ""
           git config --local --add credential.https://github.com.helper "!$(command -v gh) auth git-credential"
-          (unset GH_TOKEN GITHUB_TOKEN; gh auth status >/dev/null) || { echo "::error::gh is not logged in for the runner's user"; exit 1; }
-          (unset GH_TOKEN GITHUB_TOKEN; git fetch --quiet origin main)
+          gh api "repos/$GITHUB_REPOSITORY" --silent || { echo "::error::the factory app's token cannot read $GITHUB_REPOSITORY"; exit 1; }
+          git fetch --quiet origin main
           git checkout --quiet --detach origin/main
           git worktree prune
           echo "factory code: main at $(git rev-parse --short HEAD)"
@@ -144,9 +160,11 @@ jobs:
         if: steps.what.outputs.mode != 'none'
         env:
           MODE: ${{ steps.what.outputs.mode }}
+          # Every gh and git call of the run, the agents' included, is the app's bot.
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          FACTORY_APP_SLUG: ${{ steps.app.outputs.app-slug }}
         run: |
-          # No GH_TOKEN here: the agents use the maintainer's gh login, like a person at the laptop.
-          unset GH_TOKEN GITHUB_TOKEN
+          unset GITHUB_TOKEN
           if [ "$MODE" = triage ]; then
             .agents/scripts/factory-run.sh --triage "$ISSUE"
           else
