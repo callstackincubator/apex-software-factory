@@ -6,7 +6,7 @@ import { Platform, Pressable, Text, View } from "react-native";
 import { LiveDot } from "@/components/live-dot";
 import { UpdateInfo } from "@/components/update-info";
 import { api } from "@/lib/api";
-import { type ApiHealth, useApiHealth } from "@/lib/use-api-health";
+import { type ApiHealth, type Clock, defaultClock, useApiHealth } from "@/lib/use-api-health";
 import { fonts, space, type Theme, useTheme } from "@/theme";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -52,13 +52,18 @@ function platformName(os: string) {
 type Props = {
   /** Defaults to the app's API client; injectable for tests. */
   client?: Pick<ApiClient, "health">;
+  /** The clock the round trip is measured with; injectable for tests. Keep it stable. */
+  now?: Clock;
 };
 
 /** API health, app version and platform, running bundle — what a booth demo needs at a glance. */
-export function StatusFooter({ client = api }: Props) {
+export function StatusFooter({ client = api, now = defaultClock }: Props) {
   const theme = useTheme();
-  const { health, refresh } = useApiHealth(client);
+  const { health, refresh } = useApiHealth(client, now);
   const status = describe(health, theme);
+  // The round trip belongs to an answer only: "checking…" and "offline" show no time.
+  const latencyMs = health.state === "ok" ? health.latencyMs : null;
+  const rowText = latencyMs === null ? status.text : `${status.text} · ${latencyMs} ms`;
   const appVersion = Constants.expoConfig?.version ?? "unknown";
   const platform = platformName(Platform.OS);
 
@@ -75,7 +80,7 @@ export function StatusFooter({ client = api }: Props) {
         testID="status-api"
         onPress={refresh}
         accessibilityRole="button"
-        accessibilityLabel={`API status: ${status.text}`}
+        accessibilityLabel={`API status: ${rowText}`}
         accessibilityHint="Checks the API again"
         style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
       >
@@ -88,6 +93,18 @@ export function StatusFooter({ client = api }: Props) {
           >
             {status.text}
           </Text>
+          {latencyMs !== null && (
+            <Text
+              testID="status-api-latency"
+              selectable
+              accessible
+              accessibilityLabel={`API round trip ${latencyMs} ms`}
+              maxFontSizeMultiplier={1.6}
+              style={{ fontFamily: fonts.mono, fontSize: 12, color: theme.text }}
+            >
+              {`· ${latencyMs} ms`}
+            </Text>
+          )}
         </Row>
       </Pressable>
       <View

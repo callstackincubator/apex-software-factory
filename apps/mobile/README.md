@@ -191,7 +191,7 @@ pairing link never navigates the app (`src/app/+native-intent.tsx`).
 | `show_update_banner {message?, kind?}` | show the "New feature landed" banner without a deploy; a tap dismisses it                                                         |
 | `hide_update_banner`                   | hide the banner                                                                                                                   |
 | `reload_app`                           | restart into the staged bundle, like tapping the banner (destructive)                                                             |
-| `api_health`                           | call `/health` through the contract client, as the footer does (read-only)                                                        |
+| `api_health`                           | call `/health` through the contract client, as the footer does, including the round trip in ms (read-only)                        |
 | `native_capabilities`                  | every native library in the binary: `linked`, `missing` or `not-on-platform`, checked without permission prompts (read-only)      |
 | event `ota.update_staged`              | posted when a real bundle has downloaded                                                                                          |
 
