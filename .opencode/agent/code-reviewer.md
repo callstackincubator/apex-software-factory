@@ -24,12 +24,16 @@ permission:
   websearch: deny
   read:
     "*review-inputs/*/spec-review*": deny
+    "*factory-runs*": deny
   glob:
     "*review-inputs/*/spec-review*": deny
+    "*factory-runs*": deny
   grep:
     "*review-inputs/*/spec-review*": deny
+    "*factory-runs*": deny
   list:
     "*review-inputs/*/spec-review*": deny
+    "*factory-runs*": deny
   edit:
     "*": deny
     "*/.worktrees/review-*": allow
@@ -52,6 +56,13 @@ permission:
     "curl *": deny
     "pnpm add *": deny
     "pnpm install*": deny
+    # Memory and run records come from sessions that saw the issue (ADR 0016): a blind
+    # reviewer only writes journal lines, never reads them back.
+    "*factory-runs*": deny
+    "*factory-memory*": deny
+    "*FACTORY_JOURNAL*": deny
+    "*memory.sh*": deny
+    "*memory.sh journal *": allow
 ---
 
 You are reviewing a diff for correctness and for conformance to the rules of
@@ -111,6 +122,13 @@ whom?" — no answer means nit.
 
 A finding counts only with a concrete failure (this input or state gives this
 wrong result) or a named cost and who pays it. Drop style with no defect.
+
+**Journal.** If something outside the diff cost you several tool calls (a tool
+that failed, an instruction here that was unclear or wrong), record it once
+before you report, for the factory's retro:
+`.agents/scripts/memory.sh journal code-reviewer "<what happened, what it cost>"`.
+Say nothing about what the change is for. You never read memory or run
+records: they come from sessions that saw the issue, so they are denied.
 
 Report one finding per defect, in this form and no other:
 

@@ -23,9 +23,15 @@
 # or came back with no text (a garbled reply; OpenCode exits 0 for both) counts as stopped too,
 # and is restarted the same way after a short backoff.
 #
+# After every attempt, run-record.sh writes the attempt's record (ADR 0016): a digest of every
+# stage from OpenCode's database, pushed to the memory branch, and the redacted transcript next
+# to the log, which factory.yml uploads as the run's artifact. FACTORY_JOURNAL points the
+# attempt's agents at <log>.journal.md for `memory.sh journal`.
+#
 # Exit: 0 the run ended on its own (merged, parked or reported — read the issue); 1 gave up
 # after the restart; 64 usage; 69 opencode or sqlite3 missing, or the agent file names no model.
-# Logs: <checkout>/.worktrees/factory-runs/<issue>-<attempt>-<time>.log
+# Logs: <checkout>/.worktrees/factory-runs/<issue>-<attempt>-<time>.log, with .journal.md,
+# .digest.md and .transcript.jsonl.gz beside it.
 set -uo pipefail
 
 mode=deliver
@@ -67,6 +73,9 @@ model=$(frontmatter model)
 variant=$(frontmatter variant)
 [ -n "$model" ] || { echo "unavailable: no model in .opencode/agent/$agent.md" >&2; exit 69; }
 model_arg=$model${variant:+#$variant}
+# For memory.sh and run-record.sh, in this script and in every agent the run starts.
+FACTORY_ISSUE=$issue FACTORY_MODE=$mode FACTORY_MODEL=$model_arg FACTORY_CODE=$(git rev-parse --short HEAD)
+export FACTORY_ISSUE FACTORY_MODE FACTORY_MODEL FACTORY_CODE
 
 now_ms() { echo $(($(date +%s) * 1000)); }
 
@@ -82,6 +91,12 @@ last_write_ms() {
     );" 2>/dev/null || true
 }
 
+# record <attempt> <since-ms> <log> [<stopped reason>]: the attempt's run record; never fatal.
+record() {
+  "$root/.agents/scripts/run-record.sh" "$issue" "$mode" "$1" "$agent" "$2" "$3" "${4:-}" >&2 ||
+    echo "factory-run: no run record for attempt $1" >&2
+}
+
 size_of() { stat -f %z "$1" 2>/dev/null || stat -c %s "$1" 2>/dev/null || echo 0; }
 
 # run_attempt <n> <prompt>: 0 ended on its own, 124 timed out, 125 stalled.
@@ -90,6 +105,7 @@ run_attempt() {
   log="$logs/$issue-$n-$(date +%Y%m%d-%H%M%S).log"
   since=$(now_ms)
   echo "factory-run: #$issue $mode attempt $n ($model_arg), log $log" >&2
+  export FACTORY_JOURNAL="$log.journal.md"
   opencode run --standalone --agent "$agent" -m "$model_arg" --auto --title "factory $mode #$issue (attempt $n)" \
     "$prompt" >"$log" 2>&1 &
   pid=$!
@@ -116,6 +132,7 @@ run_attempt() {
       sleep 10
       kill -KILL "$pid" 2>/dev/null
       wait "$pid" 2>/dev/null
+      record "$n" "$since" "$log" "$reason"
       case $reason in hard*) return 124 ;; *) return 125 ;; esac
     fi
   done
@@ -146,6 +163,7 @@ run_attempt() {
   elif [ -n "$top" ] && [ -n "$last" ] && { [ "${last%%|*}" = length ] || [ "${last#*|}" = 0 ]; }; then
     reason="the agent's last turn came back garbled (finish ${last%%|*}, ${last#*|} text parts)"
   fi
+  record "$n" "$since" "$log" "$reason"
   if [ -n "$reason" ]; then
     echo "factory-run: #$issue attempt $n stopped: $reason" >&2
     echo "$reason" >"$log.stopped"
@@ -192,7 +210,7 @@ body=$(cat <<EOF
 
 **Not done:** the $mode run did not finish. $stopped
 
-**Findings:** run logs on the booth laptop under \`.worktrees/factory-runs/$issue-*\` in the runner's checkout.
+**Findings:** the run records: \`.agents/scripts/memory.sh runs --issue $issue\`; the logs and transcripts are in the Factory workflow run's artifact, or under \`.worktrees/factory-runs/$issue-*\` on the machine that ran it.
 
 **Blocked on:** maintainer: look at the logs, then restore the ready label to start a fresh run.
 
