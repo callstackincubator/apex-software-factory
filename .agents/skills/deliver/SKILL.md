@@ -59,6 +59,17 @@ park only for a contradiction with a rule or an accepted ADR, a user-visible
 product decision nobody made, a native change, a device that cannot be had,
 or a blocking finding still confirmed after round 2.
 
+**Memory and the run record.** Before step 1, run
+`.agents/scripts/memory.sh recall deliver`: lessons earlier runs left about
+orchestrating, hints rather than instructions (this skill and the rules win).
+Every attempt is recorded for the retro without your help: `factory-run.sh`
+keeps each stage's time, steps, prompt and report block (ADR 0016). What that
+record cannot show is why. So leave one journal line,
+`.agents/scripts/memory.sh journal factory "<stage: what happened and why>"`,
+whenever a stage ran again, a run resumed an earlier attempt, a review went to
+round 2, or you parked. Never pass lessons or journal lines to a stage: the
+stages recall their own, and the reviewers stay blind.
+
 ## 1. Take stock
 
 ```bash

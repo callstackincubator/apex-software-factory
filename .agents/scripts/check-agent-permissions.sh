@@ -10,9 +10,9 @@
 # defaults, then opencode.json, then the agent's own file) and, for each agent defined in
 # .opencode/agent/ plus the default `build` agent, and each action, finds the last catch-all
 # rule (resource "*"); the action can reach "ask" when there is none, when it says ask, or when
-# a later, narrower rule says ask. A subagent's and the factory's `question` tool must be
-# denied outright, since it too waits for a person. MCP tools are checked under their server
-# prefixes.
+# a later, narrower rule says ask. A subagent's, the factory's and the retro's `question` tool
+# must be denied outright, since it too waits for a person. MCP tools are checked under their
+# server prefixes.
 #
 # OpenCode also loads opencode.json and .opencode/ from every directory above the checkout up
 # to the repository's main checkout, so run this in a checkout that is not nested inside
@@ -87,8 +87,8 @@ const effect = (rules, action) =>
 
 // The default agent for people is configured here too, so it is held to the same rule.
 ours.add("build");
-// Agents that run with nobody to answer a question.
-const unattended = (agent) => agent.mode !== "primary" || agent.id === "factory";
+// Agents that run with nobody to answer a question (the retro may run from `opencode run`).
+const unattended = (agent) => agent.mode !== "primary" || agent.id === "factory" || agent.id === "retro";
 
 let failed = 0;
 for (const agent of agents) {

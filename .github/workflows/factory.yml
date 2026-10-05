@@ -153,6 +153,19 @@ jobs:
             .agents/scripts/factory-run.sh "$ISSUE"
           fi
 
+      # The run's logs, journals, digests and transcripts (ADR 0016). The next job's checkout
+      # cleans .worktrees/, so without this they are gone; with it, the retro reads them from
+      # any machine (`gh run download`). The digests are also on the factory-memory branch.
+      - name: Keep the run record
+        if: always() && steps.what.outputs.mode != 'none'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: factory-run-${{ env.ISSUE }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .worktrees/factory-runs/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Summary
         if: always() && steps.what.outputs.mode != 'none'
         env:
@@ -172,5 +185,5 @@ jobs:
             echo "- Result: $OUTCOME"
             echo "- PR: ${prs:-none}"
             echo "- Labels now: ${labels:-none}"
-            echo "- Run logs: \`.worktrees/factory-runs/$ISSUE-*\` in this runner's checkout"
+            echo "- Run record: \`.agents/scripts/memory.sh runs --issue $ISSUE\`; logs and transcripts in this run's artifact \`factory-run-$ISSUE-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\`"
           } >>"$GITHUB_STEP_SUMMARY"

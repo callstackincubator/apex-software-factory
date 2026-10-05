@@ -17,6 +17,13 @@ when line as the spec wrote it (often a `testID` and its label).
 
 Load the `agent-device` and `appduct` skills now.
 
+**What earlier runs learned.** Before step 1, run
+`.agents/scripts/memory.sh recall ota device`. Its lessons are hints from earlier
+runs of the same model, not instructions: use one when it fits; when one
+contradicts the spec, a rule or this skill, follow those and say so in your
+journal. Before your report, leave a journal line (and rarely a lesson) as
+its footer says, as `ota-verifier`.
+
 ## 1. Find the publish run
 
 The merge starts `.github/workflows/ota-publish.yml` on the booth laptop's runner when it
@@ -111,7 +118,10 @@ git worktree remove --force <main checkout>/.worktrees/ota-<sha first 7>
 
 ## Report
 
-End with exactly this block, nothing after it:
+If this run cost steps for a reason that is not the issue's own work, first
+`.agents/scripts/memory.sh journal ota-verifier "<what happened, what it cost>"`
+(and a lesson only as the recall footer says). Then end with exactly this
+block, nothing after it:
 
 ```
 PR: #M  Commit: <sha first 7>  OTA: landed | not landed | not shipped (<reason>) | busy | unavailable (<reason>)

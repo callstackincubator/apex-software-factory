@@ -252,6 +252,7 @@ text answer ([ADR 0015](internal/adr/0015-step-caps-and-no-implementer-device.md
 | `factory`         | primary  | Orchestrates one delivery; starts subagents, reasons over their reports, merges through the gate | Everything not denied; never writes code or reads the diff (by its skill)                                                | low     | 60       |
 | `intake`          | primary  | Booth front door: turns a visitor's idea into a `request:new` issue                            | Talks and files one issue; no edits, no subagents                                                                        | default | none     |
 | `spec`            | primary  | Spec sessions: business sections with a product owner, the Technical spec with a developer     | Issue bodies through `gh`, a Proposed ADR; only the `spec-checker` subagent; cannot set a ready label                   | default | none     |
+| `retro`           | primary  | Looks back at runs: finds what cost time or stopped them, curates lessons, proposes changes      | Run records, the memory branch, GitHub, transcript artifacts; changes `main` only as a draft PR a person accepted        | xhigh   | 120      |
 | `implementer`     | subagent | Tests-first implementation in a worktree; fix mode for findings                                 | The repo, the issue body, defaults; never a device                                                                       | medium  | 80       |
 | `spec-reviewer`   | subagent | Blind spec review: is every Scope and Done when line delivered, nothing extra                  | Only its inputs directory: issue, parent, linked ADRs and rules, `defaults.md`, `Assumption:` lines, diff. Not the repo | medium  | 20       |
 | `code-reviewer`   | subagent | Blind code review: what input or state breaks each changed function; rule breaches              | All agent rules, the ADR index, the diff, a detached worktree of the PR head. No issue, PR body, commit messages, `gh` or web | medium  | 40       |
@@ -328,6 +329,13 @@ agent uses each tool: [apps/mobile/README.md, Agent tooling](../apps/mobile/READ
 - **Morning warm-up.** `.agents/scripts/prewarm.sh` fills the pnpm store and
   the native build cache, and boots simlock's simulators before the first
   visitor.
+- **It learns from its runs.** Each stage starts by recalling the lessons
+  earlier runs left on the `factory-memory` branch, and may leave one, or a
+  journal line about what cost it time. Every attempt leaves a record of its
+  stages. `/retro` reads those from any machine, curates the lessons, and
+  proposes changes to skills, agents and scripts; a person decides which
+  ones land. ([ADR 0016](internal/adr/0016-factory-memory-run-records-and-retro.md),
+  [MEMORY.md](internal/MEMORY.md))
 
 ## Safety rails
 
@@ -455,7 +463,21 @@ opencode run "Reply with the single word ok."
   gh run watch <run-id>
   ```
 
-- **The full log** stays on the booth Mac, in the runner's checkout:
+- **The run record** of every attempt, from any machine: a digest of each
+  stage (time, steps, tool calls, prompts, report blocks, the agents' journal
+  lines) on the `factory-memory` branch, and the full log and transcript in
+  the workflow run's artifact
+  ([ADR 0016](internal/adr/0016-factory-memory-run-records-and-retro.md)):
+
+  ```bash
+  .agents/scripts/memory.sh runs --issue <n>
+  ```
+
+  ```bash
+  gh run download <run-id> -n factory-run-<n>-<run-id>-<attempt>
+  ```
+
+  While the job runs, the log is on the booth Mac, in the runner's checkout:
   `~/actions-runner-factory-<1|2>/_work/apex-software-factory/apex-software-factory/.worktrees/factory-runs/<n>-<attempt>-<time>.log`.
 - **OpenCode's database** has every session and step:
   `~/.local/share/opencode/opencode.db`. Open it read-only, so you never block
@@ -493,6 +515,7 @@ Details: [the console spec](internal/CONSOLE.md) and
 - Delivery manual: [DELIVERY.md](internal/DELIVERY.md)
 - OTA runbook: [OTA.md](internal/OTA.md)
 - Devices runbook: [DEVICES.md](internal/DEVICES.md)
+- Memory, run records and the retro: [MEMORY.md](internal/MEMORY.md)
 - Decisions: [docs/internal/adr/](internal/adr/README.md)
 - Rules every agent follows: [docs/internal/agent-rules/](internal/agent-rules/)
 - Setting up a machine: [BOOTSTRAP.md](BOOTSTRAP.md)

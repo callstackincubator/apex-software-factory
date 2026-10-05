@@ -17,9 +17,10 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0009](0009-a-faster-delivery-loop.md) | A faster delivery loop: lean review proving, a severity gate, parallel checks, a quicker OTA path | Accepted |
 | [0010](0010-native-build-cache.md) | A native build cache keyed by the OTA fingerprint, shared by Expo and the device lanes | Accepted |
 | [0011](0011-fewer-stopped-runs.md) | Fewer stopped runs: a spec check before ready, house defaults, assumptions instead of parking | Accepted |
-| [0012](0012-allow-by-default-watchdog-dispatcher.md) | Allow by default with a short deny list, a watchdog per run, and a GitHub Actions dispatcher | Accepted |
+| [0012](0012-allow-by-default-watchdog-dispatcher.md) | Allow by default with a short deny list, a watchdog per run, and a GitHub Actions dispatcher | Accepted (amended by 0016) |
 | [0013](0013-booth-binary-bundles-native-capabilities.md) | The booth binary carries the native libraries booth features are likely to need | Accepted |
 | [0014](0014-keep-the-models-reasoning-between-steps.md) | Keep the model's reasoning between steps | Accepted |
 | [0015](0015-step-caps-and-no-implementer-device.md) | Hard step caps per agent; the implementer never leases a device; the dispatcher runs the newest main | Accepted |
+| [0016](0016-factory-memory-run-records-and-retro.md) | Factory memory on a branch, a record of every run, and a retro agent | Accepted |
 | [0017](0017-a-local-factory-console.md) | A local, read-mostly factory console | Accepted (amended by 0018) |
 | [0018](0018-console-chats-with-intake-and-spec-agents.md) | The console chats with the intake and spec agents | Proposed |

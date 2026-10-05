@@ -306,9 +306,13 @@ repository's automation, never on a pull request, and checks out `main`.
 Runs for one issue queue behind each other (concurrency group per issue);
 the job times out after 90 minutes, and `factory-run.sh`'s watchdog stops a
 run with no progress for 15 minutes, restarts it once from the branch, and
-otherwise leaves the handoff. The job summary links the issue and the PR;
-the full run logs stay on the laptop under the runner's checkout,
-`.worktrees/factory-runs/`.
+otherwise leaves the handoff. The job summary links the issue and the PR.
+Every attempt leaves a run record (ADR 0016): a digest of each stage on the
+`factory-memory` branch (`.agents/scripts/memory.sh runs --issue <n>`), and
+the logs, journals and transcripts in the job's artifact
+`factory-run-<issue>-<run id>-<attempt>`; the next job's checkout wipes
+`.worktrees/factory-runs/`. The `retro` agent reads them from any machine:
+[MEMORY.md](MEMORY.md).
 
 Runner setup (once per runner directory, as the maintainer's user):
 
@@ -349,11 +353,13 @@ Runner setup (once per runner directory, as the maintainer's user):
   `opencode.json`
 - Scripts: `.agents/scripts/` — `worktree.sh`, `review-inputs.sh`,
   `native-check.sh`, `device-lane.sh`, `merge-pr.sh`, `factory-run.sh`,
-  `prewarm.sh`, `check-agent-permissions.sh`, `ensure-pnpm.sh`; the native
+  `run-record.sh`, `memory.sh`, `prewarm.sh`, `check-agent-permissions.sh`,
+  `ensure-pnpm.sh`; the native
   build cache in `tools/expo-build-cache/`
 - Workflows: `.github/workflows/` — `ci.yml`, `ota-publish.yml`,
   `factory.yml`, `issue-state.yml`, `labels.yml`; their helpers are in
   `scripts/ci/`
 - OTA: [OTA.md](OTA.md)
+- Memory, run records and the retro: [MEMORY.md](MEMORY.md)
 - Devices (simlock, agent-device, appduct, Rozenite host setup): [DEVICES.md](DEVICES.md),
   [ADR 0007](adr/0007-device-lane-simlock-agent-device.md)
