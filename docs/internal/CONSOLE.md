@@ -3,8 +3,9 @@
 A web page, run locally by the maintainer, that shows the factory's workers,
 every pending delivery with its time per phase, and the review statistics,
 and that can start a factory run, open an interactive OpenCode session, or
-chat with an OpenCode agent to capture a visitor's idea. Why it
-is built this way: [ADR 0016](adr/0016-a-local-factory-console.md).
+chat with an OpenCode agent to capture a visitor's idea or write a spec. Why
+it is built this way: [ADR 0017](adr/0017-a-local-factory-console.md), and for
+the chat [ADR 0018](adr/0018-console-chats-with-intake-and-spec-agents.md).
 
 ```bash
 pnpm console                 # build the page, start on http://127.0.0.1:4280
@@ -128,7 +129,7 @@ next refresh.
 
 ### 1.5 Memory branch
 
-The factory's memory (ADR 0016 on `main`: `lessons/<topic>/<id>.md`,
+The factory's memory ([ADR 0016](adr/0016-factory-memory-run-records-and-retro.md): `lessons/<topic>/<id>.md`,
 `curated/<topic>.md`, `runs/<YYYY-MM>/<run>.md`, `retros/<date>.md`) lives on
 the orphan branch `factory-memory`. The console reads it with `git`, run with
 `execFile` in the repository root, **read-only and with plumbing only**: no

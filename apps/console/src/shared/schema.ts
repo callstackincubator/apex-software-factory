@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Every shape the console's server sends and its page reads (ADR 0016 §3). */
+/** Every shape the console's server sends and its page reads (ADR 0017 §3). */
 
 export const WINDOWS = ["today", "7d", "all"] as const;
 export const Window = z.enum(WINDOWS);

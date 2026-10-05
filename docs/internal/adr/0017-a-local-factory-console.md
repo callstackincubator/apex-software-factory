@@ -1,4 +1,4 @@
-# 0016 — A local, read-mostly factory console
+# 0017 — A local, read-mostly factory console
 
 Status: Accepted
 

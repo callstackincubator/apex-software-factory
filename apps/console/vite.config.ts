@@ -2,7 +2,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 /**
- * The page's build (ADR 0016 §2). Vite's root is this directory; the server serves `dist`. Fonts
+ * The page's build (ADR 0017 §2). Vite's root is this directory; the server serves `dist`. Fonts
  * and charts are bundled and nothing is fetched from the internet at runtime.
  */
 export default defineConfig({

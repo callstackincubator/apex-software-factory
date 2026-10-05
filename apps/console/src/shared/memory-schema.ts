@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** The factory's memory branch as the console shows it (CONSOLE.md, Memory; ADR 0016 on main). */
+/** The factory's memory branch as the console shows it (CONSOLE.md, Memory; ADR 0016). */
 
 export const MEMORY_TOPICS = ["implement", "device", "ota", "triage", "deliver"] as const;
 

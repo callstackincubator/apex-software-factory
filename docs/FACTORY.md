@@ -485,7 +485,7 @@ success rate). It can start a factory run for an issue, run a workflow that
 needs no input, and open OpenCode's web app. It reads what the factory already
 writes and changes none of it; it listens on the loopback interface only.
 Details: [the console spec](internal/CONSOLE.md) and
-[ADR 0016](internal/adr/0016-a-local-factory-console.md); how to run it:
+[ADR 0017](internal/adr/0017-a-local-factory-console.md); how to run it:
 [apps/console/README.md](../apps/console/README.md).
 
 ## More

@@ -5,7 +5,7 @@ factory's workers, every pending delivery with its time per phase, the review
 statistics and the GitHub workflows, and that can start a factory run or open
 OpenCode. It is host tooling, not product. Specification:
 [docs/internal/CONSOLE.md](../../docs/internal/CONSOLE.md); decision:
-[ADR 0016](../../docs/internal/adr/0016-a-local-factory-console.md).
+[ADR 0017](../../docs/internal/adr/0017-a-local-factory-console.md).
 
 ## Run it
 

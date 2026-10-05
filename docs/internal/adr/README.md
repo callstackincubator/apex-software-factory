@@ -21,5 +21,5 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0013](0013-booth-binary-bundles-native-capabilities.md) | The booth binary carries the native libraries booth features are likely to need | Accepted |
 | [0014](0014-keep-the-models-reasoning-between-steps.md) | Keep the model's reasoning between steps | Accepted |
 | [0015](0015-step-caps-and-no-implementer-device.md) | Hard step caps per agent; the implementer never leases a device; the dispatcher runs the newest main | Accepted |
-| [0016](0016-a-local-factory-console.md) | A local, read-mostly factory console | Accepted |
-| [0017](0017-console-chats-with-intake-and-spec-agents.md) | The console chats with the intake and spec agents | Proposed |
+| [0017](0017-a-local-factory-console.md) | A local, read-mostly factory console | Accepted (amended by 0018) |
+| [0018](0018-console-chats-with-intake-and-spec-agents.md) | The console chats with the intake and spec agents | Proposed |

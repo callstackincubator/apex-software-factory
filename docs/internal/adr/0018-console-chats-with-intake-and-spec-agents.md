@@ -1,8 +1,8 @@
-# 0017 — The console chats with the intake and spec agents
+# 0018 — The console chats with the intake and spec agents
 
 Status: Proposed
 
-Amends [0016](0016-a-local-factory-console.md).
+Amends [0017](0017-a-local-factory-console.md).
 
 ## Context
 
@@ -14,7 +14,7 @@ in a second window, with a typed command. The console already shows
 everything after those steps. Business people at the booth should be able to
 start their step from the same page, with the right skill already applied.
 
-ADR 0016 §5 lets the console write in exactly three ways; a conversation is a
+ADR 0017 §5 lets the console write in exactly three ways; a conversation is a
 fourth.
 
 ## Decision
@@ -36,7 +36,7 @@ fourth.
    files one issue; `spec` writes issue bodies and, at most, a Proposed ADR,
    starts only `spec-checker`, and cannot set a ready label. The console adds
    no permission of its own.
-5. ADR 0016 §5 gains a fourth write: **Chat** starts sessions on the agents
+5. ADR 0017 §5 gains a fourth write: **Chat** starts sessions on the agents
    in (1) and sends the person's messages and form answers to them.
 
 ## Consequences
