@@ -53,7 +53,7 @@ import {
   previewUpdateBanner,
   type ReadyUpdate,
 } from "@/lib/ota-control";
-import { checkApiHealth } from "@/lib/use-api-health";
+import { checkApiHealth, type Clock, defaultClock } from "@/lib/use-api-health";
 
 /** Everything the handlers touch, injectable for tests. */
 export type AgentToolDeps = {
@@ -66,6 +66,8 @@ export type AgentToolDeps = {
     "getBundleId" | "getMinBundleId" | "getChannel" | "getFingerprintHash" | "reload"
   >;
   api: Pick<ApiClient, "health">;
+  /** The clock `api_health` measures the `/health` round trip with. */
+  now: Clock;
   navigation: {
     get(): NavigationState;
     navigate(path: string): void;
@@ -275,11 +277,17 @@ export function createAgentTools(deps: AgentToolDeps): AnyRegistration[] {
       outputSchema: z.object({
         state: z.enum(["ok", "offline"]).describe("offline = unreachable, error, or bad response"),
         version: z.string().optional().describe("API version when ok"),
+        latencyMs: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Round trip of the /health request in whole milliseconds, when ok"),
         apiUrl: z.string(),
       }),
       timeoutMs: 15_000,
       annotations: { readOnlyHint: true, idempotentHint: true },
-      handler: async () => ({ ...(await checkApiHealth(deps.api)), apiUrl: deps.apiUrl }),
+      handler: async () => ({ ...(await checkApiHealth(deps.api, deps.now)), apiUrl: deps.apiUrl }),
     }),
 
     tool({
@@ -341,6 +349,7 @@ export function defaultAgentToolDeps(): AgentToolDeps {
     apiUrl: apiBaseUrl,
     hotUpdater: HotUpdater,
     api,
+    now: defaultClock,
     navigation: {
       get: getNavigationState,
       navigate: (path) => router.navigate(path as Href),
