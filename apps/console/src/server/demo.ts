@@ -1,6 +1,7 @@
-import type { Source, WatchdogStop } from "../shared/schema.ts";
+import type { ChatMessage, ChatForm, ChatState, Source, WatchdogStop } from "../shared/schema.ts";
+import { ChatNotFound, roleFor, type ChatService } from "./chat.ts";
 import type { Collected } from "./derive/deliveries.ts";
-import type { FactoryRun, IssueRecord, PrRecord } from "./github.ts";
+import type { FactoryRun, IssueRecord, PrRecord, SpecIssue } from "./github.ts";
 import type { RunRecord, Subagent } from "./opencode-db.ts";
 import { previousRun } from "./derive/cron.ts";
 import type { AutomationsCollector, Collector } from "./service.ts";
@@ -176,6 +177,60 @@ function sources(now: number): { ok: (name: Source["name"]) => Source } {
 }
 
 /** The demo's three readings at `now`. */
+/** Two requests and three feature specs; one request already has its feature. */
+function demoSpecs(now: number): { waiting: SpecIssue[]; features: SpecIssue[] } {
+  const spec = (
+    number: number,
+    title: string,
+    labels: string[],
+    body: string,
+    updatedAgo: number,
+  ): SpecIssue => ({
+    number,
+    title,
+    url: `https://github.com/${REPO}/issues/${number}`,
+    labels,
+    body,
+    createdAt: now - updatedAgo - 2 * HOUR,
+    updatedAt: now - updatedAgo,
+  });
+  const request = (number: number, title: string, ago: number) =>
+    spec(
+      number,
+      title,
+      ["request:new"],
+      "## The problem\nI never know which talk my friends pick.",
+      ago,
+    );
+  const feature = (number: number, title: string, of: number, questions: string, ago: number) =>
+    spec(
+      number,
+      title,
+      ["feature:spec"],
+      `Request: #${of}\n\n## Open questions\n${questions}\n\n## Technical spec\n<!-- to write -->`,
+      ago,
+    );
+  const features = [
+    feature(
+      46,
+      "Friends' talks on the schedule",
+      43,
+      "- Should a friend's pick show their full name?",
+      25 * MIN,
+    ),
+    feature(47, "Lunch matching", 42, "<!-- none yet -->\nNone", 2 * HOUR),
+    feature(48, "Save a talk for later", 40, "-", 5 * HOUR),
+  ];
+  return {
+    waiting: [
+      request(44, "Tell me when a talk is full", 10 * MIN),
+      request(43, "See which talks my friends go to", 3 * HOUR),
+      ...features,
+    ],
+    features,
+  };
+}
+
 export function demoCollected(now: number): Collected {
   sequence = 0;
   const pr = (
@@ -620,7 +675,15 @@ export function demoCollected(now: number): Collected {
     repo: REPO,
     github: {
       source: sources(now).ok("github"),
-      data: { ok: true, repo: REPO, runners: week, runnersNote: null, runs: ghRuns, issues },
+      data: {
+        ok: true,
+        repo: REPO,
+        runners: week,
+        runnersNote: null,
+        runs: ghRuns,
+        issues,
+        specs: demoSpecs(now),
+      },
     },
     opencode: {
       source: sources(now).ok("opencode"),
@@ -793,4 +856,134 @@ export function demoAutomationsRead(now: number, dir: string): AutomationsRead {
 /** An automations collector that serves the demo, rebuilt on every call so its times stay current. */
 export function demoAutomations(dir: string, now: () => number = Date.now): AutomationsCollector {
   return { collect: async () => demoAutomationsRead(now(), dir) };
+}
+
+/**
+ * A scripted conversation for the Ideas tab, with no OpenCode: a greeting, a question as a form,
+ * a draft. Nothing is filed. Replies are instant, so the page's polling has nothing to wait for.
+ */
+export function demoChat(): ChatService {
+  interface Session {
+    messages: ChatMessage[];
+    forms: ChatForm[];
+    turns: number;
+    spec: boolean;
+  }
+  const sessions = new Map<string, Session>();
+  let counter = 0;
+  const get = (id: string) => {
+    const session = sessions.get(id);
+    if (session === undefined) throw new ChatNotFound(id);
+    return session;
+  };
+  const say = (session: Session, text: string, tool?: string) => {
+    counter += 1;
+    session.messages.push({
+      id: `msg_demo${counter}`,
+      role: "agent",
+      parts: [
+        ...(tool === undefined
+          ? []
+          : [
+              {
+                kind: "tool" as const,
+                tool: { name: "skill", status: "completed" as const, summary: tool },
+              },
+            ]),
+        { kind: "text", text },
+      ],
+    });
+  };
+  const hear = (session: Session, text: string) => {
+    counter += 1;
+    session.messages.push({
+      id: `msg_demo${counter}`,
+      role: "user",
+      parts: [{ kind: "text", text }],
+    });
+  };
+  const askWho = (session: Session, idea: string) => {
+    say(
+      session,
+      `So you want this: *${idea.slice(0, 120)}*\n\nOne question: **who** would use it?`,
+    );
+    session.forms = [
+      {
+        id: "frm_demo1",
+        title: "Questions",
+        fields: [
+          {
+            key: "q0",
+            title: "Who",
+            description: "Who runs into this, and when?",
+            required: true,
+            type: "string",
+            custom: true,
+            options: [
+              { value: "Me, at the conference", label: "Me, at the conference" },
+              { value: "Someone at home", label: "Someone at home" },
+              { value: "My team", label: "My team" },
+            ],
+          },
+        ],
+      },
+    ];
+  };
+  const draft = (session: Session) =>
+    say(
+      session,
+      "Here is the request as I would file it:\n\n- **Title:** See which talks my friends go to\n- **Who:** me, at the conference\n- **What you would see:** a list of talks with a friend count\n\nShall I file this as it is, or change something? *(Demo: nothing is filed.)*",
+      "loaded skill intent",
+    );
+  return {
+    async start(request) {
+      counter += 1;
+      const sessionId = `ses_demo${counter}`;
+      const session: Session = { messages: [], forms: [], turns: 0, spec: request.role === "spec" };
+      if (request.role === "spec") {
+        say(
+          session,
+          `This is the demo: I would run \`/spec ${roleFor(request).kickoff.text}\` for **#${request.issue}** (${request.mode}) and write the ${request.mode} spec with you. Nothing is edited on GitHub.`,
+          "loaded skill spec-session",
+        );
+        sessions.set(sessionId, session);
+        return { sessionId };
+      }
+      say(
+        session,
+        "Hello, and welcome to the booth. **What would you like the app to help with?**\n\nFor example:\n\n- keep track of the talks I want to see\n- find people to have lunch with",
+        "loaded skill intent",
+      );
+      sessions.set(sessionId, session);
+      return { sessionId };
+    },
+    async state(id): Promise<ChatState> {
+      const session = get(id);
+      return {
+        messages: session.messages,
+        forms: session.forms,
+        permissionPending: false,
+        running: false,
+        failure: null,
+      };
+    },
+    async send(id, text) {
+      const session = get(id);
+      session.turns += 1;
+      hear(session, text);
+      if (session.spec) say(session, "Noted. *(Demo: no issue is edited.)*");
+      else if (session.turns === 1) askWho(session, text);
+      else if (session.turns === 2) draft(session);
+      else say(session, "This is the demo: nothing is filed, and I have no more to say.");
+    },
+    async answer(id, formId, answer) {
+      const session = get(id);
+      if (!session.forms.some((f) => f.id === formId)) throw new ChatNotFound(formId);
+      session.forms = [];
+      session.turns += 1;
+      hear(session, Object.values(answer).map(String).join(", "));
+      say(session, "Thanks. And what would you **see** when you open the app?");
+    },
+    async stop() {},
+  };
 }

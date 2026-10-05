@@ -33,32 +33,17 @@ export function Overview({ snapshot }: { snapshot: Snapshot }) {
 
   return (
     <div className="view">
-      <PageHeader title="Overview" subtitle="Who is working on what, right now." />
+      <PageHeader title="Overview" />
       <StatCards
         stats={[
-          {
-            label: "Workers busy",
-            value: `${busy} / ${workers.length}`,
-            caption: "factory runners holding an issue",
-          },
-          { label: "Queued", value: String(queue.length), caption: "runs waiting for a worker" },
-          { label: "Running", value: String(running), caption: "deliveries in progress" },
-          {
-            label: "Merged today",
-            value: String(mergedToday),
-            caption: "pull requests merged since midnight",
-          },
+          { label: "Workers busy", value: `${busy} / ${workers.length}` },
+          { label: "Queued", value: String(queue.length) },
+          { label: "Running", value: String(running) },
+          { label: "Merged today", value: String(mergedToday) },
           { label: "Blocked or parked", value: String(attention), caption: "waiting for a person" },
         ]}
       />
-      <Panel
-        title="Workers"
-        description={
-          snapshot.workersNote === null
-            ? "One card per factory runner."
-            : `One card per factory runner — ${snapshot.workersNote}.`
-        }
-      >
+      <Panel title="Workers" description={snapshot.workersNote ?? undefined}>
         {workers.length === 0 ? (
           <p className="muted">No factory runner is known.</p>
         ) : (
@@ -81,16 +66,13 @@ export function Overview({ snapshot }: { snapshot: Snapshot }) {
                   #{item.issue}
                 </Link>{" "}
                 {item.title ?? ""}{" "}
-                <span className="muted mono">waiting {formatDuration(item.waitingMs)}</span>
+                <span className="muted mono nowrap">waiting {formatDuration(item.waitingMs)}</span>
               </li>
             ))}
           </ol>
         )}
       </Panel>
-      <Panel
-        title="In progress"
-        description="Running and queued deliveries, with the time each phase has taken."
-      >
+      <Panel title="In progress">
         <DataTable
           rows={inProgress}
           rowId={(d) => String(d.issue)}
@@ -147,11 +129,16 @@ const progressColumns: Column<Delivery>[] = [
   {
     header: "Issue",
     mono: true,
+    width: "6rem",
     cell: (d) => <Link to={`/pipeline/${d.issue}`}>#{d.issue}</Link>,
   },
   { header: "Title", cell: (d) => d.title },
-  { header: "State", cell: (d) => <StateStatus state={d.state} /> },
-  { header: "Phase", cell: (d) => d.currentPhase ?? (d.state === "queued" ? "waiting" : "—") },
+  { header: "State", width: "8rem", cell: (d) => <StateStatus state={d.state} /> },
+  {
+    header: "Phase",
+    width: "8rem",
+    cell: (d) => d.currentPhase ?? (d.state === "queued" ? "waiting" : "—"),
+  },
   {
     header: "Time per phase",
     cell: (d) => <PhaseStrip phases={d.phases} current={d.currentPhase} />,

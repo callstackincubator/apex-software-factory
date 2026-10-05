@@ -5,7 +5,10 @@ import { formatAge } from "./format.ts";
 import { Brand } from "./layout.tsx";
 import { Link, usePath } from "./router.tsx";
 import { Status } from "./status.tsx";
+import { IdeasView } from "./views/ideas.tsx";
+import { SpecsView } from "./views/specs.tsx";
 import { DeliveryView } from "./views/delivery.tsx";
+import { MemoryFileView, MemoryView } from "./views/memory.tsx";
 import { OpencodeView } from "./views/opencode.tsx";
 import { OverviewView } from "./views/overview.tsx";
 import { PipelineView } from "./views/pipeline.tsx";
@@ -15,9 +18,12 @@ import { StatsView } from "./views/stats.tsx";
 
 export const TABS = [
   { path: "/", label: "Overview" },
+  { path: "/ideas", label: "Ideas" },
+  { path: "/specs", label: "Specs" },
   { path: "/pipeline", label: "Pipeline" },
   { path: "/stats", label: "Stats" },
   { path: "/automations", label: "Automations" },
+  { path: "/memory", label: "Memory" },
   { path: "/opencode", label: "OpenCode" },
 ] as const;
 
@@ -40,6 +46,8 @@ export function App() {
 
 function Route({ path }: { path: string }) {
   if (path === "/") return <OverviewView />;
+  if (path === "/ideas") return <IdeasView />;
+  if (path === "/specs") return <SpecsView />;
   if (path === "/pipeline") return <PipelineView />;
   const delivery = /^\/pipeline\/(\d+)$/.exec(path);
   if (delivery) return <DeliveryView issue={Number(delivery[1])} />;
@@ -47,6 +55,9 @@ function Route({ path }: { path: string }) {
   if (path === "/automations") return <AutomationsView />;
   const automation = /^\/automations\/([^/]+)$/.exec(path);
   if (automation) return <AutomationView file={decodeURIComponent(automation[1] ?? "")} />;
+  if (path === "/memory") return <MemoryView />;
+  const memoryFile = /^\/memory\/(.+)$/.exec(path);
+  if (memoryFile) return <MemoryFileView path={decodeURIComponent(memoryFile[1] ?? "")} />;
   if (path === "/opencode") return <OpencodeView />;
   return (
     <div className="view">

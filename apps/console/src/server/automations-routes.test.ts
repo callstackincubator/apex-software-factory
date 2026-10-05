@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { AutomationDetail, AutomationsResponse } from "../shared/schema.ts";
 import { createApp } from "./app.ts";
-import { demoAutomations, demoCollector } from "./demo.ts";
+import { demoAutomations, demoChat, demoCollector } from "./demo.ts";
 import type { GhRunner } from "./github.ts";
 import { NOW } from "./test-support.ts";
 import { dispatchWorkflow, type AutomationsRead, type WorkflowFile } from "./workflows.ts";
@@ -40,6 +40,7 @@ function makeApp(files: WorkflowFile[], over: { demo?: boolean; gh?: GhRunner } 
       info: async () => ({ available: false }),
       pair: async () => ({ url: "", expiresInMinutes: 5 }),
     },
+    chat: demoChat(),
     dispatch: async () => {},
     dispatchWorkflow: over.gh
       ? (repo, file) => dispatchWorkflow(over.gh as GhRunner, repo, file)
@@ -74,6 +75,7 @@ describe("GET /api/automations", () => {
         info: async () => ({ available: false }),
         pair: async () => ({ url: "", expiresInMinutes: 5 }),
       },
+      chat: demoChat(),
       dispatch: async () => {},
       dispatchWorkflow: async () => {},
     });

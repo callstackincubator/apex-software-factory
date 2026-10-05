@@ -17,7 +17,9 @@ pnpm --filter @apex/console dev    # server with --watch, and Vite on :5173 prox
 
 Open <http://127.0.0.1:4280>. It needs, for real data, `gh` logged in (as a
 user who can see the repository's Actions) and, for phases and findings, the
-OpenCode v2 database. Each source is optional: when one fails, the page says
+OpenCode v2 database. The Memory tab reads the `factory-memory` branch with
+`git` (read-only: a fetch of that branch and plumbing, never a checkout or a
+push). Each source is optional: when one fails, the page says
 which and why, and shows the rest.
 
 ## Configuration
@@ -35,10 +37,14 @@ Environment variables, read once in `src/server/config.ts`:
 
 ## What it writes
 
-Only three things, all of which a person already does: dispatch `factory.yml`
+Only four things, all of which a person already does: dispatch `factory.yml`
 for an issue (**Start run**), dispatch another workflow on the default branch
-(**Run now**, only one with `workflow_dispatch` and no required input), and run
-`opencode pair` to open OpenCode's web app. Everything else is read-only. It
+(**Run now**, only one with `workflow_dispatch` and no required input), run
+`opencode pair` to open OpenCode's web app, and, on the **Ideas** and **Specs**
+tabs, create OpenCode sessions on the `intake` and `spec` agents and send
+messages to them (through `opencode api`; the agents file or edit issues, the
+`intake` one only when the visitor says yes).
+Everything else is read-only. It
 answers only loopback `Host` headers, and a `POST` only with its own `Origin`.
 
 ## Tests

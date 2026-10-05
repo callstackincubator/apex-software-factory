@@ -142,6 +142,10 @@ a:hover {
   overflow-wrap: anywhere;
 }
 
+.nowrap {
+  white-space: nowrap;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -463,6 +467,7 @@ input[aria-invalid="true"] {
 
 /* Stat cards: a mono label, a big number, a small caption. */
 
+/* At least 200px wide; on a phone 140px, so two sit side by side. */
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
@@ -495,6 +500,7 @@ input[aria-invalid="true"] {
   font-weight: 500;
   letter-spacing: -0.02em;
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .stat-caption {
@@ -729,16 +735,6 @@ input[aria-invalid="true"] {
   outline: none;
 }
 
-.chart-summary {
-  margin: 0 0 var(--space-2);
-  font-size: var(--text-sm);
-}
-
-.chart-summary strong {
-  font-family: var(--font-mono);
-  font-weight: 600;
-}
-
 .chart-data summary {
   padding: var(--space-2) 0;
   color: var(--text-muted);
@@ -869,6 +865,11 @@ input[aria-invalid="true"] {
     color: var(--text-muted);
     font-family: var(--font-sans);
   }
+
+  /* A cell with nothing to show, such as Run where nothing can start, has no line. */
+  .table-wide td:empty {
+    display: none;
+  }
 }
 
 @media (max-width: 767.98px) {
@@ -927,6 +928,10 @@ input[aria-invalid="true"] {
     content: attr(data-label);
     color: var(--text-muted);
     font-family: var(--font-sans);
+  }
+
+  .table td:empty {
+    display: none;
   }
 }
 
@@ -1134,6 +1139,7 @@ ul.connection {
 
 .run-cell {
   display: grid;
+  justify-items: start;
   gap: var(--space-2);
 }
 
@@ -1344,10 +1350,6 @@ ul.connection {
   border-top: 1px solid var(--border);
 }
 
-.chart-summary {
-  color: var(--text-muted);
-}
-
 @media (min-width: 1100px) {
   .table-wide td .phase-strip-wrap {
     min-width: 120px;
@@ -1359,8 +1361,17 @@ ul.connection {
     gap: var(--space-2);
   }
 
+  .stats {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+    gap: var(--space-3);
+  }
+
   .stat {
     padding: var(--space-3) var(--space-4) var(--space-4);
+  }
+
+  .stat-value {
+    font-size: var(--text-lg);
   }
 
   .panel-header,
@@ -1438,10 +1449,308 @@ ul.connection {
   gap: 0 var(--space-3);
 }
 
-.status-field {
+.table .num {
   white-space: nowrap;
 }
 
-.table .num {
-  white-space: nowrap;
+/* Chat: a conversation with an OpenCode agent. A bordered column that fills the screen below the
+ * tabs on a phone: the messages scroll, the composer stays at the bottom. */
+
+.chat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: calc(100dvh - 15rem);
+  min-height: 22rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Rows are positioned by the virtualizer; the box is as tall as all of them. */
+.chat-rows {
+  position: relative;
+  width: 100%;
+}
+
+.chat-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+}
+
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.chat-agent {
+  align-items: flex-start;
+}
+
+.chat-user {
+  align-items: flex-end;
+}
+
+.chat-user .chat-text {
+  max-width: 85%;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  white-space: pre-wrap;
+}
+
+.chat-tool {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.chat-tool::before {
+  content: "› ";
+}
+
+.chat-tool.is-error {
+  color: var(--status-error);
+}
+
+.chat-markdown {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-6);
+}
+
+.chat-markdown pre {
+  max-width: 100%;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  overflow-x: auto;
+  background: var(--field);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.chat-markdown code {
+  font-size: 0.9em;
+}
+
+.chat-markdown :not(pre) > code {
+  padding: 0 var(--space-1);
+  background: var(--chip);
+}
+
+.chat-markdown pre code {
+  overflow-wrap: normal;
+}
+
+.chat-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.chat-markdown th,
+.chat-markdown td {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+}
+
+.chat-markdown blockquote {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.chat-tail {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.chat-tail:empty {
+  display: none;
+}
+
+.chat-thinking {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+/* A question from the agent: choices as buttons, other fields as plain inputs. */
+.chat-form {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+}
+
+.chat-field {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.chat-field .hint {
+  margin: 0;
+}
+
+.chat-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chat-options .button {
+  /* Answers, not labels: sentence case in the body font. */
+  font-family: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  height: auto;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  white-space: normal;
+  text-align: left;
+}
+
+.chat-options .button.is-chosen {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.chat-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chat-check input {
+  width: auto;
+  min-height: 0;
+}
+
+.chat-jump {
+  position: absolute;
+  right: var(--space-3);
+  bottom: 6.5rem;
+  background: var(--bg);
+}
+
+.chat-error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.chat-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.chat-composer textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  max-height: 10rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--field);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  resize: none;
+}
+
+.chat-composer-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+@media (min-width: 768px) {
+  .chat {
+    height: calc(100dvh - 19rem);
+    min-height: 26rem;
+  }
+
+  .chat-composer textarea {
+    font-size: var(--text-md);
+  }
+}
+
+@media (max-width: 479.98px) {
+  .chat-composer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chat-composer-actions .button {
+    flex: 1;
+  }
+}
+
+/* Specs: the action buttons wrap instead of pushing the page sideways. */
+.spec-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* A label wider than the cell wraps inside its button instead of leaving the panel. */
+.spec-actions .button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+
+/* Memory */
+.memory-topic + .memory-topic {
+  margin-top: var(--space-4);
+}
+
+.memory-list {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-6);
+}
+
+.memory-list li {
+  margin-bottom: var(--space-1);
+  overflow-wrap: anywhere;
 }

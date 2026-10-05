@@ -1,14 +1,19 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./app.ts";
 import { ConfigError, loadConfig, type Config } from "./config.ts";
-import { demoCollector } from "./demo.ts";
-import { dispatchRun, ghRunner, resolveRepo } from "./github.ts";
+import { demoChat, demoCollector } from "./demo.ts";
+import { createChatService } from "./chat.ts";
+import { buildSpecs } from "./derive/specs.ts";
+import { createOpencodeApi } from "./opencode-api.ts";
+import { dispatchRun, EMPTY_SPECS, ghRunner, resolveRepo } from "./github.ts";
 import { openOpencodeDb } from "./opencode-db.ts";
 import { createOpencodeCli } from "./opencode-cli.ts";
 import { discoverRunLogDirs } from "./run-logs.ts";
 import { createAutomationsCollector, createCollector } from "./service.ts";
 import { demoAutomations } from "./demo.ts";
 import { dispatchWorkflow } from "./workflows.ts";
+import { createMemory, gitRunner } from "./memory.ts";
+import { demoGit } from "./memory-demo.ts";
 import { join } from "node:path";
 
 let config: Config;
@@ -58,7 +63,20 @@ const app = createApp({
   distDir: config.distDir,
   collector,
   opencode,
+  chat: config.demo
+    ? demoChat()
+    : createChatService({
+        api: createOpencodeApi({ cwd: config.repoRoot }),
+        specRow: async (issue) => {
+          const queues = buildSpecs((await collector.collect()).github.data?.specs ?? EMPTY_SPECS);
+          return [...queues.business, ...queues.technical].find((r) => r.issue === issue) ?? null;
+        },
+      }),
   dispatch: (repo, issue) => dispatchRun(gh, repo, issue),
+  memory: createMemory({
+    now: Date.now,
+    git: config.demo ? demoGit(Date.now) : gitRunner(config.repoRoot),
+  }),
 });
 
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {

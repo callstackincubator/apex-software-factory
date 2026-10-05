@@ -133,11 +133,12 @@ export function Automations({
           {
             header: "Next run",
             mono: true,
+            width: "8rem",
             cell: (a: Automation) => <NextRun automation={a} now={now} />,
           },
         ]
       : []),
-    { header: "Status", cell: (a) => <AutomationStatus status={a.status} /> },
+    { header: "Status", width: "7rem", cell: (a) => <AutomationStatus status={a.status} /> },
     {
       header: "Last run",
       cell: (a) =>
@@ -153,16 +154,19 @@ export function Automations({
           </span>
         ),
     },
-    { header: "Success", numeric: true, cell: (a) => rate(a) },
+    { header: "Success", numeric: true, width: "6rem", cell: (a) => rate(a) },
     {
       header: "Median",
       numeric: true,
+      width: "7rem",
       cell: (a) => (a.medianMs === null ? "—" : formatDuration(a.medianMs)),
     },
     {
       header: "Run",
+      width: "10rem",
       cell: (a) => {
         const answer = answers[a.file];
+        if (!a.dispatchable && answer === undefined) return null;
         return (
           <span className="run-cell">
             {a.dispatchable ? (
@@ -187,10 +191,7 @@ export function Automations({
 
   return (
     <div className="view">
-      <PageHeader
-        title="Automations"
-        subtitle="Every GitHub workflow in this repository. Scheduled ones are the factory's automations."
-      />
+      <PageHeader title="Automations" />
       {data.notes.length === 0 ? null : (
         <ul className="notice-list" aria-label="Notes">
           {data.notes.map((n) => (
@@ -202,24 +203,17 @@ export function Automations({
       )}
       <StatCards
         stats={[
-          {
-            label: "Automations",
-            value: String(data.automations.length),
-            caption: "workflow files",
-          },
-          { label: "Scheduled", value: String(scheduled.length), caption: "with on: schedule" },
-          { label: "Failing", value: String(failing), caption: "last run failed" },
+          { label: "Workflows", value: String(data.automations.length) },
+          { label: "Scheduled", value: String(scheduled.length) },
+          { label: "Failing", value: String(failing) },
           {
             label: "Next run",
             value: due ? "due" : soonest === undefined ? "—" : formatUntil(soonest, now),
-            caption: due ? "GitHub is late" : "soonest scheduled run",
+            caption: due ? "GitHub is late" : undefined,
           },
         ]}
       />
-      <Panel
-        title="Scheduled"
-        description="Workflows with a cron, soonest first. Times are UTC schedules shown in your time."
-      >
+      <Panel title="Scheduled" description="UTC schedules, shown in your time.">
         <DataTable
           rows={scheduled}
           rowId={(a) => a.file}
@@ -229,10 +223,7 @@ export function Automations({
           caption="Scheduled automations"
         />
       </Panel>
-      <Panel
-        title="On events"
-        description="Workflows that start from pushes, pull requests, issues or by hand."
-      >
+      <Panel title="On events">
         <DataTable
           rows={events}
           rowId={(a) => a.file}

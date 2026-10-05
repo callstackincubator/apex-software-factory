@@ -34,11 +34,8 @@ export function OpencodeView() {
 
   return (
     <div className="view">
-      <PageHeader
-        title="OpenCode"
-        subtitle="Open OpenCode's web app, and see the recent sessions."
-      />
-      <Panel title="Open OpenCode" description="Signs your browser in with a one-time link.">
+      <PageHeader title="OpenCode" />
+      <Panel title="Open OpenCode">
         <div className="open-row">
           <button className="button" type="button" onClick={open} disabled={busy}>
             {busy ? "Pairing…" : "Open OpenCode"}
@@ -58,11 +55,11 @@ export function OpencodeView() {
           </p>
         )}
         <p className="hint">
-          Opens OpenCode&apos;s web app, served by OpenCode on this machine. It runs as you, with
-          your logins.
+          Signs you in with a one-time link. OpenCode runs on this machine, as you, with your
+          logins.
         </p>
       </Panel>
-      <Panel title="Recent sessions" description="The latest 20 interactive sessions.">
+      <Panel title="Recent sessions">
         <DataTable
           rows={snapshot.interactive}
           rowId={(s) => s.id}
@@ -71,7 +68,7 @@ export function OpencodeView() {
           wide
           columns={[
             { header: "Title", cell: (s) => s.title },
-            { header: "Agent", mono: true, cell: (s) => s.agent ?? "—" },
+            { header: "Agent", mono: true, width: "7rem", cell: (s) => s.agent ?? "—" },
             {
               header: "Directory",
               mono: true,
@@ -84,6 +81,7 @@ export function OpencodeView() {
             {
               header: "Last activity",
               mono: true,
+              width: "9rem",
               cell: (s) => formatTime(s.updatedAt, snapshot.generatedAt),
             },
             { header: "Cost", numeric: true, cell: (s) => formatCost(s.costUsd) },

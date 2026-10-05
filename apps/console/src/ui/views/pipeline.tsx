@@ -35,6 +35,7 @@ export function PipelineView() {
     {
       header: "Issue",
       mono: true,
+      width: "6.5rem",
       cell: (d) => (
         <span className="name-cell">
           <Link to={`/pipeline/${d.issue}`}>#{d.issue}</Link>
@@ -61,7 +62,7 @@ export function PipelineView() {
         </span>
       ),
     },
-    { header: "State", cell: (d) => <StateStatus state={d.state} /> },
+    { header: "State", width: "7.5rem", cell: (d) => <StateStatus state={d.state} /> },
     {
       header: "Status line",
       mono: true,
@@ -85,16 +86,18 @@ export function PipelineView() {
     {
       header: "Total",
       numeric: true,
+      width: "7rem",
       cell: (d) => (d.totalMs > 0 ? formatDuration(d.totalMs) : "—"),
     },
     {
       header: "Findings",
       numeric: true,
+      width: "9rem",
       cell: (d) =>
         d.findings.known ? (
-          <span title="raised / confirmed / rejected / nits">
+          <span className="name-cell" title="raised / confirmed / rejected / nits">
             {d.findings.raised} / {d.findings.confirmed} / {d.findings.rejected} / {d.findings.nits}
-            {d.findings.fromPr ? <span className="muted"> from PR</span> : null}
+            {d.findings.fromPr ? <span className="muted file">from PR</span> : null}
           </span>
         ) : (
           "—"
@@ -102,8 +105,10 @@ export function PipelineView() {
     },
     {
       header: "Run",
+      width: "10rem",
       cell: (d) => {
         const answer = answers[d.issue];
+        if (!d.canStart && answer === undefined) return null;
         return (
           <span className="run-cell">
             {d.canStart ? (
@@ -128,13 +133,10 @@ export function PipelineView() {
 
   return (
     <div className="view">
-      <PageHeader
-        title="Pipeline"
-        subtitle="Every pending delivery, newest activity first, with the time each phase took."
-      />
+      <PageHeader title="Pipeline" />
       <Panel
         title="Deliveries"
-        description={`${rows.length} of ${snapshot.deliveries.length} shown. Findings read raised / confirmed / rejected / nits.`}
+        description={`${rows.length} of ${snapshot.deliveries.length} shown · findings: raised / confirmed / rejected / nits`}
       >
         <fieldset className="filter">
           <legend>State</legend>

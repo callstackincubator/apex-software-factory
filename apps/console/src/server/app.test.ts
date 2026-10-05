@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeliveryDetail, Snapshot } from "../shared/schema.ts";
 import { createApp, type AppDeps } from "./app.ts";
 import type { Collected } from "./derive/deliveries.ts";
-import { demoCollector } from "./demo.ts";
+import { demoChat, demoCollector } from "./demo.ts";
 import { ghRunner, GhError, type GhRunner } from "./github.ts";
 import { openOpencodeDb } from "./opencode-db.ts";
 import { OpencodeUnavailable, type OpencodeCli } from "./opencode-cli.ts";
@@ -46,6 +46,7 @@ function makeApp(data: Collected, over: Partial<AppDeps> = {}) {
     distDir: "/nonexistent",
     collector: { collect: async () => data },
     opencode: fakeCli(),
+    chat: demoChat(),
     automations: {
       collect: async () => ({
         now: NOW,

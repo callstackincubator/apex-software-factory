@@ -12,7 +12,10 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",
+    "@tanstack/react-virtual": "^3.14.13",
     "hono": "^4.13.12",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },

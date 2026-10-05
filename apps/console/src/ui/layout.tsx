@@ -13,7 +13,7 @@ export function Brand() {
   );
 }
 
-/** A view's title, a one-line muted subtitle under it, and its actions on the right. */
+/** A view's title, an optional muted line under it, and its actions on the right. */
 export function PageHeader(props: {
   readonly title: ReactNode;
   readonly subtitle?: ReactNode;
@@ -34,7 +34,8 @@ export function PageHeader(props: {
 export interface Stat {
   readonly label: string;
   readonly value: string;
-  readonly caption: string;
+  /** Only where it adds what the label does not say, such as a breakdown. */
+  readonly caption?: string | undefined;
 }
 
 /** A row of stat cards. Each card's label, number and caption are read in that order. */
@@ -51,7 +52,9 @@ export function StatCards({
         <li key={stat.label} className="stat">
           <p className="stat-label">{stat.label}</p>
           <p className="stat-value">{stat.value}</p>
-          <p className="stat-caption">{stat.caption}</p>
+          {stat.caption === undefined || stat.caption === "" ? null : (
+            <p className="stat-caption">{stat.caption}</p>
+          )}
         </li>
       ))}
     </ul>

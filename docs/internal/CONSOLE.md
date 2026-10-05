@@ -2,7 +2,8 @@
 
 A web page, run locally by the maintainer, that shows the factory's workers,
 every pending delivery with its time per phase, and the review statistics,
-and that can start a factory run or an interactive OpenCode session. Why it
+and that can start a factory run, open an interactive OpenCode session, or
+chat with an OpenCode agent to capture a visitor's idea. Why it
 is built this way: [ADR 0016](adr/0016-a-local-factory-console.md).
 
 ```bash
@@ -44,6 +45,13 @@ number of open tabs (one in-flight refresh, shared). The page asks
   — one GraphQL query: number, title, state, labels, assignees, `createdAt`,
   `closedAt`, and the PRs whose head is `feature/<n>`, `task/<n>` or
   `bug/<n>` (number, state, isDraft, merged, `mergedAt`, labels, body, url).
+- **Specs**: a second GraphQL query, read in the same refresh, apart from the
+  issue query and from `AGENT_LABELS` (which drive the pipeline): open issues
+  labelled `request:new` or `feature:spec`, and open or closed issues labelled
+  `feature:spec`, `feature:ready`, `feature:planned` or `feature:blocked`
+  (first 100 of each, newest update first) — number, title, url, body, labels,
+  `createdAt`, `updatedAt`. If it fails the Specs queues are empty; the rest
+  of the read is unaffected.
 - **From a PR body**: the line after `### Status`
   (`Implement: … Review: … Simulator: … Native: … Gate: …`, each field
   optional, unknown fields kept as they are), the `## Review` counts
@@ -117,6 +125,34 @@ next refresh.
   request per workflow, and at 10 seconds the console would spend more than
   GitHub's 5,000 requests an hour. For the same reason the repository is
   resolved once, at start.
+
+### 1.5 Memory branch
+
+The factory's memory (ADR 0016 on `main`: `lessons/<topic>/<id>.md`,
+`curated/<topic>.md`, `runs/<YYYY-MM>/<run>.md`, `retros/<date>.md`) lives on
+the orphan branch `factory-memory`. The console reads it with `git`, run with
+`execFile` in the repository root, **read-only and with plumbing only**: no
+checkout, no write, no push.
+
+- `git fetch --quiet origin +factory-memory:refs/remotes/origin/factory-memory`,
+  at most once a minute. "couldn't find remote ref" means the branch is not
+  created yet (the first factory run that writes creates it): a normal state,
+  shown as "The factory has not written its memory yet.", not an error. Any
+  other failure with no earlier fetch makes the source `unavailable` with the
+  reason; with an earlier fetch the page shows it and says it could not refresh.
+- Then `git rev-parse`, `git ls-tree -r --name-only origin/factory-memory`,
+  `git show origin/factory-memory:<path>` and one `git log -1 --format=%cI`
+  (the last write). When the branch did not move since the last reading, the
+  tree is not read again.
+- A path is read only when `ls-tree` listed it and it matches
+  `^(lessons|curated|runs|retros)/[A-Za-z0-9._/-]+\.md$` without `..`. A file
+  is read up to 200,000 characters; at most the newest 200 run records, 50 raw
+  lessons per topic, 50 retros and 20 curated files are read. `archive/` is
+  never read.
+- Parsed leniently (`src/server/derive/memory.ts`): a lesson's `key: value`
+  header and text; a run digest's `# Run: <mode> #<issue>, attempt <n>`,
+  `- Started:` and `- Ended: stopped: <reason>` lines and its first stage row's
+  time (the file name backs them up); a retro's date and first heading.
 
 ## 2. What the console works out
 
@@ -230,6 +266,22 @@ and the median duration. Status words for a run: `success` ok; `failure`,
 (error) when its last completed run failed, `disabled` (idle), else `healthy`
 (ok).
 
+### 2.7 Specs queues
+
+`src/server/derive/specs.ts`, in the snapshot as `specs: { business,
+technical }`, each row `{ issue, title, url, kind, suggested, updatedAt }`:
+
+- **Needs business spec**: an open `request:new` issue that no feature
+  (open or closed, any `feature:*` label) names with a `Request: #<n>` line;
+  and an open `feature:spec` whose `## Open questions` section has content
+  once HTML comments, whitespace and a lone `None` or `-` are removed.
+  `kind` is `request` or `feature`; `suggested` is `business`.
+- **Needs technical spec**: the other open `feature:spec` issues (`kind`
+  `feature`, `suggested` `technical`). The booth template pre-fills parts of
+  the Technical spec, so "done" is not detected: a feature stays here until a
+  person sets `feature:ready`.
+- Newest update first. Empty when GitHub is unavailable.
+
 ## 3. HTTP
 
 All JSON. Every response shape is a zod schema in `src/shared/schema.ts`; the
@@ -241,10 +293,33 @@ server validates what it sends in its tests, the page parses what it gets.
 | `GET /api/deliveries/:issue` | one delivery with every attempt, its subagent intervals, rounds and their parsed report blocks, the watchdog stops, the Assumption lines and the Rejected list |
 | `POST /api/runs` `{ "issue": n }` | dispatches `factory.yml` with `issue=n` (`gh workflow run factory.yml --repo … -f issue=n`). Refuses (409, with the reason) an issue that is closed, carries no ready or triage label, or already has a queued or running factory run. 202 on success. |
 | `POST /api/opencode` | runs `opencode pair` (`execFile`, 30 s timeout, in the repository root). In v2 that starts OpenCode's background service if it is not running (loopback by default) and prints one-time links of the form `http://127.0.0.1:<port>/auth/connect/<code>`, which sign a browser in once and expire within minutes. Answers `{ url, expiresInMinutes }` with the first link on a loopback host (any other link is ignored). 503 with OpenCode's own message when `opencode` is not on `PATH`, the service is disabled, or no link comes back. The console never sees or stores OpenCode's server password. |
+| `POST /api/chat` `{ "role": "intake" }` or `{ "role": "spec", "issue": n, "mode": "business" \| "technical" }` | starts a chat: maps the role to an agent and a first command (`intake` → agent `intake`, command `/intent`; `spec` → agent `spec`, command `/spec` with `<n>` for a business spec of a `request:new`, `<n> business` for a business spec of a `feature:spec`, `<n> technical` for a technical one, session titled "Spec #n · mode"; `spec` is refused with 409 for an issue that is in neither Specs queue, and for a technical spec of a request; `issue` must be a positive integer; a role is the only thing the page names, never an agent or a command), checks the agent exists (`GET /api/agent` scoped to the repository; OpenCode accepts an unknown name silently), creates a session (the intake one is titled "Idea · console"), runs the command, answers `{ sessionId }`. 409 when OpenCode has no such agent, 400 for an unknown role. |
+| `GET /api/chat/:id` | `{ messages, forms, permissionPending, running, failure }`: messages oldest first, each a run of text and tool-call parts (reasoning and the command's own prompt are left out; a tool call is `{ name, status, summary }`), the forms the agent waits on, whether OpenCode waits for a permission, whether a turn is in progress |
+| `POST /api/chat/:id/message` `{ text }` | sends the text (trimmed, 1–8000 characters) as the visitor's message; 202 |
+| `POST /api/chat/:id/form/:formId` `{ answer }` | answers a form the agent asked, `answer` being `{ <field key>: value }`; 202 |
+| `POST /api/chat/:id/stop` | interrupts the running turn; 202 |
 | `GET /api/automations` | every workflow (1.4, 2.6), scheduled ones first by next run, then the rest by name |
 | `GET /api/automations/:file` | one workflow with its last 20 runs |
 | `POST /api/automations/:file/dispatch` | `gh workflow run <file> --ref <default branch>`; only for a workflow that has `workflow_dispatch` and no required input, else 409 with the reason; `factory.yml` is started from the Pipeline tab only (it needs an issue). 202 on success. |
+| `GET /api/memory` | the memory branch (1.5): `status` (`ok`, `empty` for no branch yet, `unavailable` with a `reason`), counts, last write, the newest raw lessons, the curated files, the run records and the retros (metadata only) |
+| `GET /api/memory/file?path=…` | one file's Markdown, for a run digest or a retro; the path must be in the branch's current tree and match 1.5's pattern, else 404 |
 | `GET /*` | the built page; a path with no extension serves `index.html`; a missing asset is 404 |
+
+**Chat and OpenCode.** The chat routes drive the maintainer's OpenCode
+background service only through the CLI, `opencode api <METHOD> <path>` run
+with `execFile` in the repository root (`src/server/opencode-api.ts`): the
+CLI supplies the service's credentials, so the console never sees, reads or
+stores them and never calls the service over HTTP itself. Every output is
+parsed with zod and read leniently (an unknown message or content type is
+passed over); an HTTP error is read from the `HTTP <code>` line and the
+`_tag` in the body, not from the exit code. Only a session this console
+process created can be used (an in-memory set; any other id is a 404, so after
+a restart the page starts over), and only the agents in the role map
+(`src/server/chat.ts`) are ever started. OpenCode's event stream is not used:
+the page polls `GET /api/chat/:id` every second while a turn runs or a form is
+pending, every 5 seconds otherwise. A permission request should never happen
+(ADR 0012); if one does, the page says OpenCode is waiting for one and offers
+no approval.
 
 **Guard, for every request:** the `Host` header must be
 `127.0.0.1:<port>` or `localhost:<port>`, else 421. A `POST` must carry an
@@ -269,7 +344,9 @@ bad value (architecture rule 6):
 `src/server/demo.ts` (two workers, one busy in Review round 2, one queued
 run, eight deliveries across every state, a week of stats, three interactive
 sessions) through the same routes and the same schemas. `POST /api/runs` and
-`POST /api/opencode` answer 409 "demo mode" there. The header shows a `demo`
+`POST /api/opencode` answer 409 "demo mode" there. The chat routes answer a
+short scripted conversation (a greeting, a question as a form, a draft;
+nothing is filed) without OpenCode. The header shows a `demo`
 status.
 
 ## 4. Look
@@ -314,21 +391,26 @@ green where simlock has orange. Summary of what to carry over:
 - **Header.** "APEX FACTORY" wordmark, `--on-accent` on an `--accent` block,
   then a "By Callstack" chip. Right: each source as a status (`github ok`,
   `opencode unavailable`, or `demo`), and "updated 4 s ago" in mono.
-- **Tabs** under the header: Overview, Pipeline, Stats, Automations, OpenCode. Current tab
+- **Tabs** under the header: Overview, Ideas, Specs, Pipeline, Stats, Automations, Memory, OpenCode. Current tab
   `--text` with a 2px `--accent` underline and `aria-current="page"`. The
-  URL carries the tab (`/`, `/pipeline`, `/pipeline/42`, `/stats`,
+  URL carries the tab (`/`, `/ideas`, `/specs`, `/pipeline`, `/pipeline/42`, `/stats`,
   `/automations`, `/automations/:file`, `/opencode`), so a reload keeps it.
-- **Page header**: title, one muted line under it, actions on the right.
-- **Stat cards**: label, big mono number, muted caption; at least 200px wide,
-  wrapping.
-- **Panels** hold tables, charts and lists: a header with title, muted
-  description and actions, a 1px line under it.
+- **Page header**: title, actions on the right. No subtitle unless the page
+  needs one to be read.
+- **Stat cards**: label and big mono number; a muted caption only when it
+  says what the label does not (a breakdown, a definition of jargon). At
+  least 200px wide, wrapping; on a phone 140px, so two sit side by side.
+- **Panels** hold tables, charts and lists: a header with title, actions and
+  a muted description only where the content does not explain itself, a 1px
+  line under it.
 - **Tables**: mono uppercase muted headers, 16px row padding, numbers and
-  durations mono and right-aligned. Under 768px rows stack, each cell with
-  its column name beside it.
+  durations mono and right-aligned. Short columns (ids, states, numbers,
+  buttons) have a fixed width; the text columns share the rest. Under 768px
+  rows stack, each cell with its column name beside it, and an empty cell
+  has no line.
 - **Charts**: Recharts, animation off, bars in `--accent`, grid in
-  `--border`, axis text mono muted. Every chart has a caption and its numbers
-  as text under it.
+  `--border`, axis text mono muted. Every chart has a caption, visually
+  hidden for screen readers, and its numbers as text under it.
 - **Phone first**: works at 360px wide without sideways scrolling; the tab
   bar scrolls inside itself.
 - Durations read `42 s`, `7 m 05 s`, `1 h 12 m`. Times are the browser's
@@ -346,6 +428,48 @@ green where simlock has orange. Summary of what to carry over:
   with their wait.
 - **In progress** panel: the running and queued deliveries as rows: issue,
   title, current phase, a phase strip (section "Phase strip"), elapsed.
+
+### Ideas (`/ideas`)
+
+- **Start an idea**: a primary button. It calls `POST /api/chat` with
+  `{ role: "intake" }` and shows the **chat** for the returned session. The
+  session id is kept in `sessionStorage`, so a reload resumes the
+  conversation; **New idea** starts a fresh session. When the console no
+  longer knows the session (it restarted), the page returns to the button.
+- The booth visitor talks with a facilitator beside them to the `intake`
+  agent, which interviews them and, only on the visitor's clear yes, files a
+  `request:new` issue with `gh` (the `intent` skill). The console files
+  nothing itself.
+- **The chat** (`src/ui/chat/`, reusable: it takes a session id and nothing
+  else, so another tab can open it on a session of another role): a
+  virtualized list (`@tanstack/react-virtual`, rows measured) that sticks to
+  the bottom while content arrives unless the reader scrolled up, then shows
+  **Jump to latest**; the visitor's messages on the right, tinted with the
+  accent, the agent's on the left as markdown (`react-markdown` with GFM; raw
+  HTML is never rendered, images are dropped, links open in a new tab with
+  `rel="noopener noreferrer"`); each tool call as one muted line ("loaded
+  skill intent", `gh issue create …`); "thinking…" while a turn runs; the
+  forms the agent asks inline under the last message (choices as buttons, a
+  single choice answers on click; other fields as inputs); a composer where
+  Enter sends and Shift+Enter breaks the line; **Stop** while a turn runs;
+  errors in the `refusal` style. On a phone it fills the height below the
+  tabs, with the composer at the bottom.
+
+### Specs (`/specs`)
+
+- Two panels, **Needs business spec** and **Needs technical spec** (2.7), each
+  a table: issue (`#n`, to GitHub in a new tab), title, kind (business rows
+  only, muted) and an action. The action is the suggested mode as a primary
+  button (**Write business spec** / **Write technical spec**) and, for a
+  feature, the other mode as a secondary one so a person can override; a bare
+  request offers only the business spec. Empty: "Nothing waits for a business
+  spec." / "Nothing waits for a technical spec."
+- A click calls `POST /api/chat` with `{ role: "spec", issue, mode }` and the
+  same page shows the **chat** with the `spec` agent (the command is already
+  sent), under the header "#42 Title · technical" and a **Back to the
+  queues** button. The session is kept in `sessionStorage`, as on Ideas. The
+  `spec` agent writes issue bodies with `gh` (the `spec-session` skill) and
+  cannot set a ready label; the developer does that on GitHub.
 
 ### Pipeline (`/pipeline`)
 
@@ -389,9 +513,7 @@ green where simlock has orange. Summary of what to carry over:
 
 ### Automations (`/automations`)
 
-- Subtitle: "Every GitHub workflow in this repository. Scheduled ones are the
-  factory's automations."
-- Stat cards: **Automations**, **Scheduled**, **Failing**, **Next run** (the
+- Stat cards: **Workflows**, **Scheduled**, **Failing**, **Next run** (the
   soonest, as "in 12 m").
 - **Scheduled** panel: a table — name (link to its page), schedule in words,
   next run, status, last run, success rate, median duration, and **Run now**
@@ -411,14 +533,27 @@ green where simlock has orange. Summary of what to carry over:
 - A **Runs** chart: duration per run as columns, oldest left, failed runs
   told apart by a pattern as well as the status word in the table.
 
+### Memory (`/memory`, `/memory/<path>`)
+
+- Stat cards: **Lessons** (raw, not yet curated), **Curated topics**, **Run
+  records**, **Retros**, **Last written**. With no branch yet the page says
+  "The factory has not written its memory yet."
+- **Lessons** panel: by topic, the curated summary first, then the newest raw
+  lessons (five shown, the rest folded), each a short line with its date.
+- **Retros** panel: newest first; each opens its report as Markdown.
+- **Run records** panel: a table of when, issue (links to `/pipeline/<n>`),
+  mode, attempt, outcome (finished, or stopped with the watchdog's reason) and
+  duration; the time opens the digest as Markdown (`/memory/<path>`).
+- Markdown is rendered by the chat's `ChatMarkdown`: raw HTML is never rendered.
+
 ### OpenCode (`/opencode`)
 
 - **Open OpenCode**: a primary button. It calls `POST /api/opencode`, then
   opens the returned one-time link in a new tab (opened synchronously from
   the click with `window.open('', '_blank')` first, then given the URL, so a
   popup blocker lets it through). Each click pairs anew. A line under it:
-  "Opens OpenCode's web app, served by OpenCode on this machine. It runs as
-  you, with your logins." On a 503 the panel shows OpenCode's message.
+  "Signs you in with a one-time link. OpenCode runs on this machine, as you,
+  with your logins." On a 503 the panel shows OpenCode's message.
 - **Recent sessions**: the latest 20 interactive sessions: title, agent,
   directory (cut with an ellipsis, full value in `title`), last activity,
   cost.
@@ -444,6 +579,10 @@ apps/console/
   src/server/main.ts      config, real deps, serve, SIGINT/SIGTERM
   src/server/github.ts    gh wrapper (injectable runner) and the GitHub reads
   src/server/opencode-db.ts  schema detection and the queries
+  src/server/opencode-api.ts the OpenCode service through `opencode api` (injectable exec)
+  src/server/derive/specs.ts  the Specs queues (2.7)
+  src/server/memory.ts    the memory branch through read-only git plumbing (injectable runner); memory-demo.ts is a fake git over a demo tree
+  src/server/chat.ts      chat roles, the session set, messages and forms for the page
   src/server/run-logs.ts  the .stopped files
   src/server/workflows.ts the workflow files and their runs
   src/server/derive/*.ts  pure: state (2.2), phases (2.3), report parser (2.4), stats (2.5), Status line and Review section parsers
@@ -478,6 +617,16 @@ Vitest, in `apps/console`. Each claim at its cheapest level (testing rule 6):
   `0 6 * * 1-5` across a weekend, `30 2 1 * *`, and names (`MON`, `JAN`);
   the dispatch route refuses a workflow with a required input and dispatches
   one without, with the exact `gh` arguments.
+- **Chat**: the `opencode api` client with a stubbed exec (a message list with
+  an unknown content type, an `HTTP 404` trailer as an error, the
+  `location[directory]` query); the chat routes refuse an unknown role and a
+  session the console did not create, map `intake` to its agent and
+  `/intent`, and refuse empty or over-long text; the page's chat renders
+  markdown without raw HTML and sends a pending form's choice as the reply.
+- **Specs**: the queue classification (a request a feature names leaves the
+  queue; `Open questions` holding only a comment or `None` is empty), the
+  `spec` role (`/spec 42 technical`, a stranger issue and a non-integer
+  refused), and the page rendering both queues with the suggested button first.
 - **Pairing**: `opencode pair` output (stubbed) yields its loopback link;
   output with no link, and a missing binary, are 503s.
 - **Routes** with `app.request()`: the snapshot validates against its

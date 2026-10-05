@@ -93,7 +93,7 @@ export function AutomationView({ file }: { file: string }) {
         <p className="hint">Run now is off: {a.dispatchRefusal}.</p>
       ) : null}
       {a.description === "" ? null : (
-        <Panel title="Description" description="The file's leading comment.">
+        <Panel title="Description">
           <p className="description">{a.description}</p>
         </Panel>
       )}
@@ -154,16 +154,13 @@ export function AutomationView({ file }: { file: string }) {
           </div>
         </dl>
       </Panel>
-      <Panel
-        title="Runs"
-        description="Duration of each finished run among the last 20, oldest left. Failed runs are hatched."
-      >
+      <Panel title="Run duration" description="Failed runs are hatched.">
         {chart.length === 0 ? (
           <p className="muted">No finished run yet.</p>
         ) : (
           <figure className="chart-figure">
             <FindingPatterns />
-            <figcaption className="chart-summary">
+            <figcaption className="visually-hidden">
               Duration per run in minutes:{" "}
               {chart
                 .map(
@@ -191,7 +188,7 @@ export function AutomationView({ file }: { file: string }) {
                     interval="preserveStartEnd"
                     minTickGap={24}
                   />
-                  <YAxis tickLine={false} axisLine={false} width={32} unit=" m" />
+                  <YAxis tickLine={false} axisLine={false} width={44} unit=" m" />
                   <Tooltip
                     cursor={{ className: "chart-cursor" }}
                     isAnimationActive={false}
@@ -222,7 +219,7 @@ export function AutomationView({ file }: { file: string }) {
           </figure>
         )}
       </Panel>
-      <Panel title="Recent runs" description="The last 20 runs, newest first.">
+      <Panel title="Recent runs">
         <DataTable
           rows={data.runs}
           rowId={(r) => String(r.id)}

@@ -164,6 +164,21 @@ export const InteractiveSession = z.object({
 });
 export type InteractiveSession = z.infer<typeof InteractiveSession>;
 
+/** One issue waiting in a Specs queue. */
+export const SpecRow = z.object({
+  issue: z.number(),
+  title: z.string(),
+  url: z.string(),
+  /** A `request:new` issue, or a `feature:spec` one. */
+  kind: z.enum(["request", "feature"]),
+  suggested: z.enum(["business", "technical"]),
+  updatedAt: z.number(),
+});
+export type SpecRow = z.infer<typeof SpecRow>;
+
+export const Specs = z.object({ business: z.array(SpecRow), technical: z.array(SpecRow) });
+export type Specs = z.infer<typeof Specs>;
+
 export const Snapshot = z.object({
   generatedAt: z.number(),
   demo: z.boolean(),
@@ -176,6 +191,8 @@ export const Snapshot = z.object({
   deliveries: z.array(Delivery),
   stats: Stats,
   interactive: z.array(InteractiveSession),
+  /** Issues waiting for a person's spec; empty when GitHub is unavailable. */
+  specs: Specs,
   /** Whether the `opencode` CLI is on PATH, and its version. */
   opencode: z.object({ available: z.boolean(), version: z.string().optional() }),
 });
@@ -319,3 +336,88 @@ export const AutomationDetail = z.object({
   runs: z.array(AutomationRun),
 });
 export type AutomationDetail = z.infer<typeof AutomationDetail>;
+
+/** The chat with an OpenCode agent (CONSOLE.md 3, Ideas). */
+
+/** Who the visitor or developer talks to. The server maps a role to an agent and its first command. */
+export const ChatStart = z.discriminatedUnion("role", [
+  z.object({ role: z.literal("intake") }),
+  z.object({
+    role: z.literal("spec"),
+    issue: z.number().int().positive(),
+    mode: z.enum(["business", "technical"]),
+  }),
+]);
+export type ChatStart = z.infer<typeof ChatStart>;
+export const ChatStarted = z.object({ sessionId: z.string() });
+
+export const MAX_MESSAGE_LENGTH = 8000;
+export const ChatMessageRequest = z.object({
+  text: z.string().trim().min(1).max(MAX_MESSAGE_LENGTH),
+});
+
+export const FormValue = z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]);
+export type FormValue = z.infer<typeof FormValue>;
+export const ChatFormAnswer = z.object({ answer: z.record(z.string(), FormValue) });
+
+export const ChatToolCall = z.object({
+  name: z.string(),
+  status: z.enum(["running", "completed", "error"]),
+  summary: z.string(),
+});
+export type ChatToolCall = z.infer<typeof ChatToolCall>;
+
+/** A message is a run of parts, in order: agent text and tool calls interleave. */
+export const ChatPart = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("text"), text: z.string() }),
+  z.object({ kind: z.literal("tool"), tool: ChatToolCall }),
+]);
+export type ChatPart = z.infer<typeof ChatPart>;
+
+export const ChatMessage = z.object({
+  id: z.string(),
+  role: z.enum(["user", "agent"]),
+  parts: z.array(ChatPart),
+});
+export type ChatMessage = z.infer<typeof ChatMessage>;
+
+export const ChatFieldOption = z.object({
+  value: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+});
+export type ChatFieldOption = z.infer<typeof ChatFieldOption>;
+
+export const ChatField = z.object({
+  key: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  required: z.boolean(),
+  /** `string` is also what a field type the page does not know falls back to. */
+  type: z.enum(["string", "number", "integer", "boolean", "multiselect"]),
+  options: z.array(ChatFieldOption),
+  /** A free answer is allowed besides the options. */
+  custom: z.boolean(),
+  placeholder: z.string().optional(),
+});
+export type ChatField = z.infer<typeof ChatField>;
+
+export const ChatForm = z.object({
+  id: z.string(),
+  title: z.string(),
+  fields: z.array(ChatField),
+});
+export type ChatForm = z.infer<typeof ChatForm>;
+
+export const ChatState = z.object({
+  /** Oldest first; reasoning is left out. */
+  messages: z.array(ChatMessage),
+  /** Forms the agent waits on. */
+  forms: z.array(ChatForm),
+  permissionPending: z.boolean(),
+  /** A turn is in progress. */
+  running: z.boolean(),
+  /** Why the last turn failed, when it did. */
+  failure: z.string().nullable(),
+});
+export type ChatState = z.infer<typeof ChatState>;

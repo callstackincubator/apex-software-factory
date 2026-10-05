@@ -1,5 +1,5 @@
 import type { Collected } from "./derive/deliveries.ts";
-import type { FactoryRun, IssueRecord } from "./github.ts";
+import type { FactoryRun, IssueRecord, SpecIssue, SpecsRead } from "./github.ts";
 
 /** Small builders for tests: a reading of the three sources with only what a test names. */
 export const NOW = Date.UTC(2026, 9, 7, 12, 0, 0);
@@ -35,6 +35,7 @@ export function collected(parts: {
   issues?: IssueRecord[];
   runs?: FactoryRun[];
   runners?: { name: string; online: boolean }[] | null;
+  specs?: SpecsRead;
 }): Collected {
   return {
     now: NOW,
@@ -50,6 +51,7 @@ export function collected(parts: {
         runnersNote: parts.runners === null ? "runner list needs admin access" : null,
         runs: parts.runs ?? [],
         issues: parts.issues ?? [],
+        specs: parts.specs ?? { waiting: [], features: [] },
       },
     },
     opencode: {
@@ -62,5 +64,17 @@ export function collected(parts: {
       data: null,
     },
     runLogs: { source: { name: "runLogs", status: "ok", refreshedAt: NOW }, stops: [] },
+  };
+}
+
+export function specIssue(over: Partial<SpecIssue> & { number: number }): SpecIssue {
+  return {
+    title: `Spec ${over.number}`,
+    url: `https://github.com/o/r/issues/${over.number}`,
+    labels: [],
+    body: "",
+    createdAt: NOW - 7_200_000,
+    updatedAt: NOW - 3_600_000,
+    ...over,
   };
 }

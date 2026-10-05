@@ -16,6 +16,7 @@ import type { OpencodeData, RunRecord } from "../opencode-db.ts";
 import { aggregateFindings, findingsFromPr, NO_FINDINGS } from "./findings.ts";
 import { currentPhase, LIVE_WINDOW_MS, runPhases, sumPhases } from "./phases.ts";
 import { parseAssumptions, parseReviewSection, parseStatusLine } from "./pr-body.ts";
+import { buildSpecs } from "./specs.ts";
 import { parseReport } from "./report.ts";
 import { canStartRun, deriveState } from "./state.ts";
 import { computeStats, type StatRun } from "./stats.ts";
@@ -333,6 +334,7 @@ export function buildSnapshot(
       stops: c.runLogs.stops,
     }),
     interactive: interactiveOf(c),
+    specs: buildSpecs(c.github.data?.specs ?? { waiting: [], features: [] }),
     opencode,
   };
 }

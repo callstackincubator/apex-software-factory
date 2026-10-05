@@ -78,6 +78,27 @@ export interface IssueRecord {
   pr: PrRecord | null;
 }
 
+/** An issue of the Specs tab: its body is read for the request link and the open questions. */
+export interface SpecIssue {
+  number: number;
+  title: string;
+  url: string;
+  labels: string[];
+  body: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** What the Specs tab reads: open `request:new` / `feature:spec` issues, and every feature. */
+export interface SpecsRead {
+  /** Open issues labelled `request:new` or `feature:spec`. */
+  waiting: SpecIssue[];
+  /** Open and closed issues labelled `feature:*`: the requests they answer are not waiting. */
+  features: SpecIssue[];
+}
+
+export const EMPTY_SPECS: SpecsRead = { waiting: [], features: [] };
+
 export type GithubRead =
   | {
       ok: true;
@@ -86,6 +107,7 @@ export type GithubRead =
       runnersNote: string | null;
       runs: FactoryRun[];
       issues: IssueRecord[];
+      specs: SpecsRead;
     }
   | { ok: false; reason: string; repo: string | null };
 
@@ -143,6 +165,47 @@ fragment IssueFields on Issue {
   labels(first: 30) { nodes { name } }
   assignees(first: 5) { nodes { login } }
 }`;
+
+/**
+ * The Specs tab's own query, apart from `GRAPHQL` (and `AGENT_LABELS`, which drive the
+ * pipeline). `features` is read to know which requests already have a feature.
+ */
+const SPECS_GRAPHQL = `
+query($owner: String!, $name: String!, $waiting: [String!], $features: [String!]) {
+  repository(owner: $owner, name: $name) {
+    waiting: issues(first: 100, states: OPEN, labels: $waiting, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { ...SpecFields }
+    }
+    features: issues(first: 100, states: [OPEN, CLOSED], labels: $features, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { ...SpecFields }
+    }
+  }
+}
+fragment SpecFields on Issue {
+  number title url body createdAt updatedAt
+  labels(first: 30) { nodes { name } }
+}`;
+
+const WAITING_LABELS = ["request:new", "feature:spec"];
+const FEATURE_LABELS = ["feature:spec", "feature:ready", "feature:planned", "feature:blocked"];
+
+export function parseSpecs(data: unknown, now: number): SpecsRead {
+  const repo = asRecord(asRecord(asRecord(data)["data"])["repository"]);
+  const read = (key: string): SpecIssue[] =>
+    asArray(asRecord(repo[key])["nodes"]).map((raw) => {
+      const issue = asRecord(raw);
+      return {
+        number: Number(issue["number"]),
+        title: text(issue["title"]),
+        url: text(issue["url"]),
+        labels: asArray(asRecord(issue["labels"])["nodes"]).map((l) => text(asRecord(l)["name"])),
+        body: text(issue["body"]),
+        createdAt: time(issue["createdAt"]) ?? now,
+        updatedAt: time(issue["updatedAt"]) ?? now,
+      };
+    });
+  return { waiting: read("waiting"), features: read("features") };
+}
 
 const HEAD = /^(feature|task|bug)\/(\d+)$/;
 
@@ -303,6 +366,25 @@ export async function readGithub(
       `since=${new Date(week).toISOString()}`,
       ...AGENT_LABELS.flatMap((label) => ["-f", `labels[]=${label}`]),
     ]);
+    // The Specs tab must not take the pipeline down with it: if its query fails, its lists are empty.
+    let specs = EMPTY_SPECS;
+    try {
+      const specsOut = await gh([
+        "api",
+        "graphql",
+        "-f",
+        `query=${SPECS_GRAPHQL}`,
+        "-f",
+        `owner=${owner}`,
+        "-f",
+        `name=${name}`,
+        ...WAITING_LABELS.flatMap((label) => ["-f", `waiting[]=${label}`]),
+        ...FEATURE_LABELS.flatMap((label) => ["-f", `features[]=${label}`]),
+      ]);
+      specs = parseSpecs(JSON.parse(specsOut), options.now);
+    } catch {
+      // Left empty.
+    }
     return {
       ok: true,
       repo,
@@ -310,6 +392,7 @@ export async function readGithub(
       runnersNote,
       runs,
       issues: parseIssues(JSON.parse(issuesOut), options.now),
+      specs,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

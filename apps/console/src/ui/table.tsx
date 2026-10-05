@@ -8,6 +8,8 @@ export interface Column<T> {
   readonly numeric?: boolean;
   /** Mono, for what people copy or compare. */
   readonly mono?: boolean;
+  /** A fixed width, such as `7rem`, where the table has columns; the rest share what is left. */
+  readonly width?: string;
 }
 
 /**
@@ -30,7 +32,12 @@ export function DataTable<T>(props: {
       <thead>
         <tr>
           {columns.map((column) => (
-            <th key={column.header} scope="col" className={column.numeric ? "num" : undefined}>
+            <th
+              key={column.header}
+              scope="col"
+              className={column.numeric ? "num" : undefined}
+              style={column.width === undefined ? undefined : { width: column.width }}
+            >
               {column.header}
             </th>
           ))}

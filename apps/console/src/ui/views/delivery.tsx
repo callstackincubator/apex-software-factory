@@ -59,24 +59,24 @@ export function DeliveryView({ issue }: { issue: number }) {
             value: delivery.totalMs > 0 ? formatDuration(delivery.totalMs) : "—",
             caption: `${detail.attempts.length} attempt${detail.attempts.length === 1 ? "" : "s"}`,
           },
-          { label: "Rounds", value: String(f.rounds), caption: "review-verifier rounds" },
+          { label: "Rounds", value: String(f.rounds) },
           {
             label: "Raised",
             value: f.known ? String(f.raised) : "—",
-            caption: f.fromPr ? "from the PR's Review section" : "spec and code findings",
+            caption: f.fromPr ? "from the PR's Review section" : undefined,
           },
           {
             label: "Confirmed",
             value: f.known ? String(f.confirmed) : "—",
             caption: "blocking, fixed",
           },
-          { label: "Rejected", value: f.known ? String(f.rejected) : "—", caption: "not valid" },
-          { label: "Nits", value: f.known ? String(f.nits) : "—", caption: "not worth a round" },
+          { label: "Rejected", value: f.known ? String(f.rejected) : "—" },
+          { label: "Nits", value: f.known ? String(f.nits) : "—" },
         ]}
       />
       <TimelinePanel attempts={detail.attempts} />
       <ReviewPanel rounds={detail.rounds} rejected={detail.rejected} />
-      <Panel title="Status" description="From the pull request, and from the watchdog.">
+      <Panel title="Status">
         <h3 className="subhead">Status line</h3>
         {delivery.statusLine.length === 0 ? (
           <p className="muted">The PR has no Status line yet.</p>
@@ -137,10 +137,7 @@ export function lanes(intervals: readonly Interval[]): { interval: Interval; lan
 function TimelinePanel({ attempts }: { attempts: readonly Attempt[] }) {
   const phases = [...new Set(attempts.flatMap((a) => a.phases.map((p) => p.phase)))];
   return (
-    <Panel
-      title="Timeline"
-      description="Each attempt on its own time axis; what ran in parallel is stacked."
-    >
+    <Panel title="Timeline">
       {attempts.length === 0 ? (
         <p className="muted">The database has no run for this issue.</p>
       ) : (
@@ -304,7 +301,7 @@ function ReviewPanel({
   rejected: readonly string[];
 }) {
   return (
-    <Panel title="Review" description="What the review-verifier reported, round by round.">
+    <Panel title="Review">
       {rounds.length === 0 ? <p className="muted">No review round has run.</p> : null}
       {rounds.map((round) => (
         <section

@@ -1,7 +1,7 @@
 import { WINDOWS, type Snapshot, type Window } from "../../shared/schema.ts";
 import { FindingPatterns, FindingsChart, FindingsLegend, PhaseChart } from "../charts.tsx";
 import { useSnapshot } from "../data.tsx";
-import { formatCost, formatCount, formatDuration, formatTime, formatTokens } from "../format.ts";
+import { formatCost, formatDuration, formatTime, formatTokens } from "../format.ts";
 import { PageHeader, Panel, StatCards } from "../layout.tsx";
 import { Link } from "../router.tsx";
 import { DataTable } from "../table.tsx";
@@ -30,7 +30,6 @@ export function Stats(props: {
     <div className="view">
       <PageHeader
         title="Stats"
-        subtitle="Runs counted by their start time, over the window you choose."
         actions={
           <label className="select-field">
             Window
@@ -46,35 +45,31 @@ export function Stats(props: {
       />
       <StatCards
         stats={[
-          { label: "Runs", value: String(s.runs), caption: "started in the window" },
-          { label: "Merged", value: String(s.merged), caption: "deliveries merged" },
+          { label: "Runs started", value: String(s.runs) },
+          { label: "Merged", value: String(s.merged) },
           {
             label: "Parked or blocked",
             value: String(s.parked + s.blocked),
             caption: `${s.parked} parked, ${s.blocked} blocked`,
           },
-          { label: "Failed", value: String(s.failed), caption: "latest run failed" },
+          { label: "Failed", value: String(s.failed) },
           {
             label: "Watchdog stops",
             value: String(s.watchdogStops),
-            caption: s.watchdogReasons.map((r) => `${r.count} ${r.reason}`).join(", ") || "none",
+            caption: s.watchdogReasons.map((r) => `${r.count} ${r.reason}`).join(", "),
           },
           {
             label: "Median run",
             value: s.medianRunMs === null ? "—" : formatDuration(s.medianRunMs),
-            caption: "finished runs",
           },
         ]}
       />
-      <Panel
-        title="Time per phase"
-        description="Median across finished runs; the longest is beside each phase."
-      >
+      <Panel title="Median time per phase">
         {s.phases.length === 0 ? (
           <p className="muted">No finished run in this window, or no OpenCode data.</p>
         ) : (
           <figure className="chart-figure">
-            <figcaption className="chart-summary">
+            <figcaption className="visually-hidden">
               Median time per phase, in minutes.{" "}
               {s.phases.map((p) => `${p.phase} ${formatDuration(p.medianMs)}`).join(", ")}.
             </figcaption>
@@ -97,18 +92,15 @@ export function Stats(props: {
           </figure>
         )}
       </Panel>
-      <Panel
-        title="Findings"
-        description="What the reviewers raised and what the verifier made of it."
-      >
+      <Panel title="Findings">
         <StatCards
           label="Findings totals"
           stats={[
-            { label: "Raised", value: String(f.raised), caption: "spec and code" },
-            { label: "Blocking", value: String(f.blocking), caption: "raised as blocking" },
-            { label: "Confirmed", value: String(f.confirmed), caption: "Fix items" },
-            { label: "Rejected", value: String(f.rejected), caption: "not valid" },
-            { label: "Nits", value: String(f.nits), caption: "not worth a round" },
+            { label: "Raised", value: String(f.raised) },
+            { label: "Blocking", value: String(f.blocking) },
+            { label: "Confirmed", value: String(f.confirmed) },
+            { label: "Rejected", value: String(f.rejected) },
+            { label: "Nits", value: String(f.nits) },
             { label: "Spec needs", value: String(f.specNeeds), caption: "rounds with a spec gap" },
           ]}
         />
@@ -117,7 +109,7 @@ export function Stats(props: {
         ) : (
           <figure className="chart-figure">
             <FindingPatterns />
-            <figcaption className="chart-summary">
+            <figcaption className="visually-hidden">
               Findings per issue, one stacked column each: confirmed, rejected, nits, unsorted.
             </figcaption>
             <FindingsLegend />
@@ -145,7 +137,7 @@ export function Stats(props: {
           </figure>
         )}
       </Panel>
-      <Panel title="Watchdog" description="Runs the watchdog stopped, newest first.">
+      <Panel title="Watchdog stops">
         <DataTable
           rows={s.watchdog}
           rowId={(w) => `${w.issue}-${w.attempt}-${w.at}`}
@@ -164,28 +156,16 @@ export function Stats(props: {
         />
       </Panel>
       {s.costUsd === null && s.tokens === null ? null : (
-        <Panel
-          title="Cost and tokens"
-          description="From the OpenCode database, for runs in the window."
-        >
+        <Panel title="Cost and tokens">
           <StatCards
             label="Cost and tokens"
             stats={[
-              { label: "Cost", value: formatCost(s.costUsd), caption: "all sessions of the runs" },
-              {
-                label: "Input tokens",
-                value: s.tokens ? formatTokens(s.tokens.input) : "—",
-                caption: s.tokens ? formatCount(s.tokens.input) : "",
-              },
-              {
-                label: "Output tokens",
-                value: s.tokens ? formatTokens(s.tokens.output) : "—",
-                caption: s.tokens ? formatCount(s.tokens.output) : "",
-              },
+              { label: "Cost", value: formatCost(s.costUsd) },
+              { label: "Input tokens", value: s.tokens ? formatTokens(s.tokens.input) : "—" },
+              { label: "Output tokens", value: s.tokens ? formatTokens(s.tokens.output) : "—" },
               {
                 label: "Reasoning tokens",
                 value: s.tokens ? formatTokens(s.tokens.reasoning) : "—",
-                caption: s.tokens ? formatCount(s.tokens.reasoning) : "",
               },
             ]}
           />
