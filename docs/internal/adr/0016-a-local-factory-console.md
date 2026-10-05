@@ -56,8 +56,10 @@ hosted.
    - **Start a factory run** dispatches `factory.yml` for an issue
      (`gh workflow run`), which is what `issue-state.yml` does; the workflow's
      own "Check who asked" step still decides.
-   - **Open OpenCode** starts `opencode web` on the loopback interface in the
-     repository root, the same as typing it, and links to it.
+   - **Open OpenCode** runs `opencode pair` (OpenCode v2), the same as typing
+     it: OpenCode starts its own background service on loopback and prints a
+     one-time sign-in link, which the console opens. The console never holds
+     OpenCode's password.
 
    Nothing else: no labels, comments, merges, or simlock operations.
 
@@ -72,7 +74,7 @@ hosted.
 
 - One more app in `pnpm check`: its typecheck, lint, format and tests run in
   CI like every other package. Its tests build a temporary OpenCode database
-  for both schema versions it supports and stub `gh`.
+  (OpenCode v2's tables) and stub `gh` and `opencode`.
 - OpenCode's database is not a public interface. The console detects the
   tables and columns it needs at start and shows "OpenCode data unavailable"
   with the reason instead of failing; the GitHub half keeps working.

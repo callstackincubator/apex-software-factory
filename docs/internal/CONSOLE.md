@@ -52,28 +52,34 @@ number of open tabs (one in-flight refresh, shared). The page asks
 
 ### 1.2 OpenCode database
 
-- Path: `OPENCODE_DB`, else `~/.local/share/opencode/opencode.db`.
-- **Two schemas.** The session table is `session_v2` (what the booth
-  laptop's OpenCode writes, and what `factory-run.sh` reads) or `session`
-  (OpenCode 1.18). The console picks whichever exists and reads the columns
-  it needs with `PRAGMA table_info`: `id`, `parent_id`, `agent`, `directory`,
-  `time_created`, `time_updated` are required; `title`, `cost`,
-  `tokens_input`, `tokens_output`, `tokens_reasoning` are used when present.
-  A missing table or required column makes the source "unavailable: <what is
-  missing>".
-- **A run** is a top-level session (no `parent_id`) whose title is
+- The factory runs **OpenCode v2** (`docs/BOOTSTRAP.md`; v2.0.22 on the
+  temporary Mac). Path: `OPENCODE_DB`, else
+  `~/.local/share/opencode/opencode.db` (v2's name for the stable channels).
+- **Tables** (v2's `packages/core/src/session/sql.ts`): `session_v2` and
+  `session_message`. At start the console checks with `PRAGMA table_info`
+  that `session_v2` has `id`, `parent_id`, `title`, `agent`, `directory`,
+  `time_created`, `time_updated`, and `session_message` has `session_id`,
+  `type`, `seq`, `data`; a missing table or column makes the source
+  "unavailable: <what is missing>" (an OpenCode 1.x database, which has
+  `session` instead, says so). `cost`, `tokens_input`, `tokens_output`,
+  `tokens_reasoning`, `time_idle` and `idle_outcome` are used when present.
+  Times are epoch milliseconds.
+- **A run** is a top-level session (`parent_id` null) whose title is
   `factory deliver #<n> (attempt <k>)` or `factory triage #<n> (attempt <k>)`
   — the title `factory-run.sh` gives it. A top-level session with any other
-  title is an **interactive session** (OpenCode tab).
+  title (or none) is an **interactive session** (OpenCode tab).
 - **Its subagents** are the sessions whose `parent_id` is the run's id. A
   subagent's agent is its `agent` column, else the `@<name>` in its title.
+- **A run's end and outcome**: `session_v2.idle_outcome` (`succeeded`,
+  `failed`, `interrupted`) and `time_idle`; without them, the last `idle`
+  row in `session_message` (`data.outcome`), as `factory-run.sh` reads it.
 - **Text replies**: an agent's final text is the text parts of its last
-  `assistant` row in `session_message` (`data.content[]` items with
-  `type = 'text'`, as `factory-run.sh` reads them). When `session_message`
-  has no rows for the session, the console falls back to the `part` table
-  (`data.type = 'text'`, `data.text`), newest message first.
+  `assistant` row in `session_message` (`type = 'assistant'`,
+  `data.content[]` items with `type = 'text'`, joined with a blank line), as
+  `factory-run.sh` reads them.
 - **A run is live** while its Actions job is running; without GitHub, while
-  any of its sessions was written in the last 2 minutes.
+  it has no idle outcome and any of its sessions was written in the last 2
+  minutes.
 
 ### 1.3 Run logs
 
@@ -190,10 +196,10 @@ server validates what it sends in its tests, the page parses what it gets.
 
 | Route | Does |
 | --- | --- |
-| `GET /api/snapshot?window=today\|7d\|all` | everything the page shows: `generatedAt`, `sources` (each `ok` or `unavailable` with a reason, and `refreshedAt`), `workers`, `queue`, `deliveries` (state, kind, title, PR, Status-line fields, current phase, elapsed, per-phase totals, findings), `stats`, `interactive` sessions (latest 20), `opencode` (whether `opencode web` is up and its URL) |
+| `GET /api/snapshot?window=today\|7d\|all` | everything the page shows: `generatedAt`, `sources` (each `ok` or `unavailable` with a reason, and `refreshedAt`), `workers`, `queue`, `deliveries` (state, kind, title, PR, Status-line fields, current phase, elapsed, per-phase totals, findings), `stats`, `interactive` sessions (latest 20), `opencode` (whether the `opencode` CLI is on `PATH`, and its version) |
 | `GET /api/deliveries/:issue` | one delivery with every attempt, its subagent intervals, rounds and their parsed report blocks, the watchdog stops, the Assumption lines and the Rejected list |
 | `POST /api/runs` `{ "issue": n }` | dispatches `factory.yml` with `issue=n` (`gh workflow run factory.yml --repo … -f issue=n`). Refuses (409, with the reason) an issue that is closed, carries no ready or triage label, or already has a queued or running factory run. 202 on success. |
-| `POST /api/opencode` | starts `opencode web --hostname 127.0.0.1 --port <OPENCODE_WEB_PORT>` in the repository root, detached from the request but a child of the console, unless something already answers on that port; answers `{ url }`. Stopped when the console stops. 503 with the reason when `opencode` is not on `PATH`. |
+| `POST /api/opencode` | runs `opencode pair` (`execFile`, 30 s timeout, in the repository root). In v2 that starts OpenCode's background service if it is not running (loopback by default) and prints one-time links of the form `http://127.0.0.1:<port>/auth/connect/<code>`, which sign a browser in once and expire within minutes. Answers `{ url, expiresInMinutes }` with the first link on a loopback host (any other link is ignored). 503 with OpenCode's own message when `opencode` is not on `PATH`, the service is disabled, or no link comes back. The console never sees or stores OpenCode's server password. |
 | `GET /*` | the built page; a path with no extension serves `index.html`; a missing asset is 404 |
 
 **Guard, for every request:** the `Host` header must be
@@ -213,7 +219,6 @@ bad value (architecture rule 6):
 | `CONSOLE_REPO` | from `gh repo view` |
 | `OPENCODE_DB` | `~/.local/share/opencode/opencode.db` |
 | `FACTORY_RUN_LOGS` | see 1.3 |
-| `OPENCODE_WEB_PORT` | `4096` |
 | `CONSOLE_DEMO` | off; `--demo` on the command line sets it |
 
 **Demo mode** serves a fixed, believable snapshot built in
@@ -341,10 +346,11 @@ green where simlock has orange. Summary of what to carry over:
 ### OpenCode (`/opencode`)
 
 - **Open OpenCode**: a primary button. It calls `POST /api/opencode`, then
-  opens the returned URL in a new tab. When OpenCode web is already up, the
-  button reads "Open OpenCode" and only opens it; the panel shows its URL in
-  mono. A line under it: "Starts `opencode web` in the repository on this
-  machine. It runs as you, with your logins."
+  opens the returned one-time link in a new tab (opened synchronously from
+  the click with `window.open('', '_blank')` first, then given the URL, so a
+  popup blocker lets it through). Each click pairs anew. A line under it:
+  "Opens OpenCode's web app, served by OpenCode on this machine. It runs as
+  you, with your logins." On a 503 the panel shows OpenCode's message.
 - **Recent sessions**: the latest 20 interactive sessions: title, agent,
   directory (cut with an ellipsis, full value in `title`), last activity,
   cost.
@@ -392,10 +398,13 @@ Vitest, in `apps/console`. Each claim at its cheapest level (testing rule 6):
 - **State**: one test per row of the table in 2.2, and the order between
   them (a merged PR on an issue that still carries a ready label is
   `merged`).
-- **Database**: a temporary database created in the test with the
-  `session_v2` schema, and one with the `session` schema plus `part`, each
-  yielding the same run, subagents and verifier text; a database missing
-  `parent_id` is "unavailable" with that reason.
+- **Database**: a temporary database created in the test with v2's
+  `session_v2` and `session_message` tables (their DDL copied from OpenCode
+  v2.0.22), yielding a run, its subagents, its outcome and the verifier's
+  text; a database with only a 1.x `session` table, and one whose
+  `session_v2` lacks `parent_id`, are each "unavailable" with that reason.
+- **Pairing**: `opencode pair` output (stubbed) yields its loopback link;
+  output with no link, and a missing binary, are 503s.
 - **Routes** with `app.request()`: the snapshot validates against its
   schema; the Host guard (421) and the Origin guard (403); `POST /api/runs`
   refuses a closed issue, an issue with a running run, and dispatches with
