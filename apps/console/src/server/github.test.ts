@@ -110,6 +110,28 @@ describe("readGithub", () => {
     ]);
   });
 
+  it("keeps the pipeline when the Specs query fails, and says why the queues are unknown", async () => {
+    const { gh: base } = stub({
+      "api repos/o/r/actions/runners": JSON.stringify({ runners: [] }),
+      "api repos/o/r/actions/workflows": runsJson,
+      "api repos/o/r/actions/runs/": jobs("#42", "booth-factory-1"),
+      "api graphql": graphql({ open: [issueNode(42, "OPEN", ["feature:ready"])] }),
+    });
+    const gh: GhRunner = async (args) => {
+      if (args.some((a) => a.includes("SpecFields"))) {
+        throw new GhError(args, "HTTP 502: Bad Gateway");
+      }
+      return base(args);
+    };
+
+    const read = await readGithub(gh, { repo: "o/r", now: NOW, cache: newGithubCache() });
+
+    if (!read.ok) throw new Error(read.reason);
+    expect(read.issues.map((i) => i.number)).toEqual([42]);
+    expect(read.specs.waiting).toEqual([]);
+    expect(read.specs.error).toContain("502");
+  });
+
   it("says the runner list needs admin access on 403 and builds on the jobs", async () => {
     const { gh } = stub({
       "api repos/o/r/actions/runners": new GhError(

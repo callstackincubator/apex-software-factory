@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { allowedMemoryPath, parseRun } from "./derive/memory.ts";
 import { demoGit } from "./memory-demo.ts";
@@ -209,5 +212,60 @@ describe("the demo memory", () => {
     expect(read.runs.map((r) => r.issue)).toContain(37);
     expect(read.runs.some((r) => r.outcome === "stopped")).toBe(true);
     expect(read.retros).toHaveLength(1);
+  });
+});
+
+/** Every file under `fixtures/factory-memory/`, keyed by its path on the branch. */
+function realBranch(): Record<string, string> {
+  const root = fileURLToPath(new URL("./fixtures/factory-memory/", import.meta.url));
+  const files: Record<string, string> = {};
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else files[relative(root, path)] = readFileSync(path, "utf8");
+    }
+  };
+  walk(root);
+  return files;
+}
+
+// Written by memory.sh and run-record.sh themselves (fixtures/factory-memory/README.md).
+describe("a factory-memory branch written by the factory's own scripts", () => {
+  it("reads both run records of #18, the stopped one with its reason", async () => {
+    const memory = createMemory({ now: () => NOW, git: stub(realBranch()).git });
+    const { runs, status } = await memory.read();
+
+    expect(status).toBe("ok");
+    expect(runs.map((r) => [r.issue, r.attempt, r.outcome, r.reason, r.durationMs])).toEqual([
+      [18, 2, "finished", null, (25 * 60 + 32) * 1000],
+      [18, 1, "stopped", "no progress for 15 min", 18_000],
+    ]);
+    expect(runs[1]?.startedAt).toBe(Date.UTC(2026, 9, 5, 7, 4, 34));
+  });
+
+  it("reads the raw lessons with their author and time, and leaves archived ones out", async () => {
+    const memory = createMemory({ now: () => NOW, git: stub(realBranch()).git });
+    const { lessons, curated } = await memory.read();
+
+    expect(lessons.map((l) => [l.topic, l.by, l.date])).toEqual([
+      ["deliver", "factory", Date.UTC(2026, 9, 5, 9, 29, 53)],
+      ["device", "mobile-verifier", Date.UTC(2026, 9, 5, 9, 29, 52)],
+    ]);
+    expect(lessons[0]?.text).toMatch(/^Park a native change at once/);
+    expect(curated.map((c) => c.topic)).toEqual(["implement"]);
+  });
+
+  it("names a retro report by its heading and the time in its file name", async () => {
+    const memory = createMemory({ now: () => NOW, git: stub(realBranch()).git });
+    const { retros } = await memory.read();
+
+    expect(retros).toEqual([
+      {
+        path: "retros/2026-10-05-0930.md",
+        date: "2026-10-05 09:30",
+        title: "Retro 2026-10-05: runs since 2026-10-04",
+      },
+    ]);
   });
 });

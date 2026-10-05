@@ -47,9 +47,28 @@ describe("Specs against the demo snapshot", () => {
     ).toEqual(["Write business spec"]);
 
     cleanup();
-    render(<Specs snapshot={{ ...snapshot, specs: { business: [], technical: [] } }} />);
+    render(
+      <Specs
+        snapshot={{ ...snapshot, specs: { business: [], technical: [], unavailable: null } }}
+      />,
+    );
     expect(screen.getByText("Nothing waits for a business spec.")).toBeTruthy();
     expect(screen.getByText("Nothing waits for a technical spec.")).toBeTruthy();
+  });
+
+  it("says the queues are unknown, not empty, when GitHub could not be read", () => {
+    render(
+      <Specs
+        snapshot={{
+          ...snapshot,
+          specs: { business: [], technical: [], unavailable: "HTTP 502: Bad Gateway" },
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain("HTTP 502: Bad Gateway");
+    expect(screen.queryByText("Nothing waits for a business spec.")).toBeNull();
+    expect(screen.getAllByText("Unknown until GitHub answers.")).toHaveLength(2);
   });
 
   it("starts a spec chat for the clicked mode and shows it under the issue's header", async () => {

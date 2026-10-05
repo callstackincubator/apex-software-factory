@@ -1529,9 +1529,17 @@ ul.connection {
   color: var(--status-error);
 }
 
+/* A long unbroken word (a session id, a path) wraps rather than widening the page; code blocks
+ * and tables scroll inside themselves instead. */
 .chat-markdown {
   max-width: 100%;
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-markdown pre,
+.chat-markdown table {
+  overflow-wrap: normal;
 }
 
 .chat-markdown > :last-child {

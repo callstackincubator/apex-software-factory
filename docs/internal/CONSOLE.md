@@ -465,6 +465,9 @@ green where simlock has orange. Summary of what to carry over:
   feature, the other mode as a secondary one so a person can override; a bare
   request offers only the business spec. Empty: "Nothing waits for a business
   spec." / "Nothing waits for a technical spec."
+- When the queues' GitHub query fails (the rest of the snapshot still loads),
+  an error notice above the panels gives gh's reason, and both panels say
+  "Unknown until GitHub answers." instead of claiming nothing waits.
 - A click calls `POST /api/chat` with `{ role: "spec", issue, mode }` and the
   same page shows the **chat** with the `spec` agent (the command is already
   sent), under the header "#42 Title · technical" and a **Back to the

@@ -95,6 +95,8 @@ export interface SpecsRead {
   waiting: SpecIssue[];
   /** Open and closed issues labelled `feature:*`: the requests they answer are not waiting. */
   features: SpecIssue[];
+  /** Why the query failed, when it did: the lists are then empty, not known to be. */
+  error?: string;
 }
 
 export const EMPTY_SPECS: SpecsRead = { waiting: [], features: [] };
@@ -382,8 +384,8 @@ export async function readGithub(
         ...FEATURE_LABELS.flatMap((label) => ["-f", `features[]=${label}`]),
       ]);
       specs = parseSpecs(JSON.parse(specsOut), options.now);
-    } catch {
-      // Left empty.
+    } catch (error) {
+      specs = { ...EMPTY_SPECS, error: error instanceof Error ? error.message : String(error) };
     }
     return {
       ok: true,

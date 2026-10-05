@@ -334,7 +334,13 @@ export function buildSnapshot(
       stops: c.runLogs.stops,
     }),
     interactive: interactiveOf(c),
-    specs: buildSpecs(c.github.data?.specs ?? { waiting: [], features: [] }),
+    specs: buildSpecs(
+      c.github.data?.specs ?? {
+        waiting: [],
+        features: [],
+        error: c.github.source.reason ?? "GitHub is unavailable",
+      },
+    ),
     opencode,
   };
 }

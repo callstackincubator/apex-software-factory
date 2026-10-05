@@ -96,5 +96,8 @@ export function parseRun(path: string, content: string): MemoryRun {
 export function parseRetro(path: string, content: string): MemoryRetro {
   const name = (path.split("/").pop() ?? path).replace(/\.md$/, "");
   const heading = /^#{1,2}[ \t]+(.+?)[ \t#]*$/m.exec(content);
-  return { path, date: name, title: heading?.[1] ?? `Retro ${name}` };
+  // The retro skill names a report `<YYYY-MM-DD>-<HHMM>.md`.
+  const stamp = /^(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})$/.exec(name);
+  const date = stamp === null ? name : `${stamp[1]} ${stamp[2]}:${stamp[3]}`;
+  return { path, date, title: heading?.[1] ?? `Retro ${name}` };
 }

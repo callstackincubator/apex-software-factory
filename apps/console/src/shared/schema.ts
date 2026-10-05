@@ -176,7 +176,12 @@ export const SpecRow = z.object({
 });
 export type SpecRow = z.infer<typeof SpecRow>;
 
-export const Specs = z.object({ business: z.array(SpecRow), technical: z.array(SpecRow) });
+export const Specs = z.object({
+  business: z.array(SpecRow),
+  technical: z.array(SpecRow),
+  /** Why the queues could not be read; null when they were. Empty lists then mean "unknown". */
+  unavailable: z.string().nullable(),
+});
 export type Specs = z.infer<typeof Specs>;
 
 export const Snapshot = z.object({

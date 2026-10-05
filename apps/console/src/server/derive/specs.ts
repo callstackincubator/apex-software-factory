@@ -55,5 +55,9 @@ export function buildSpecs(read: SpecsRead): Specs {
     }
   }
   const newest = (a: SpecRow, b: SpecRow) => b.updatedAt - a.updatedAt || a.issue - b.issue;
-  return { business: business.sort(newest), technical: technical.sort(newest) };
+  return {
+    business: business.sort(newest),
+    technical: technical.sort(newest),
+    unavailable: read.error ?? null,
+  };
 }

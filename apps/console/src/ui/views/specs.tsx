@@ -144,12 +144,22 @@ export function Specs({ snapshot }: { readonly snapshot: Snapshot }) {
   return (
     <div className="view">
       <PageHeader title="Specs" />
+      {snapshot.specs.unavailable === null ? null : (
+        // Empty queues here mean "not known", never "nothing waits".
+        <p className="notice notice-error" role="alert">
+          The queues could not be read from GitHub: {snapshot.specs.unavailable}
+        </p>
+      )}
       <Panel title="Needs business spec">
         <DataTable
           rows={snapshot.specs.business}
           columns={business}
           rowId={(row) => String(row.issue)}
-          empty="Nothing waits for a business spec."
+          empty={
+            snapshot.specs.unavailable === null
+              ? "Nothing waits for a business spec."
+              : "Unknown until GitHub answers."
+          }
           caption="Issues that need a business spec"
         />
       </Panel>
@@ -158,7 +168,11 @@ export function Specs({ snapshot }: { readonly snapshot: Snapshot }) {
           rows={snapshot.specs.technical}
           columns={[...base, action]}
           rowId={(row) => String(row.issue)}
-          empty="Nothing waits for a technical spec."
+          empty={
+            snapshot.specs.unavailable === null
+              ? "Nothing waits for a technical spec."
+              : "Unknown until GitHub answers."
+          }
           caption="Issues that need a technical spec"
         />
       </Panel>

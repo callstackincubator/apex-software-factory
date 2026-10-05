@@ -70,4 +70,10 @@ describe("openQuestions", () => {
     expect(openQuestions("## Open questions\nWhy?\n## Next\nmore")).toBe("Why?");
     expect(openQuestions("## Something else\nWhy?")).toBe("");
   });
+
+  it("passes on why the queues could not be read", () => {
+    const specs = buildSpecs({ waiting: [], features: [], error: "HTTP 502" });
+
+    expect(specs).toEqual({ business: [], technical: [], unavailable: "HTTP 502" });
+  });
 });
