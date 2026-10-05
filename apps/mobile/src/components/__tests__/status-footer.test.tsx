@@ -89,7 +89,7 @@ describe("StatusFooter", () => {
     );
     const latency = screen.getByTestId("status-api-latency");
     expect(latency).toHaveAccessibleName("API round trip 43 ms");
-    expect(latency).toHaveTextContent("43 ms");
+    expect(latency).toHaveTextContent("· 43 ms");
   });
 
   it("the footer shows no round trip when the API is offline", async () => {
