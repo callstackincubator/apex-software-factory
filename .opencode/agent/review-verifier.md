@@ -102,8 +102,10 @@ issue's comments. `git log`, `git show` and `gh` are denied on purpose.
 **Blocking findings.** Never research library or native sources (`node_modules`): a finding whose evidence is not in the diff, this repository or one test run is rejected as unproven. Reproduce each one's evidence: read the cited lines in
 the worktree, or run the cited command there — one test file
 (`pnpm --filter <package> exec vitest run <file>`, or `exec jest <file>` for
-`@apex/mobile`), never the whole `pnpm check`; CI runs that. Restore anything
-you change with `git checkout .`. Then decide:
+`@apex/mobile`), never the whole `pnpm check`; CI runs that. A throwaway test
+for `@apex/mobile` follows `apps/mobile/TESTING.md` (`await render(...)`);
+this Mac has no `timeout` command. Restore anything you change with
+`git checkout .`. Then decide:
 
 - **Confirmed**: it goes under Fix, as `path:line what is wrong`, written so
   it makes sense without the PR open.

@@ -91,6 +91,7 @@
     "typescript": "~6.0.3"
   },
   "jest": {
+    "forceExit": true,
     "preset": "jest-expo",
     "resolver": "<rootDir>/jest.resolver.js",
     "setupFilesAfterEnv": [

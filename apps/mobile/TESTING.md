@@ -11,7 +11,10 @@ the how. Copy the closest recipe.
   under test from `..`; import other modules only by `@/modules/<name>`.
 - `@testing-library/react-native` **14**: `render`, `fireEvent.*` and `act`
   return promises — always `await` them. Matchers like `toBeOnTheScreen()` are
-  loaded.
+  loaded. A test that fails while an un-awaited `render` still has an effect in
+  flight leaves Jest unable to exit; the config sets `forceExit` so that run
+  ends instead of hanging, but the test is still wrong. The "Force exiting
+  Jest" line after every run is that setting, not a problem to chase.
 - `jest.setup.ts` sets up Reanimated and, before every test, puts every port
   module on its fake: the updater offers no update and runs the embedded
   bundle on channel `production`, and the API is unreachable. A test that
