@@ -24,3 +24,4 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0016](0016-factory-memory-run-records-and-retro.md) | Factory memory on a branch, a record of every run, and a retro agent | Accepted |
 | [0017](0017-a-local-factory-console.md) | A local, read-mostly factory console | Accepted (amended by 0018) |
 | [0018](0018-console-chats-with-intake-and-spec-agents.md) | The console chats with the intake and spec agents | Proposed |
+| [0019](0019-no-global-skills-in-factory-runs.md) | Factory runs see only the repository's skills (`OPENCODE_TEST_HOME`) | Accepted |
