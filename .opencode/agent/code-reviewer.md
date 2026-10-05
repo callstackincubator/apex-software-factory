@@ -120,7 +120,9 @@ Break-and-rerun probes (testing rules 2 and 3) are for your riskiest claims
 only: **at most three per review**. A probe is one edit to the code under
 test, one run of its test file, and `git checkout .`. Spend them where a
 wrong answer would hurt a user: a changed error path, a bound, a parser, an
-interleaving. Read, do not run, everything else.
+interleaving. Read, do not run, everything else. A throwaway test you write
+for `@apex/mobile` follows `apps/mobile/TESTING.md` (`await render(...)`).
+This Mac has no `timeout` command; do not wrap runs in it.
 
 **Stay in the diff.** Read the changed files, the code they call in this
 repository, and the rules — never `node_modules`, React Native's or another
