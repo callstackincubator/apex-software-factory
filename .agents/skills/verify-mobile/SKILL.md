@@ -92,6 +92,16 @@ is `fail`: read the last 30 lines of the log, not the whole log, and quote the f
 The initial snapshot is your first evidence. A red screen, a crash or an empty snapshot is
 `fail`.
 
+Start one recording for the whole of step 4; it becomes the video in the evidence comment
+(step 8):
+
+```bash
+.agents/scripts/device-lane.sh record start pr<PR>-checks   # <main>/.worktrees/sim-shots/pr<PR>-checks.mp4
+```
+
+If it cannot start (the simulator host's recording lock is busy), note it and check without
+video: the recording never decides a line.
+
 ## 4. Check each line
 
 - **`e2e:` scripts.** One at a time, in the lane's session (do not `close` first):
@@ -116,7 +126,10 @@ The initial snapshot is your first evidence. A red screen, a crash or an empty s
   ```
 
   Read the image and say whether it shows what the line claims, quoting the visible text.
-  Screenshots stay local and are never committed.
+  Screenshots and the recording are never committed; step 8 shows them on the PR.
+
+After the last line, `.agents/scripts/device-lane.sh record stop` (release stops it too, if
+you could not).
 
 A lane `ad` command that exits 76 failed twice on the device side (CoreSimulator or the
 XCUITest runner, not the app; the lane already retried once): `release`, `lease ios` again,
@@ -169,6 +182,42 @@ It stops Metro, closes the agent-device session, and gives the device back to si
 erases it for the next lane). Run it before the report on every path, including `fail` and an
 error midway. If you cannot run it, say so under Evidence: the lease then expires on its TTL.
 
+## 8. Show the evidence on the PR
+
+After the release, for `pass` and `fail` (not `busy` or `unavailable`), post one comment with
+each checked line, its result and its screenshot, and the recording at the end. Upload the
+files first: `attach.sh` prints one Markdown line per file, in order (an image, or a video's
+URL):
+
+```bash
+.agents/scripts/attach.sh <main>/.worktrees/sim-shots/pr<PR>-1.png'#line 1' \
+  <main>/.worktrees/sim-shots/pr<PR>-2.png'#line 2' <main>/.worktrees/sim-shots/pr<PR>-checks.mp4
+```
+
+Then post the comment with those lines in place (`git rev-parse --short HEAD` in the
+worktree is the commit you checked):
+
+```bash
+gh pr comment <PR> --body-file - <<'EOF'
+## Simulator evidence (`<short sha>`)
+
+**<line 1, as given>**: pass
+![line 1](https://github.com/user-attachments/assets/...)
+
+**<line 2, as given>**: fail. <the step that differs, one line>
+![line 2](https://github.com/user-attachments/assets/...)
+
+Recording of the checks:
+https://github.com/user-attachments/assets/...
+
+_Written by an agent._
+EOF
+```
+
+A line with no screenshot (`not covered`) gets its result alone. `attach.sh` exit 69 (no user
+login on this machine) or 1: post no comment, and say why under Evidence. The comment shows
+what you checked; your report decides. Never let an upload change a line's result.
+
 ## Report
 
 If this run cost steps for a reason that is not the issue's own work, first
@@ -179,7 +228,8 @@ block, nothing after it:
 ```
 PR: #M  Simulator: pass | fail | busy (<simlock line>) | unavailable (<reason>)
 Device: <model> <os> <udid first 8> lease <lease id> | none
-Ran: build <minutes> min, e2e <files or "none">, screenshots <n>; logs <paths>
+Ran: build <minutes> min, e2e <files or "none">, screenshots <n>, video yes | no; logs <paths>
+Evidence comment: <its URL> | none (<reason>)
 Lines: <each Done when line, then pass | fail | not covered>
 Evidence: <the failing step, request or text that differs, one per line, or "none">
 ```

@@ -28,6 +28,9 @@
 #   device-lane.sh rozenite targets | session | reset | <domain> <args...>
 #                                               rozenite agent against the lane's Metro port
 #   device-lane.sh screenshot <name>            <main checkout>/.worktrees/sim-shots/<name>.png
+#   device-lane.sh record start <name> | stop   a video of the app, to
+#                                               <main checkout>/.worktrees/sim-shots/<name>.mp4;
+#                                               release stops one still running
 #   device-lane.sh renew                        push the lease's deadline out by its TTL
 #   device-lane.sh status                       this lane, simlock's queue, the build slots
 #   device-lane.sh release                      metro stop, agent-device close, simlock release;
@@ -62,6 +65,31 @@
 # so replays run inside the lane's session and `ad test` replays scripts one by one; iOS's
 # "Open in Apex Factory?" prompt for a deep link into a running app is accepted here.
 set -eu
+
+cmd_record() {
+  case ${1:-} in
+    start)
+      name=${2:?usage: device-lane.sh record start <name> | record stop}
+      case $name in *[!A-Za-z0-9._-]* | .*) die "recording name: letters, digits, . _ - only" ;; esac
+      require_lease
+      shots="$main_root/.worktrees/sim-shots"
+      mkdir -p "$shots"
+      renew_if_due
+      agent_device record start "$shots/$name.mp4" --quality medium >/dev/null
+      state_set recording "$shots/$name.mp4"
+      echo "recording: $shots/$name.mp4"
+      ;;
+    stop)
+      require_lease
+      file=$(state_get recording)
+      [ -n "$file" ] || die "no recording running in this lane"
+      agent_device record stop >/dev/null
+      state_set recording ""
+      echo "recorded: $file"
+      ;;
+    *) die "usage: device-lane.sh record start <name> | record stop" ;;
+  esac
+}
 
 usage() {
   sed -n '2,/^# Exit codes/p' "$self" | sed '$d' | sed 's/^# \{0,1\}//' >&2
@@ -855,6 +883,8 @@ cmd_release() {
     return 0
   fi
   cmd_metro stop >/dev/null
+  # A recorder left running holds the simulator host's recording lock.
+  [ -z "$(state_get recording)" ] || agent_device record stop >/dev/null 2>&1 || true
   sid=$(state_get appductSession)
   [ -z "$sid" ] || appduct sessions revoke "$sid" >/dev/null 2>&1 || true
   agent_device close >/dev/null 2>&1 || true
@@ -880,6 +910,7 @@ case $cmd in
   appduct) cmd_appduct "$@" ;;
   rozenite) cmd_rozenite "$@" ;;
   screenshot) cmd_screenshot "$@" ;;
+  record) cmd_record "$@" ;;
   renew) require_lease && renew_lease ;;
   status) cmd_status ;;
   release) cmd_release ;;

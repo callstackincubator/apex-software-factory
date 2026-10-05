@@ -20,7 +20,7 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0012](0012-allow-by-default-watchdog-dispatcher.md) | Allow by default with a short deny list, a watchdog per run, and a GitHub Actions dispatcher | Accepted (amended by 0016, 0020, 0021) |
 | [0013](0013-booth-binary-bundles-native-capabilities.md) | The booth binary carries the native libraries booth features are likely to need | Accepted |
 | [0014](0014-keep-the-models-reasoning-between-steps.md) | Keep the model's reasoning between steps | Accepted |
-| [0015](0015-step-caps-and-no-implementer-device.md) | Hard step caps per agent; the implementer never leases a device; the dispatcher runs the newest main | Accepted |
+| [0015](0015-step-caps-and-no-implementer-device.md) | Hard step caps per agent; the implementer never leases a device; the dispatcher runs the newest main | Accepted (amended by 0023) |
 | [0016](0016-factory-memory-run-records-and-retro.md) | Factory memory on a branch, a record of every run, and a retro agent | Accepted |
 | [0017](0017-a-local-factory-console.md) | A local, read-mostly factory console | Accepted (amended by 0018) |
 | [0018](0018-console-chats-with-intake-and-spec-agents.md) | The console chats with the intake and spec agents | Proposed |
@@ -28,3 +28,4 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0020](0020-factory-github-app-and-branch-claims.md) | Unattended runs act as a GitHub App; the branch is the claim | Accepted |
 | [0021](0021-repository-automation-acts-as-the-factory-app.md) | Repository automation acts as the factory app too | Accepted |
 | [0022](0022-implementer-only-mobile-guides.md) | Expo and React Native guides for the implementer only, loaded by name | Accepted |
+| [0023](0023-simulator-evidence-as-pr-attachments.md) | Simulator screenshots and a recording go on the PR as attachments | Accepted |
