@@ -19,8 +19,9 @@
 # this script leaves the issue's `## Handoff` (delivery rule 2), releases the claim and moves it
 # to <kind>:blocked, or says why it could not.
 #
-# An attempt whose agent turn ended on a provider error (OpenCode exits 0 then) counts as
-# stopped too, and is restarted the same way after a short backoff.
+# An attempt whose agent turn ended on a provider error, or whose last turn hit the output limit
+# or came back with no text (a garbled reply; OpenCode exits 0 for both) counts as stopped too,
+# and is restarted the same way after a short backoff.
 #
 # Exit: 0 the run ended on its own (merged, parked or reported — read the issue); 1 gave up
 # after the restart; 64 usage; 69 opencode or sqlite3 missing, or the agent file names no model.
@@ -121,19 +122,31 @@ run_attempt() {
   wait "$pid"
   echo "factory-run: #$issue attempt $n ended (opencode exit $?) after $(($(date +%s) - started))s" >&2
   tail -n 15 "$log" >&2
+  top=$(sqlite3 -readonly "$db" "
+    select id from session_v2 where parent_id is null and agent = '$agent'
+      and time_created >= $since and (directory = '$root' or directory like '$root/%')
+      order by time_created desc limit 1;" 2>/dev/null || true)
   # `opencode run` exits 0 even when the agent's turn ended on an error (a 503 from the
   # provider, "no upstreams available"): the run stopped, it did not finish. OpenCode records
   # it as the top session's last event, `idle` with outcome "failed".
   outcome=$(sqlite3 -readonly "$db" "
-    select json_extract(m.data, '\$.outcome') from session_message m
-      where m.session_id = (select id from session_v2 where parent_id is null and agent = '$agent'
-                              and time_created >= $since and (directory = '$root' or directory like '$root/%')
-                              order by time_created desc limit 1)
-        and m.type = 'idle'
-      order by m.seq desc limit 1;" 2>/dev/null || true)
+    select json_extract(data, '\$.outcome') from session_message
+      where session_id = '$top' and type = 'idle' order by seq desc limit 1;" 2>/dev/null || true)
+  # It also exits 0, outcome "succeeded", when the last turn was garbled: it ran to the output
+  # limit (finish "length") or ended with no text at all (#18's run on 2026-10-05). A run that
+  # finished on its own ends with a text reply (the end-of-run comment's summary, a handoff).
+  last=$(sqlite3 -readonly "$db" "
+    select json_extract(m.data, '\$.finish') || '|' || coalesce((select count(*) from json_each(m.data, '\$.content') c
+                where json_extract(c.value, '\$.type') = 'text' and trim(json_extract(c.value, '\$.text')) <> ''), 0)
+      from session_message m where m.session_id = '$top' and m.type = 'assistant' order by m.seq desc limit 1;" 2>/dev/null || true)
+  reason=
   if [ "$outcome" = failed ]; then
     error=$(grep -oE 'ServiceUnavailable[A-Za-z]*|no upstreams available|"status":5[0-9][0-9]' "$log" | tail -n 1)
     reason="the agent's turn ended on an error${error:+ ($error)}"
+  elif [ -n "$top" ] && [ -n "$last" ] && { [ "${last%%|*}" = length ] || [ "${last#*|}" = 0 ]; }; then
+    reason="the agent's last turn came back garbled (finish ${last%%|*}, ${last#*|} text parts)"
+  fi
+  if [ -n "$reason" ]; then
     echo "factory-run: #$issue attempt $n stopped: $reason" >&2
     echo "$reason" >"$log.stopped"
     sleep "${FACTORY_ERROR_BACKOFF_S:-60}" # a provider outage is usually short
