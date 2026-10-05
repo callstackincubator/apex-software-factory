@@ -27,7 +27,7 @@ import {
   type ReadyUpdate,
 } from "@/modules/ota";
 import { shippedFeatures } from "@/modules/registry";
-import { checkApiHealth } from "@/modules/status";
+import { checkApiHealth, type Clock, defaultClock } from "@/modules/status";
 import { getUpdater } from "@/modules/updater";
 
 import { type FeatureAgentTools, featureAgentTools } from "./features";
@@ -42,6 +42,7 @@ export type AgentToolDeps = {
   platform: string;
   appVersion: string;
   apiUrl: string;
+  now: Clock;
   navigation: {
     get(): NavigationState;
     navigate(path: string): void;
@@ -247,11 +248,17 @@ export function createAgentTools(deps: AgentToolDeps): AnyRegistration[] {
       outputSchema: z.object({
         state: z.enum(["ok", "offline"]).describe("offline = unreachable, error, or bad response"),
         version: z.string().optional().describe("API version when ok"),
+        latencyMs: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Round trip of the /health request in whole milliseconds, when ok"),
         apiUrl: z.string(),
       }),
       timeoutMs: 15_000,
       annotations: { readOnlyHint: true, idempotentHint: true },
-      handler: async () => ({ ...(await checkApiHealth()), apiUrl: deps.apiUrl }),
+      handler: async () => ({ ...(await checkApiHealth(deps.now)), apiUrl: deps.apiUrl }),
     }),
 
     tool({
@@ -304,6 +311,7 @@ export function defaultAgentToolDeps(): AgentToolDeps {
     platform: Platform.OS,
     appVersion: Constants.expoConfig?.version ?? "unknown",
     apiUrl: apiBaseUrl,
+    now: defaultClock,
     navigation: {
       get: getNavigationState,
       navigate: (path) => router.navigate(path as Href),

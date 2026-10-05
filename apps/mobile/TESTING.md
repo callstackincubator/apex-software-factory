@@ -35,10 +35,15 @@ jest.mock("expo-constants", () => ({
   default: { expoConfig: { version: "1.0.0" } },
 }));
 
+// The API row's label carries the round trip ("API status: ok · v1.4.0 · 42 ms"),
+// so fix the clock the footer measures with (see "A plain function or hook").
+let t = 0;
+const now = () => (t += 42); // two calls per check, 42 ms apart → a 42 ms round trip
+
 it("shows the API version once healthy, and re-checks on press", async () => {
-  await render(<StatusFooter />);
+  await render(<StatusFooter now={now} />);
   expect(await screen.findByText("ok · v1.4.0")).toBeOnTheScreen(); // findBy* waits for effects
-  await fireEvent.press(screen.getByRole("button", { name: "API status: ok · v1.4.0" }));
+  await fireEvent.press(screen.getByRole("button", { name: "API status: ok · v1.4.0 · 42 ms" }));
 });
 ```
 

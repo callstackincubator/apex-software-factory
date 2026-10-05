@@ -5,7 +5,7 @@ import { Platform, Pressable, Text, View } from "react-native";
 import { UpdateInfo } from "@/modules/ota";
 import { fonts, LiveDot, space, type Theme, useTheme } from "@/modules/ui";
 
-import { type ApiHealth, useApiHealth } from "./api-health";
+import { type ApiHealth, type Clock, defaultClock, useApiHealth } from "./api-health";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   const theme = useTheme();
@@ -46,10 +46,16 @@ function platformName(os: string) {
   }
 }
 
-export function StatusFooter() {
+type Props = {
+  now?: Clock;
+};
+
+export function StatusFooter({ now = defaultClock }: Props) {
   const theme = useTheme();
-  const { health, refresh } = useApiHealth();
+  const { health, refresh } = useApiHealth(now);
   const status = describe(health, theme);
+  const latencyMs = health.state === "ok" ? health.latencyMs : null;
+  const rowText = latencyMs === null ? status.text : `${status.text} · ${latencyMs} ms`;
   const appVersion = Constants.expoConfig?.version ?? "unknown";
   const platform = platformName(Platform.OS);
 
@@ -66,7 +72,7 @@ export function StatusFooter() {
         testID="status-api"
         onPress={refresh}
         accessibilityRole="button"
-        accessibilityLabel={`API status: ${status.text}`}
+        accessibilityLabel={`API status: ${rowText}`}
         accessibilityHint="Checks the API again"
         style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
       >
@@ -79,6 +85,18 @@ export function StatusFooter() {
           >
             {status.text}
           </Text>
+          {latencyMs !== null && (
+            <Text
+              testID="status-api-latency"
+              selectable
+              accessible
+              accessibilityLabel={`API round trip ${latencyMs} ms`}
+              maxFontSizeMultiplier={1.6}
+              style={{ fontFamily: fonts.mono, fontSize: 12, color: theme.text }}
+            >
+              {`· ${latencyMs} ms`}
+            </Text>
+          )}
         </Row>
       </Pressable>
       <View

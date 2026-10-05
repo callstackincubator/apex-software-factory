@@ -52,6 +52,7 @@ function makeDeps(overrides: Partial<AgentToolDeps> = {}) {
     platform: "ios",
     appVersion: "1.0.0",
     apiUrl: "http://192.168.1.20:3001",
+    now: jest.fn(() => 1000),
     navigation: {
       get: jest.fn(() => ({ pathname: "/", routes: ["/", "/features/[id]", "/settings"] })),
       navigate: jest.fn(),
@@ -244,6 +245,19 @@ describe("agent tools", () => {
     expect(await call(deps, "api_health")).toEqual({
       state: "ok",
       version: "0.1.0",
+      latencyMs: 0,
+      apiUrl: "http://192.168.1.20:3001",
+    });
+  });
+
+  it("the api_health tool returns latencyMs when the API answers", async () => {
+    let time = 1000;
+    const deps = makeDeps({ now: () => (time += 42.7) });
+
+    expect(await call(deps, "api_health")).toEqual({
+      state: "ok",
+      version: "0.1.0",
+      latencyMs: 43,
       apiUrl: "http://192.168.1.20:3001",
     });
   });
