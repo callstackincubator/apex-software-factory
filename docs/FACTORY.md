@@ -467,6 +467,26 @@ opencode run "Reply with the single word ok."
 - **The PR body** has a status line every stage updates, for example
   `Implement: done (5/5 green)  Review: round 2, 0 open  Simulator: pass  Native: no  Gate: merged`.
 
+## The console
+
+The maintainer watches the factory from a web page on their own machine, not
+from GitHub tabs and SQLite queries:
+
+```bash
+pnpm console          # builds the page, serves http://127.0.0.1:4280
+pnpm console --demo   # the same page on sample data, nothing else needed
+```
+
+It shows which `factory` runner holds which issue, every pending delivery with
+the time each phase took, the review statistics, and every GitHub workflow
+(the scheduled ones are the factory's automations, with their next run and
+success rate). It can start a factory run for an issue, run a workflow that
+needs no input, and open OpenCode's web app. It reads what the factory already
+writes and changes none of it; it listens on the loopback interface only.
+Details: [the console spec](internal/CONSOLE.md) and
+[ADR 0016](internal/adr/0016-a-local-factory-console.md); how to run it:
+[apps/console/README.md](../apps/console/README.md).
+
 ## More
 
 - Delivery manual: [DELIVERY.md](internal/DELIVERY.md)
