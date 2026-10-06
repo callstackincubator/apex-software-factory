@@ -289,7 +289,7 @@ Modules talk through each other's `index.ts` and through domain events on
    request and response shapes live in `@apex/contract`.
 4. Prefer JS-only changes. A new native module changes the binary's fingerprint
    and cannot ship over the air (ADR 0003). The binary already carries the
-   native libraries booth features are likely to need — Skia, MMKV, SQLite,
+   native libraries booth features are likely to need — Skia, MMKV,
    VisionCamera (QR scanning), local notifications, calendar, image picker,
    sharing, media library, maps, location, SVG, gradient, blur, sensors,
    keyboard-controller, clipboard, speech, WebView, plus Reanimated, Gesture
@@ -310,7 +310,7 @@ Modules talk through each other's `index.ts` and through domain events on
 What the running binary links: the appduct tool `native_capabilities`, or the
 hidden route `/_capabilities` (`open_route {"path":"/_capabilities"}`; not
 linked from the home screen), which adds a live smoke per library — Skia
-draws, MMKV and SQLite round-trip, SVG, gradient, blur, WebView and map views
+draws, MMKV round-trips, SVG, gradient, blur, WebView and map views
 render, sensors and permissions are read without prompting. The probe list is
 `src/modules/capabilities/native-capabilities.ts`; keep it in step with
 `docs/internal/NATIVE-CAPABILITIES.md`.

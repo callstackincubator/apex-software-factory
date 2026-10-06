@@ -28,14 +28,6 @@
       "enables": "fast synchronous key-value storage"
     },
     {
-      "id": "sqlite",
-      "package": "expo-sqlite",
-      "version": "~57.0.3",
-      "status": "linked",
-      "missingModules": [],
-      "enables": "on-device SQL database"
-    },
-    {
       "id": "vision-camera",
       "package": "react-native-vision-camera",
       "version": "5.2.3",

@@ -139,7 +139,6 @@ describe("NATIVE_LIBRARIES", () => {
       "@shopify/react-native-skia",
       "react-native-mmkv",
       "react-native-nitro-modules",
-      "expo-sqlite",
       "react-native-vision-camera",
       "expo-notifications",
       "expo-calendar",

@@ -71,7 +71,6 @@
           "allowPrivateLanOnly": true
         }
       ],
-      "expo-sqlite",
       "expo-sharing",
       [
         "expo-image-picker",
