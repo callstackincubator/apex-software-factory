@@ -43,9 +43,8 @@ if (process.env.APPDUCT_ENABLED !== "1") {
 
 /**
  * Native builds write into node_modules, and the fingerprint hashes what they
- * write: `pod install` copies expo-sqlite's SQLite amalgamation into
- * `expo-sqlite/ios/sqlite3.{c,h}`, and a react-native-maps build phase
- * rewrites `ios/AirMaps/RNMapsDefines.h` (the package hashes as a whole, so
+ * write: a react-native-maps build phase rewrites
+ * `ios/AirMaps/RNMapsDefines.h` (the package hashes as a whole, so
  * it moves the Android fingerprint too). A checkout that has built once would
  * then embed, and compare against, a fingerprint that a fresh checkout (CI's
  * deploy) never computes, and no update would reach the phone. hot-updater's
@@ -60,15 +59,11 @@ function resetNativeBuildByproducts(): void {
     existsSync(path: string): boolean;
     readFileSync(path: string, encoding: "utf8"): string;
     writeFileSync(path: string, data: string): void;
-    rmSync(path: string, options: { force: boolean }): void;
   };
   const getBuiltin = (process as unknown as { getBuiltinModule(id: string): unknown })
     .getBuiltinModule;
   const fs = getBuiltin("node:fs") as Fs;
   const modules = `${process.cwd()}/node_modules`;
-  for (const file of ["sqlite3.c", "sqlite3.h"]) {
-    fs.rmSync(`${modules}/expo-sqlite/ios/${file}`, { force: true });
-  }
   const defines = `${modules}/react-native-maps/ios/AirMaps/RNMapsDefines.h`;
   if (
     fs.existsSync(defines) &&
