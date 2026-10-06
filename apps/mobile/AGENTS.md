@@ -36,7 +36,7 @@ https://docs.expo.dev/llms.txt.
 - The native libraries in the booth binary, with their permissions and
   platform limits, are listed in
   [docs/internal/NATIVE-CAPABILITIES.md](../../docs/internal/NATIVE-CAPABILITIES.md)
-  (Skia, MMKV, SQLite, VisionCamera, local notifications, maps, location,
+  (Skia, MMKV, VisionCamera, local notifications, maps, location,
   calendar, sensors, WebView and more). Build booth features from those; a
   feature that needs a native library, permission or plugin not listed there
   is "needs native build". JS-only packages (FlashList v2,

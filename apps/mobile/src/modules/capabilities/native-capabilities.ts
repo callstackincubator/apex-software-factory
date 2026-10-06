@@ -35,12 +35,6 @@ export const NATIVE_LIBRARIES: readonly NativeLibrary[] = [
     modules: [["nitro", "MMKVFactory"]],
   },
   {
-    id: "sqlite",
-    package: "expo-sqlite",
-    enables: "on-device SQL database",
-    modules: [["expo", "ExpoSQLite"]],
-  },
-  {
     id: "vision-camera",
     package: "react-native-vision-camera",
     enables: "camera preview, photos, QR/barcode scanning (iOS object output)",

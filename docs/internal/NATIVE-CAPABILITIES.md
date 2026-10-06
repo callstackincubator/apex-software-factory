@@ -24,7 +24,7 @@ package with no native code can be added over the air (see
 - Hidden route **`/_capabilities`** (not linked from the home screen):
   `open_route {"path":"/_capabilities"}`. The same probe as chips, then a live
   smoke per library: Skia draws offscreen and reads the pixel back and shows a
-  canvas, MMKV and SQLite round-trip, SVG / gradient / blur / WebView (a
+  canvas, MMKV round-trip, SVG / gradient / blur / WebView (a
   HTML page whose script posts back) / map views report that they rendered,
   sensors report availability, the clipboard round-trips, the
   keyboard-controller provider is found, and camera, notification, calendar,
@@ -51,7 +51,6 @@ pinned exactly in `apps/mobile/package.json`.
 | `@shopify/react-native-skia` | 2.6.2 | 2D drawing, paths, shaders, image filters, offscreen rendering, Skia + Reanimated animations | — | — |
 | `react-native-mmkv` | 4.3.2 | fast synchronous key-value storage (`createMMKV()`, hooks) | — | v4 API: `createMMKV`, `.remove()`; keep data well under 100 MB |
 | `react-native-nitro-modules` | 0.37.1 | runtime for MMKV and VisionCamera | — | — |
-| `expo-sqlite` | 57.0.3 | on-device SQLite (sync and async API, `useSQLiteContext`) | — | default build flags: no SQLCipher, no FTS/vec extension options set |
 | `react-native-vision-camera` | 5.2.3 | camera preview, in-memory photos (`usePhotoOutput`), video without audio, **QR/barcode scanning on iOS** with `useObjectOutput` | Camera | v5 API only (outputs, constraints; no `takePhoto`, no `format`). No microphone permission, so no audio in recordings. No frame processors (`react-native-vision-camera-worklets` is not in the binary). |
 | `react-native-nitro-image` | 0.15.2 | VisionCamera's in-memory `Photo` → image | — | peer of VisionCamera |
 | `react-native-vision-camera-barcode-scanner` | 5.2.3 | **QR/barcode scanning on Android** (MLKit, `useBarcodeScannerOutput`) | Camera | **Android only**: excluded from iOS autolinking (`expo.autolinking.ios.exclude`) because MLKit ships no iOS simulator binaries. Use `Scanner.ios.tsx` (object output) + `Scanner.android.tsx` (barcode scanner). |
@@ -200,11 +199,9 @@ the config plugin" is native: needs native build.
 
 ## Fingerprint hygiene
 
-Two of these libraries write into `node_modules` during a native build:
-`pod install` copies expo-sqlite's SQLite amalgamation to
-`expo-sqlite/ios/sqlite3.{c,h}`, and a react-native-maps build phase rewrites
-`ios/AirMaps/RNMapsDefines.h`. The fingerprint hashes both (hot-updater's
-`ignorePaths` cannot exclude them), so a checkout that had built once would
+One of these libraries writes into `node_modules` during a native build: a
+react-native-maps build phase rewrites `ios/AirMaps/RNMapsDefines.h`. The
+fingerprint hashes it (hot-updater's `ignorePaths` cannot exclude it), so a checkout that had built once would
 embed a fingerprint that CI's fresh checkout never computes, and no update
 would reach the phone. `hot-updater.config.ts` therefore puts them back to
 their published state whenever it loads (every `expo prebuild` and every

@@ -25,11 +25,6 @@ const smokes: readonly Smoke[] = [
     load: () => (require("./smokes/storage") as typeof import("./smokes/storage")).MmkvSmoke,
   },
   {
-    id: "sqlite",
-    title: "SQLite",
-    load: () => (require("./smokes/storage") as typeof import("./smokes/storage")).SqliteSmoke,
-  },
-  {
     id: "svg",
     title: "SVG",
     load: () => (require("./smokes/graphics") as typeof import("./smokes/graphics")).SvgSmoke,

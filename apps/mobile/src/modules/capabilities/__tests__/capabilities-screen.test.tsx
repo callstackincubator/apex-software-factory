@@ -26,13 +26,6 @@ jest.mock("expo-clipboard", () => {
     getStringAsync: jest.fn(async () => text),
   };
 });
-jest.mock("expo-sqlite", () => ({
-  openDatabaseSync: jest.fn(() => ({
-    execSync: jest.fn(),
-    getFirstSync: jest.fn(() => ({ total: 42, version: "3.50.4" })),
-    closeSync: jest.fn(),
-  })),
-}));
 jest.mock("expo-sensors", () => {
   const sensor = (available: boolean) => ({ isAvailableAsync: jest.fn(async () => available) });
   return {
@@ -107,9 +100,6 @@ describe("CapabilitiesScreen", () => {
     // Smokes that call a module settle on their own (the modules are Jest mocks).
     expect(await screen.findByLabelText(/^MMKV: ok\. set\/get\/remove round-trip/)).toBeTruthy();
     expect(await screen.findByLabelText(/^Skia: ok\. offscreen draw \+ readPixels/)).toBeTruthy();
-    expect(
-      await screen.findByLabelText("SQLite: ok. in-memory query = 42 · SQLite 3.50.4"),
-    ).toBeTruthy();
     expect(
       await screen.findByLabelText("Clipboard: ok. setString/getString round-trip"),
     ).toBeTruthy();

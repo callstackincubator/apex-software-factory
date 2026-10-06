@@ -26,14 +26,6 @@
       "version": "4.3.2"
     },
     {
-      "status": "linked",
-      "version": "~57.0.3",
-      "enables": "on-device SQL database",
-      "package": "expo-sqlite",
-      "missingModules": [],
-      "id": "sqlite"
-    },
-    {
       "id": "vision-camera",
       "enables": "camera preview, photos, QR/barcode scanning (iOS object output)",
       "package": "react-native-vision-camera",
