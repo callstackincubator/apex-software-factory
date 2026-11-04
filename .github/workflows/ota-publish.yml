@@ -1,20 +1,21 @@
 name: OTA publish
 
-# Ships the mobile JS bundle to the `production` channel of the self-hosted
-# hot-updater server on the booth laptop (ADR 0003). Runs after every merge to
-# main that can change the bundle. A native change cannot ship over the air:
-# the fingerprint does not match the installed binary, the deploy refuses, and
-# this workflow reports "needs a native build" on the job and the merged PR.
+# Publishes the mobile JS bundle to the `production` channel of EAS Update
+# (ADR 0025). Runs after every merge to main that can change the bundle. An
+# update only reaches binaries whose runtime version (the native fingerprint)
+# matches, so before publishing this looks for a finished `production`-profile
+# EAS build of the same fingerprint on each platform. A native change has none:
+# nothing is published, and this workflow reports "needs a native build" on the
+# job and the merged PR.
 #
-# SECURITY: this job runs on the self-hosted runner on the booth laptop, which
-# holds the OTA token and S3 credentials and runs as the maintainer's user.
-# It must only ever run reviewed code from main. Never add pull_request,
-# pull_request_target, or any other trigger that runs a branch or a fork here.
-# A workflow_dispatch from another branch runs the preflight only; the deploy
-# step is gated on refs/heads/main.
+# SECURITY: this job holds EXPO_TOKEN, which can publish to every phone and
+# simulator running the production binary. It must only ever run reviewed code
+# from main. Never add pull_request, pull_request_target, or any other trigger
+# that runs a branch or a fork here. A workflow_dispatch from another branch
+# runs the build check only; the publish step is gated on refs/heads/main.
 #
-# Setup (secrets, variables, the runner's PATH): docs/internal/DELIVERY.md,
-# "CI and OTA publishing". Booth-day runbook: docs/internal/OTA.md.
+# Setup (secrets, variables): docs/internal/DELIVERY.md, "CI and OTA
+# publishing". Runbook: docs/internal/OTA.md.
 
 on:
   push:
@@ -26,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       preflight_only:
-        description: Check the runner and the OTA stack, print fingerprints, deploy nothing
+        description: Print the fingerprints and look for their builds, publish nothing
         type: boolean
         default: false
 
@@ -46,7 +47,7 @@ defaults:
 jobs:
   publish:
     name: publish
-    runs-on: [self-hosted, ota]
+    runs-on: ubuntu-24.04
     permissions:
       actions: read # wait for CI's `check` on this commit
       checks: read # or prove it from the merged PR head's `check` (scripts/ci/wait-for-check.sh)
@@ -57,11 +58,11 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       CHANNEL: production
-      # One build profile (docs/internal/DEVICES.md): the booth binary links
-      # appduct (APPDUCT_ENABLED=1), and the variable changes the iOS
-      # fingerprint, so fingerprints and bundles are computed with it too. The
-      # ota:* scripts set it as well. Rozenite is a dev-only Metro plugin:
-      # WITH_ROZENITE stays empty here, so the bundle carries none of it.
+      # One build profile (docs/internal/DEVICES.md): the binaries link appduct
+      # (APPDUCT_ENABLED=1, also set by eas.json), and the variable changes the
+      # iOS fingerprint, so fingerprints and bundles are computed with it too.
+      # Rozenite is a dev-only Metro plugin: WITH_ROZENITE stays empty here,
+      # so the bundle carries none of it.
       APPDUCT_ENABLED: "1"
       WITH_ROZENITE: ""
     steps:
@@ -69,30 +70,24 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Put Node, pnpm and gh on PATH
-        run: scripts/ci/runner-env.sh
+      # Reads the version from package.json's packageManager pin.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
 
-      - name: Preflight (configuration, OTA server, MinIO)
-        env:
-          HOT_UPDATER_SERVER_URL: ${{ vars.HOT_UPDATER_SERVER_URL || secrets.HOT_UPDATER_SERVER_URL }}
-          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
-          S3_ENDPOINT: ${{ vars.S3_ENDPOINT || secrets.S3_ENDPOINT }}
-          S3_REGION: ${{ vars.S3_REGION || secrets.S3_REGION }}
-          S3_BUCKET: ${{ vars.S3_BUCKET || secrets.S3_BUCKET }}
-          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
-          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
-          EXPO_PUBLIC_OTA_URL: ${{ vars.EXPO_PUBLIC_OTA_URL }}
-          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
-        run: scripts/ci/ota-preflight.sh
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@9da89d3617bb88139671bad31b09c65714c2ee06 # 9.0.1
+        with:
+          eas-version: 27.4.1
+          packager: npm
+          token: ${{ secrets.EXPO_TOKEN }}
 
-      # No secrets in this step's environment: install scripts never see them.
-      # A full install (not --prod): the bundle build needs the app's
-      # devDependencies (Metro config helpers, hot-updater's build plugin).
+      # The fingerprint reads the installed native packages, and the bundle
+      # build needs the app's devDependencies (Metro config helpers).
       - name: Install
         run: pnpm install --frozen-lockfile
-
-      - name: Fingerprints
-        run: pnpm --filter @apex/mobile run ota:fingerprint
 
       - name: Describe the commit
         id: commit
@@ -104,97 +99,116 @@ jobs:
           {
             echo "short=$short"
             echo "pr=$pr"
-            # The deploy message is the merge commit subject plus the short sha.
+            # The update message is the merge commit subject plus the short sha.
             echo "message<<EOF_MESSAGE"
             echo "$subject ($short)"
             echo "EOF_MESSAGE"
           } >>"$GITHUB_OUTPUT"
 
+      # Per platform: the fingerprint of this commit, and whether a finished
+      # `production` build with it exists on EAS.
+      - name: Look for a production build of each fingerprint
+        id: builds
+        working-directory: apps/mobile
+        run: |
+          result=ready
+          for platform in ios android; do
+            hash=$(eas fingerprint:generate --platform "$platform" --build-profile production \
+              --json --non-interactive | jq -r .hash)
+            if ! [[ $hash =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error title=$platform fingerprint failed::eas fingerprint:generate returned no hash."
+              exit 1
+            fi
+            found=$(eas build:list --platform "$platform" --build-profile production \
+              --status finished --fingerprint-hash "$hash" --limit 1 --json --non-interactive | jq length)
+            if [ "$found" -gt 0 ]; then
+              status=build-found
+            else
+              status=needs-native-build
+              result=needs-native-build
+              echo "::error title=$platform needs a native build::No finished production build has fingerprint $hash. Not published."
+            fi
+            echo "$platform: $hash $status"
+            {
+              echo "${platform}_fingerprint=$hash"
+              echo "${platform}_status=$status"
+            } >>"$GITHUB_OUTPUT"
+          done
+          echo "result=$result" >>"$GITHUB_OUTPUT"
+
       # Skipped at once when the merge commit's tree is the tree of the merged PR's head and
       # that head's check passed (a squash merge of an up-to-date branch: the same code, already
       # tested); otherwise waits for CI on this commit (ADR 0009).
       - name: Wait for CI's check on this commit
-        if: github.ref == 'refs/heads/main' && !inputs.preflight_only
+        if: github.ref == 'refs/heads/main' && !inputs.preflight_only && steps.builds.outputs.result == 'ready'
         run: scripts/ci/wait-for-check.sh "$GITHUB_SHA" 25
 
-      - name: Deploy iOS and Android, side by side
-        id: deploy
-        if: github.ref == 'refs/heads/main' && !inputs.preflight_only
+      # EXPO_PUBLIC_API_URL and the rest of the bundle's public environment come
+      # from the `production` EAS environment (--environment), the same one the
+      # production binary was built with.
+      - name: Publish to EAS Update
+        id: publish
+        if: github.ref == 'refs/heads/main' && !inputs.preflight_only && steps.builds.outputs.result == 'ready'
+        working-directory: apps/mobile
         env:
-          OTA_CHANNEL: ${{ env.CHANNEL }}
-          OTA_MESSAGE: ${{ steps.commit.outputs.message }}
-          OTA_PLATFORMS: ios android
-          OTA_MISMATCH_PATTERN: ${{ vars.OTA_MISMATCH_PATTERN }}
-          HOT_UPDATER_SERVER_URL: ${{ vars.HOT_UPDATER_SERVER_URL || secrets.HOT_UPDATER_SERVER_URL }}
-          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
-          S3_ENDPOINT: ${{ vars.S3_ENDPOINT || secrets.S3_ENDPOINT }}
-          S3_REGION: ${{ vars.S3_REGION || secrets.S3_REGION }}
-          S3_BUCKET: ${{ vars.S3_BUCKET || secrets.S3_BUCKET }}
-          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
-          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
-          # Compiled into every bundle: an OTA bundle replaces the binary's JS, so it
-          # must carry the same URLs the booth binary was built with.
-          EXPO_PUBLIC_OTA_URL: ${{ vars.EXPO_PUBLIC_OTA_URL }}
-          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+          MESSAGE: ${{ steps.commit.outputs.message }}
         run: |
-          # An empty repo variable must not blank out the script's default.
-          [ -n "$OTA_MISMATCH_PATTERN" ] || unset OTA_MISMATCH_PATTERN
-          scripts/ci/ota-deploy.sh
-
-      # Best effort, never fails the job: booth phones paired with this laptop's appduct daemon
-      # check now instead of on their next 30 s poll (docs/internal/OTA.md, Booth phones).
-      - name: Nudge paired booth phones
-        if: steps.deploy.outcome == 'success'
-        continue-on-error: true
-        timeout-minutes: 2
-        run: scripts/ci/ota-nudge.sh
+          eas update --channel "$CHANNEL" --environment production \
+            --message "$MESSAGE" --json --non-interactive >"$RUNNER_TEMP/update.json"
+          cat "$RUNNER_TEMP/update.json"
+          group=$(jq -r '[.[]?.group] | map(select(. != null)) | first // empty' "$RUNNER_TEMP/update.json" || true)
+          echo "group=$group" >>"$GITHUB_OUTPUT"
 
       - name: Summary
-        if: always() && steps.deploy.outcome != 'skipped'
+        if: always()
         env:
-          RESULT: ${{ steps.deploy.outputs.result }}
-          IOS_STATUS: ${{ steps.deploy.outputs.ios_status }}
-          IOS_BUNDLE: ${{ steps.deploy.outputs.ios_bundle }}
-          ANDROID_STATUS: ${{ steps.deploy.outputs.android_status }}
-          ANDROID_BUNDLE: ${{ steps.deploy.outputs.android_bundle }}
+          RESULT: ${{ steps.builds.outputs.result }}
+          PUBLISHED: ${{ steps.publish.outcome }}
+          IOS_STATUS: ${{ steps.builds.outputs.ios_status }}
+          IOS_FINGERPRINT: ${{ steps.builds.outputs.ios_fingerprint }}
+          ANDROID_STATUS: ${{ steps.builds.outputs.android_status }}
+          ANDROID_FINGERPRINT: ${{ steps.builds.outputs.android_fingerprint }}
+          GROUP: ${{ steps.publish.outputs.group }}
           MESSAGE: ${{ steps.commit.outputs.message }}
           PR: ${{ steps.commit.outputs.pr }}
         run: |
           url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY
-          case $RESULT in
-            shipped) title="Shipped over the air to \`$CHANNEL\`" ;;
-            needs-native-build) title="Needs a native build — not shipped over the air" ;;
+          case $RESULT:$PUBLISHED in
+            needs-native-build:*) title="Needs a native build — not published" ;;
+            ready:success) title="Published to \`$CHANNEL\`" ;;
+            ready:skipped) title="Builds found — nothing published (preflight or not main)" ;;
             *) title="OTA publish failed" ;;
           esac
           row() { echo "| $1 | ${2:-not run} | ${3:+\`$3\`} |"; }
           {
             echo "### $title"
             echo
-            echo "| Platform | Result | Bundle id |"
+            echo "| Platform | Production build | Fingerprint |"
             echo "| --- | --- | --- |"
-            row iOS "$IOS_STATUS" "$IOS_BUNDLE"
-            row Android "$ANDROID_STATUS" "$ANDROID_BUNDLE"
+            row iOS "$IOS_STATUS" "$IOS_FINGERPRINT"
+            row Android "$ANDROID_STATUS" "$ANDROID_FINGERPRINT"
             echo
             echo "- Channel: \`$CHANNEL\`"
+            if [ -n "$GROUP" ]; then echo "- Update group: \`$GROUP\`"; fi
             echo "- Commit: [\`${GITHUB_SHA:0:7}\`]($url/commit/$GITHUB_SHA) — $MESSAGE"
             if [ -n "$PR" ]; then echo "- PR: [#$PR]($url/pull/$PR)"; else echo "- PR: none (pushed to main directly)"; fi
             if [ "$RESULT" = needs-native-build ]; then
               echo
-              echo "The native fingerprint no longer matches the installed binary. A maintainer builds and installs a new binary (docs/internal/OTA.md, Mobile release builds); phones keep the last bundle until then."
+              echo "No finished production EAS build has this commit's native fingerprint. A maintainer builds one (docs/internal/OTA.md, Production builds); binaries keep the last update until then."
             fi
           } >>"$GITHUB_STEP_SUMMARY"
 
       # The label and comment are the factory app's (ADR 0021), not github-actions[bot]'s.
       - name: Factory app token
         id: app
-        if: always() && steps.deploy.outputs.result == 'needs-native-build' && steps.commit.outputs.pr != ''
+        if: always() && steps.builds.outputs.result == 'needs-native-build' && steps.commit.outputs.pr != ''
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.FACTORY_APP_ID }}
           private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
 
       - name: Tell the merged PR it needs a native build
-        if: always() && steps.deploy.outputs.result == 'needs-native-build' && steps.commit.outputs.pr != ''
+        if: always() && steps.builds.outputs.result == 'needs-native-build' && steps.commit.outputs.pr != ''
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ steps.commit.outputs.pr }}
@@ -202,6 +216,6 @@ jobs:
         run: |
           gh api "repos/$GH_REPO/issues/$PR/labels" -f 'labels[]=needs-native-build' >/dev/null
           gh api "repos/$GH_REPO/issues/$PR/comments" -f body="$(printf '%s\n' \
-            "**Needs a native build — not shipped over the air.** The native fingerprint of \`${GITHUB_SHA:0:7}\` does not match the installed binary, so the OTA publish refused it." \
+            "**Needs a native build — not published.** No finished production EAS build has the native fingerprint of \`${GITHUB_SHA:0:7}\`, so the OTA publish skipped it." \
             "" \
             "A maintainer ships a new binary (docs/internal/OTA.md). Run: $RUN_URL")" >/dev/null

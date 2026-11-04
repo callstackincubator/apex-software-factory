@@ -8,11 +8,12 @@
 # "review: <reason>" lines name changes that are not native but deserve a look (the Metro
 # config, which decides what reaches a bundle); they never change the answer.
 #
-# The OTA strategy is fingerprint (ADR 0003): a bundle only reaches binaries with the same
-# native fingerprint, so a merged native change never reaches the booth phone until someone
-# ships a new binary. This check is the conservative pre-merge half: it flags anything that can
-# change the fingerprint. A false "yes" costs a maintainer one look; a false "no" is caught by
-# the fingerprint at publish time, where it costs a missed update.
+# The OTA strategy is fingerprint (ADR 0025): an EAS Update only reaches binaries with the same
+# runtime version (the native fingerprint), so a merged native change never reaches the booth
+# binaries until someone builds new ones. This check is the conservative pre-merge half: it flags
+# anything that can change the fingerprint. A false "yes" costs a maintainer one look; a false
+# "no" is caught at publish time, where no finished build has the new fingerprint and it costs a
+# missed update.
 set -eu
 
 base=${1:-origin/main}
@@ -23,7 +24,7 @@ classify() {
   case $1 in
     "$mobile"/ios/* | "$mobile"/android/*) echo "native: $1 (generated native project)" ;;
     "$mobile"/app.json | "$mobile"/app.config.*) echo "native: $1 (app config: plugins, ids, permissions, runtime)" ;;
-    "$mobile"/fingerprint.json) echo "native: $1 (native fingerprint regenerated: the booth binary must be rebuilt)" ;;
+    "$mobile"/fingerprint.config.* | "$mobile"/eas.json) echo "native: $1 (fingerprint or build config: the runtime version may move)" ;;
     "$mobile"/plugins/* | "$mobile"/modules/*) echo "native: $1 (config plugin or local native module)" ;;
     "$mobile"/react-native.config.*) echo "native: $1 (autolinking config)" ;;
     patches/* | "$mobile"/patches/*) echo "native: $1 (patched dependency)" ;;
