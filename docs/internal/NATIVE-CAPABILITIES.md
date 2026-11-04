@@ -2,7 +2,7 @@
 
 The authoritative list of native code in the Apex Factory binary on the booth
 phones. Booth features ship over the air, and an OTA update can only replace
-JavaScript and assets ([ADR 0003](adr/0003-ota-through-self-hosted-hot-updater.md)),
+JavaScript and assets ([ADR 0025](adr/0025-ota-through-eas-update.md)),
 so a feature can use exactly the native libraries listed here, with the
 permissions listed here — nothing else. Why the binary carries libraries no
 feature uses yet: [ADR 0013](adr/0013-booth-binary-bundles-native-capabilities.md).
@@ -85,7 +85,7 @@ pinned exactly in `apps/mobile/package.json`.
 | `expo-device` | 57.0.2 | device model and OS facts |
 
 Plus the app's infrastructure: Expo Router, `react-native-screens`,
-`react-native-safe-area-context`, hot-updater, appduct (agent tools), and the
+`react-native-safe-area-context`, expo-updates, appduct (agent tools), and the
 Expo modules they depend on.
 
 ## Permissions declared
@@ -169,7 +169,7 @@ Expo also links a few modules only as dependencies of others
 (`expo-file-system`, `expo-keep-awake`, `expo-application`,
 `expo-asset`). They are in the binary, but the app cannot import them until
 they are direct dependencies; adding one at the exact linked version should
-leave the fingerprint unchanged — prove it with `ota:fingerprint` before
+leave the fingerprint unchanged — prove it with `eas fingerprint:generate` before
 calling it JS-only.
 
 When in doubt, check the running binary with `native_capabilities`: a library
@@ -181,8 +181,8 @@ A package with no native code (no `ios/`, `android/`, podspec, `expo-module.conf
 or config plugin) only changes the JS bundle, so the fingerprint stays the
 same and a booth feature may add it with `pnpm exec expo install <pkg>` from
 `apps/mobile`. Check before relying on it: run
-`pnpm --filter @apex/mobile run ota:fingerprint` after installing — it must
-still match `fingerprint.json` — and `.agents/scripts/native-check.sh` (which
+`eas fingerprint:generate --platform ios --build-profile production` (and `android`)
+from `apps/mobile` before and after installing — the hash must not move — and `.agents/scripts/native-check.sh` (which
 flags *every* dependency change in `package.json` for a person to look at).
 Good fits built on what is linked here:
 
@@ -201,20 +201,17 @@ the config plugin" is native: needs native build.
 
 One of these libraries writes into `node_modules` during a native build: a
 react-native-maps build phase rewrites `ios/AirMaps/RNMapsDefines.h`. The
-fingerprint hashes it (hot-updater's `ignorePaths` cannot exclude it), so a checkout that had built once would
-embed a fingerprint that CI's fresh checkout never computes, and no update
-would reach the phone. `hot-updater.config.ts` therefore puts them back to
-their published state whenever it loads (every `expo prebuild` and every
-`ota:*` command) — so never run an `ota:*` command in a checkout while its
-Xcode build is compiling: the build needs those files. A new native library that writes into `node_modules` needs
-the same treatment: after a build, `pnpm --filter @apex/mobile run
-ota:fingerprint` must still match the fingerprint embedded in the binary.
+fingerprint would hash it, so a checkout that had built once would embed a
+fingerprint that CI's fresh checkout never computes, and no update would
+reach the binary. `apps/mobile/fingerprint.config.js` lists the file under
+`ignorePaths`. A new native library that writes into `node_modules` needs the
+same entry: after a local build, `eas fingerprint:generate` must still give
+the hash it gave before.
 
 ## Changing this list
 
 Adding, removing or upgrading a native library, or changing a permission, is
 a native change: update `apps/mobile/package.json` (with `expo install`),
 `app.json`, `src/modules/capabilities/native-capabilities.ts` and this page in one PR,
-regenerate `fingerprint.json` (a prebuild writes it; `pnpm --filter
-@apex/mobile run ota:fingerprint` must then match it), and build and install a new binary on every booth phone
-([OTA.md](OTA.md#fingerprints-how-a-bundle-finds-its-binary)).
+and build a new `production` binary on EAS
+([OTA.md](OTA.md#fingerprints-how-an-update-finds-its-binary)).

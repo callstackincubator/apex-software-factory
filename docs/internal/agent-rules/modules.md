@@ -89,7 +89,7 @@ commit and in CI (`pnpm check`); the rest are for the reviewer.
 10. **A port module has a port, a real adapter and a fake.** `port.ts`
     describes the capability in the app's own words and types; no type from
     the SDK appears in it. The real adapter (named after the SDK, e.g.
-    `hot-updater.ts`) is the only file that imports the package. The fake
+    `expo-updates.ts`) is the only file that imports the package. The fake
     (`fake.ts`) is in-memory, deterministic, and has controls a test can
     drive (`offer()`, `runBundle()`) and read (`checks`, `reloads`).
     `index.ts` exports the port's types and the fake, never the real

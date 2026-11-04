@@ -5,10 +5,10 @@ description: After a delivery PR merges, check on a leased iOS simulator that it
 
 # Did the update land?
 
-ADR 0003 (OTA through hot-updater), ADR 0007 (device lanes), rule 16 in
+ADR 0025 (OTA through EAS Update), ADR 0007 (device lanes), rule 16 in
 `docs/internal/agent-rules/delivery.md` and rules 4 and 5 in
 `docs/internal/agent-rules/safety.md` govern this skill. You observe and report. You never
-deploy, roll back, disable a bundle, or call the OTA server's management routes; you never edit
+publish, roll back or republish an update, or run any `eas` command that writes; you never edit
 a file or a label.
 
 Arguments: the merged PR number, its merge commit sha, and what a user should see once the
@@ -26,11 +26,12 @@ its footer says, as `ota-verifier`.
 
 ## 1. Find the publish run
 
-The merge starts `.github/workflows/ota-publish.yml` on the booth laptop's runner when it
-touched `apps/mobile/**`, `packages/**` or `pnpm-lock.yaml`. It deploys iOS and Android side
-by side, skips the wait for CI when the merged tree is the PR head's tested tree, and nudges
-paired booth phones with `ota_check_now` once it has deployed (ADR 0009). Find the run for the
-merge commit; it usually appears within seconds of the merge:
+The merge starts `.github/workflows/ota-publish.yml` on a GitHub-hosted runner when it
+touched `apps/mobile/**`, `packages/**` or `pnpm-lock.yaml`. It looks for a finished
+`production` EAS build of each platform's fingerprint, skips the wait for CI when the merged
+tree is the PR head's tested tree (ADR 0009), and publishes one EAS Update to the `production`
+channel for both platforms. Find the run for the merge commit; it usually appears within
+seconds of the merge:
 
 ```bash
 gh run list --workflow ota-publish.yml --commit <sha> --json databaseId,status,conclusion
@@ -49,7 +50,7 @@ the merge commit's parent, in a detached worktree of its own:
 ```bash
 git worktree add --detach <main checkout>/.worktrees/ota-<sha first 7> <sha>^
 .agents/scripts/worktree.sh --prepare <main checkout>/.worktrees/ota-<sha first 7>
-cd <that worktree> && APEX_LANE_OTA=on .agents/scripts/device-lane.sh build ios release
+cd <that worktree> && .agents/scripts/device-lane.sh build ios release
 cd <that worktree> && .agents/scripts/device-lane.sh lease ios
 ```
 
@@ -59,12 +60,11 @@ again, up to four times; give the bash tool a ten-minute timeout), 75 `busy`, 69
 `<log>.exit` as `verify-mobile` does (`sleep 20; cat "<log>.exit"`): the parent of a JS-only
 merge has the same native fingerprint, so the build reuses the cached binary (ADR 0010).
 
-`APEX_LANE_OTA=on` keeps the booth's OTA URL in the binary and dates it to the parent commit,
-so the server offers it the bundles published after that commit — the merge's among them.
-Without it a lane binary takes no OTA update at all, which is what every other check needs. The lane's Release build uses
-`APPDUCT_ENABLED=1` like the booth binary, so its fingerprint
-matches what the publish run deployed against, and its default OTA URL
-(`http://localhost:3002/hot-updater`) reaches the OTA server on this machine.
+An update reaches a binary only if the binary's channel is `production` and its runtime
+version (the native fingerprint) is the one the publish run published for. The lane's Release
+build uses `APPDUCT_ENABLED=1` like the production binary, so its fingerprint is computed the
+same way; `app_info` reports `channel` and `fingerprint`, and the publish run's summary lists
+the fingerprint per platform.
 
 Once the build's `<log>.exit` is there, wait for the publish run in one call (give the bash
 tool a fifteen-minute timeout); it returns the moment the run ends:
@@ -74,7 +74,8 @@ gh run watch <id> --exit-status --interval 10 >/dev/null; echo "exit=$?"
 ```
 
 A non-zero exit: `gh run view <id> --log-failed` and quote the first error line. "Needs a
-native build" means the change was native. Report `not shipped`, going through step 5.
+native build" (no finished `production` build has the merge's fingerprint) means the change was
+native. Report `not shipped`, going through step 5.
 
 ## 3. Install, check now, apply
 
@@ -90,8 +91,9 @@ native build" means the change was native. Report `not shipped`, going through s
 
 Tapping the banner restarts into the staged bundle, as a visitor would. `reload_app` does the
 same but is destructive, and the operator policy denies it unattended; do not try it.
-`ota_check_now` answering `no_update` means the server has nothing newer for this binary's
-fingerprint: report `not landed` with its answer.
+`ota_check_now` answering `no_update` means EAS Update has nothing newer for this binary's
+channel and fingerprint: report `not landed` with its answer, and the `channel` and
+`fingerprint` from `app_info`.
 
 ## 4. Prove it
 

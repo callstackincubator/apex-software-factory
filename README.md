@@ -13,7 +13,6 @@ over-the-air update to the phones at the booth.
 | ------------------- | ------------------------------------------------ |
 | `apps/mobile`       | The booth app ([README](apps/mobile/README.md))  |
 | `apps/api`          | The product API ([README](apps/api/README.md))   |
-| `apps/ota-server`   | The self-hosted OTA update server                |
 | `packages/contract` | Every wire shape as zod schemas, plus the client |
 
 ```bash

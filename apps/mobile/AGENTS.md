@@ -30,7 +30,7 @@ https://docs.expo.dev/llms.txt.
   so versions match the SDK.
 - `ios/` and `android/` are generated (Continuous Native Generation). Never
   commit or hand-edit them; configure native behaviour in `app.json`.
-- OTA updates use hot-updater (ADR 0003), not EAS Update. A change that adds or
+- OTA updates use expo-updates and EAS Update (ADR 0025). A change that adds or
   upgrades native code changes the fingerprint and needs a new native build —
   avoid it for booth features.
 - The native libraries in the booth binary, with their permissions and

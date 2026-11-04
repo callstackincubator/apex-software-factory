@@ -101,7 +101,7 @@ setApiClient(
 ```
 
 A real adapter is tested once, in its own module, against the SDK's mock in
-`__mocks__/` (`src/modules/updater/__tests__/hot-updater.test.ts`).
+`__mocks__/` (`src/modules/updater/__tests__/expo-updates.test.ts`).
 
 ## Domain events
 

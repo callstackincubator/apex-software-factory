@@ -151,9 +151,10 @@ their report blocks.
 7. **Merge.** The factory fills the PR's `## Review` section, marks it ready,
    and runs `merge-pr.sh`, which refuses a draft, a parked label, a missing
    review result, a "spec needs" line, a native diff, red CI, or a conflict.
-8. **Ship.** The merge to `main` triggers the OTA publish on the booth
-   laptop's runner. The bundle carries the binary's fingerprint, so only
-   compatible phones take it. See [OTA.md](OTA.md).
+8. **Ship.** The merge to `main` triggers the OTA publish, which publishes an
+   EAS Update to the `production` channel. The update carries the binary's
+   fingerprint as its runtime version, so only compatible binaries take it.
+   See [OTA.md](OTA.md).
 9. **Did it land?** `ota-verifier` waits for the publish run, installs a
    Release build of `main` from before the merge on a leased simulator, asks
    the app to check now (appduct `ota_check_now`), taps the update banner, and
@@ -233,62 +234,58 @@ so `merge-pr.sh` is the enforcement. If the plan changes, add a ruleset on
 `main`: require a pull request and the `check` status, with repository admins
 allowed to bypass.
 
-**OTA publish** (`.github/workflows/ota-publish.yml`) runs on the booth
-laptop's self-hosted runner (`runs-on: [self-hosted, ota]`) after each push to
-`main` that touches `apps/mobile/**`, `packages/**` or `pnpm-lock.yaml`, and
-on manual dispatch. It never runs for pull requests: the runner holds the OTA
-credentials and must only run reviewed code. One publish runs at a time, and a
-running one is never cancelled. Steps:
+**OTA publish** (`.github/workflows/ota-publish.yml`) runs on a
+GitHub-hosted runner (`ubuntu-24.04`) after each push to `main` that touches
+`apps/mobile/**`, `packages/**` or `pnpm-lock.yaml`, and on manual dispatch.
+It never runs for pull requests: the job holds `EXPO_TOKEN` and must only run
+reviewed code. One publish runs at a time, and a running one is never
+cancelled. Steps:
 
-1. Put Node, the pinned pnpm and `gh` on `PATH` (`scripts/ci/runner-env.sh`).
-2. Preflight (`scripts/ci/ota-preflight.sh`): every setting below is present,
-   the OTA server answers `/version` and accepts the token, MinIO is up and
-   the bucket exists. A failure names what to fix, usually "start the OTA
-   stack" from [OTA.md](OTA.md).
-3. `pnpm install --frozen-lockfile`, then print the fingerprints.
-4. Wait for CI's `check` on the same commit (up to 25 minutes) — unless the
+1. Check out, install pnpm and Node (`.nvmrc`), install EAS CLI with
+   `expo/expo-github-action` and `pnpm install --frozen-lockfile`.
+2. For each platform, compute the fingerprint
+   (`eas fingerprint:generate --build-profile production`) and look for a
+   finished `production` EAS build with it (`eas build:list --fingerprint-hash`).
+3. Wait for CI's `check` on the same commit (up to 25 minutes) — unless the
    merge commit's tree is exactly the tree of the merged PR's head commit and
    that head's `check` passed, which `scripts/ci/wait-for-check.sh` proves
    from GitHub's tree ids (a squash merge of an up-to-date branch: the same
    code, already tested). Anything else waits: a merge that was not up to
    date makes a new tree, and a maintainer may push directly.
-5. Deploy iOS and Android to `production` at the same time, with the merge
-   commit subject and short sha as the message (`scripts/ci/ota-deploy.sh`).
-6. Nudge paired booth phones with appduct's `ota_check_now`
-   (`scripts/ci/ota-nudge.sh`; best effort, see [OTA.md](OTA.md#booth-phones-appduct-pairing)).
+4. Publish one update to the `production` channel for both platforms with the
+   merge commit subject and short sha as the message
+   (`eas update --channel production --environment production`).
 
-The job summary lists each platform's result and bundle id, the channel, the
-commit and the PR. If the fingerprint does not match the installed binary, the
-job fails with "Needs a native build — not shipped over the air", labels the
-merged PR `needs-native-build` and comments on it. Phones keep the last
-bundle until a maintainer ships a new binary.
+The job summary lists each platform's fingerprint and build lookup, the
+channel, the commit and the PR. If either platform has no finished
+`production` build, nothing is published: the job fails with "Needs a native
+build — not published", labels the merged PR `needs-native-build` and comments
+on it. Binaries keep the last update until a maintainer builds a new one
+([OTA.md](OTA.md#production-builds)).
 
-Dispatching with `preflight_only` checks the runner and the stack and prints
-the fingerprints without deploying. A dispatch from any branch other than
-`main` never deploys.
+Dispatching with `preflight_only` does the build lookup and prints the
+fingerprints without publishing. A dispatch from any branch other than `main`
+never publishes.
 
-Configuration (repository settings → Secrets and variables → Actions). The
-values must match `infra/.env` and `apps/ota-server/.env` on the booth laptop:
+Configuration (repository settings → Secrets and variables → Actions):
 
-| Name                     | Kind     | Value                                          |
-| ------------------------ | -------- | ---------------------------------------------- |
-| `HOT_UPDATER_SERVER_URL` | variable | `http://127.0.0.1:3002/hot-updater`            |
-| `S3_ENDPOINT`            | variable | `http://127.0.0.1:9000`                        |
-| `S3_REGION`              | variable | `S3_REGION` from `apps/ota-server/.env`        |
-| `S3_BUCKET`              | variable | `S3_BUCKET` from `infra/.env`                  |
-| `HOT_UPDATER_AUTH_TOKEN` | secret   | `HOT_UPDATER_AUTH_TOKEN` from `apps/ota-server/.env` |
-| `S3_ACCESS_KEY_ID`       | secret   | `S3_ACCESS_KEY_ID` from `infra/.env`           |
-| `S3_SECRET_ACCESS_KEY`   | secret   | `S3_SECRET_ACCESS_KEY` from `infra/.env`       |
-| `OTA_MISMATCH_PATTERN`   | variable | optional: regex for the fingerprint-mismatch message |
+| Name                     | Kind     | Value                                                 |
+| ------------------------ | -------- | ----------------------------------------------------- |
+| `EXPO_TOKEN`             | secret   | an access token of the `callstack.io` Expo account    |
+| `FACTORY_APP_ID`         | secret   | the factory GitHub App (ADR 0021)                     |
+| `FACTORY_APP_PRIVATE_KEY`| secret   | the factory GitHub App (ADR 0021)                     |
 
-The runner is a launchd service, and its `PATH` is the snapshot in
-`~/actions-runner/.path`, taken when it was installed. That snapshot can point
-at directories that no longer exist (an fnm shell directory, for example), so
-`runner-env.sh` does not rely on it. It looks for Node 22.18 or newer in the
-fnm default alias, Volta, Homebrew and `/usr/local/bin`. It gets the pinned
-pnpm through `.agents/scripts/ensure-pnpm.sh`, and finds `gh` in Homebrew. To
-force a Node, set `APEX_NODE_BIN=<dir>` in `~/actions-runner/.env` and restart
-the service (`cd ~/actions-runner && ./svc.sh stop && ./svc.sh start`).
+`EXPO_PUBLIC_API_URL` and the other public values of the bundle are EAS
+environment variables (`production`), not repository settings
+([OTA.md](OTA.md#one-time-setup)).
+
+`scripts/ci/runner-env.sh`, which the factory dispatcher runs on the
+self-hosted runners, does not rely on the runner service's `PATH` snapshot,
+which can point at directories that no longer exist (an fnm shell directory,
+for example). It looks for Node 22.18 or newer in the fnm default alias,
+Volta, Homebrew and `/usr/local/bin`. It gets the pinned pnpm through
+`.agents/scripts/ensure-pnpm.sh`, and finds `gh` in Homebrew. To force a Node,
+set `APEX_NODE_BIN=<dir>` in the runner's `.env` and restart the service.
 
 ## The factory dispatcher
 

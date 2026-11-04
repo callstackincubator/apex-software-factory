@@ -4,8 +4,8 @@ Rules for anyone (human or agent) writing code in this monorepo. They restate
 the boundaries ADRs 0001–0003 set, as checks a reviewer can apply to a diff.
 Violating one is grounds for rejecting a change even if it works.
 
-1. **Apps never import each other.** `apps/mobile`, `apps/api` and
-   `apps/ota-server` depend on `packages/*` and on npm packages, never on
+1. **Apps never import each other.** `apps/mobile` and `apps/api`
+   depend on `packages/*` and on npm packages, never on
    another app — not by workspace name, not by relative path. Code two apps
    need moves into a package.
 
@@ -39,10 +39,9 @@ Violating one is grounds for rejecting a change even if it works.
    environment. The mobile app gets its configuration from Expo's public
    config, never from a secret.
 
-7. **The OTA server is release infrastructure, not product.** A product
-   feature never changes `apps/ota-server`, and the product API never serves
-   update bundles. The app talks to the OTA server only through
-   `@hot-updater/react-native`.
+7. **Updates are release infrastructure, not product.** The product API
+   never serves update bundles. The app receives them from EAS Update only
+   through `expo-updates`, behind the `updater` port.
 
 8. **A rule is enforced in exactly one place.** Never implement the same
    decision twice — not in two modules, not on two paths through one module,
