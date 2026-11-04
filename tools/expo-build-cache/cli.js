@@ -3,7 +3,7 @@
 // .agents/scripts/prewarm.sh. Same cache, same key as the Expo provider.
 //
 //   cli.js fingerprint <ios|android> <projectRoot>
-//       prints the OTA fingerprint (hot-updater's) of the app at projectRoot
+//       prints the native fingerprint (@expo/fingerprint) of the app at projectRoot
 //   cli.js resolve <ios|android> <release|debug> <projectRoot> <fingerprint> [outDir]
 //       exit 0 and the binary's path (a copy, with this checkout's JS for release) on a hit;
 //       exit 3 on a miss

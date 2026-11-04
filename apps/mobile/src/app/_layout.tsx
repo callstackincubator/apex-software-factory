@@ -8,10 +8,9 @@ import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { installAgentTools, useTrackNavigation } from "@/modules/agent-tools";
-import { initOta, UpdateBanner } from "@/modules/ota";
+import { UpdateBanner } from "@/modules/ota";
 import { AppKeyboardProvider, useTheme } from "@/modules/ui";
 
-initOta();
 installAgentTools();
 
 // A require under __DEV__, not an import, so Metro drops it from release and OTA bundles.

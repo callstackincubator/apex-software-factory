@@ -1,10 +1,10 @@
-import { createHotUpdater } from "./hot-updater";
+import { createExpoUpdater } from "./expo-updates";
 import type { Updater } from "./port";
 
 let current: Updater | null = null;
 
 export function getUpdater(): Updater {
-  current ??= createHotUpdater();
+  current ??= createExpoUpdater();
   return current;
 }
 

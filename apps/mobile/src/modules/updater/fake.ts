@@ -30,8 +30,7 @@ export function createFakeUpdater(): FakeUpdater {
   let reloads = 0;
 
   return {
-    serverUrl: "http://ota.test/hot-updater",
-    start() {},
+    serverUrl: "https://u.expo.dev/test",
     async check() {
       checks += 1;
       if (offered instanceof Error) throw offered;
