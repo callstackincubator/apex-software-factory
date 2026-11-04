@@ -12,7 +12,7 @@ const APP = {
   src: "src",
   alias: "@/",
   framework: ["react"],
-  owners: { "@hot-updater/react-native": ["modules/updater/**"] },
+  owners: { "expo-updates": ["modules/updater/**"] },
 };
 
 function violationsIn(files) {
@@ -77,15 +77,14 @@ test("a module imports its own files by relative path, not through the alias", (
 test("a third-party package is imported only by the module that owns it", () => {
   assert.deepEqual(
     violationsIn({
-      "modules/updater/hot-updater.ts": 'import { HotUpdater } from "@hot-updater/react-native";',
+      "modules/updater/expo-updates.ts": 'import * as Updates from "expo-updates";',
       "modules/ota/check.ts": [
         'import { useState } from "react";',
-        'import { HotUpdater } from "@hot-updater/react-native";',
+        'import * as Updates from "expo-updates";',
         'import { openDatabaseSync } from "expo-sqlite";',
       ].join("\n"),
-      "modules/ota/__tests__/check.test.ts":
-        'import { HotUpdater } from "@hot-updater/react-native";',
+      "modules/ota/__tests__/check.test.ts": 'import * as Updates from "expo-updates";',
     }),
-    ["modules/ota/check.ts -> @hot-updater/react-native", "modules/ota/check.ts -> expo-sqlite"],
+    ["modules/ota/check.ts -> expo-updates", "modules/ota/check.ts -> expo-sqlite"],
   );
 });

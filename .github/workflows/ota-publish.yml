@@ -219,3 +219,7 @@ jobs:
             "**Needs a native build — not published.** No finished production EAS build has the native fingerprint of \`${GITHUB_SHA:0:7}\`, so the OTA publish skipped it." \
             "" \
             "A maintainer ships a new binary (docs/internal/OTA.md). Run: $RUN_URL")" >/dev/null
+
+      - name: Fail the run when nothing could be published
+        if: always() && steps.builds.outputs.result == 'needs-native-build'
+        run: exit 1
