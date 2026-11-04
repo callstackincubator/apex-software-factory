@@ -17,7 +17,7 @@ every tool.
 | Path                 | What                                                                                                                             |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/mobile`        | Expo app (expo-router, hot-updater, Jest). `@apex/mobile`                                                                        |
-| `apps/api`           | Product HTTP API, Hono on Node. `@apex/api`                                                                                      |
+| `apps/api`           | Product HTTP API, Hono on Cloudflare Workers (ADR 0026). `@apex/api`                                                             |
 | `apps/ota-server`    | Self-hosted hot-updater server — release infrastructure, not product                                                             |
 | `apps/console`       | The factory console: local web page, host tooling. `@apex/console`                                                               |
 | `packages/contract`  | Every wire shape as zod schemas, plus the typed client. `@apex/contract`                                                         |
