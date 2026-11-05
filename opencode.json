@@ -76,15 +76,6 @@
       "cwd": "apps/mobile",
       "enabled": true,
       "timeout": 60000
-    },
-    "simlock": {
-      "type": "local",
-      "command": ["pnpm", "exec", "simlock", "mcp"],
-      "enabled": false,
-      "environment": {
-        "SIMLOCK_AGENT_ID": "opencode-build"
-      },
-      "timeout": 600000
     }
   },
   "permission": {
@@ -96,7 +87,6 @@
     "execute": "deny",
     "agent-device_*": "deny",
     "appduct_*": "deny",
-    "simlock_*": "deny",
     "skill": {
       "*": "allow",
       "callstack-react-native-best-practices": "deny",
@@ -164,13 +154,8 @@
       "*eas-cli* env*": "deny",
       "*eas submit*": "deny",
       "*eas-cli* submit*": "deny",
-      "*simlock nuke*": "deny",
-      "*simlock release --all*": "deny",
-      "*simlock config set*": "deny",
-      "*simlock daemon stop*": "deny",
-      "*simlock cleanup*": "deny",
-      "*simlock token*": "deny",
-      "*simlock component*": "deny",
+      "*eas simulator*": "deny",
+      "*eas-cli* simulator*": "deny",
       "*--allow-download*": "deny",
       "*agent-device install-from-source*": "deny",
       "*agent-device react-devtools*": "deny",
@@ -189,7 +174,6 @@
       "permission": {
         "agent-device_*": "allow",
         "appduct_*": "allow",
-        "simlock_*": "allow",
         "skill": "allow"
       }
     }

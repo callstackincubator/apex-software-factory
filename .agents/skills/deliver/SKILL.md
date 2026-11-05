@@ -49,7 +49,7 @@ report three times".
 you are about to post and ask before a simulator build. Unattended, post
 directly. Nothing in this factory asks for permission (ADR 0012): what is not
 denied is allowed, so never stop to wait for an approval. Devices are leased
-from simlock by the subagents that use them (rule 16, ADR 0007); you never
+from Expo Simulators by the subagents that use them (rule 16, ADR 0007); you never
 touch one yourself.
 
 **Park only for a person's decision.** Small gaps in the spec are not a
@@ -128,12 +128,12 @@ build`. A report with `spec needs` under Open: park (step 6).
    in the **same message** as the two reviewers (the review skill's step 2),
    with the PR, the branch, those lines (Done when lines and `e2e:` scripts)
    and the spec's Agent hooks, pasted from the issue. The simulator check
-   does not wait for the review: the build reuses the cached binary for a
-   JS-only change (ADR 0010), so it takes about as long as the reviews.
+   does not wait for the review: the lane binary is a repack of the
+   production build (ADR 0027), so it takes about as long as the reviews.
    Then the review skill starts `review-verifier` with the reviewers'
    findings.
 3. **Decide.** Collect the review report and the simulator report.
-   - `busy` (simlock found no device within 30 minutes) or `unavailable`
+   - `busy` (EAS refused a session) or `unavailable`
      (this machine cannot run it): add the `needs-simulator` label to the PR
      and park.
    - Fix lines, or Simulator `fail`: one `implementer` run in mode `fix` with
@@ -239,9 +239,8 @@ readiness already encodes the order. Deliver up to two runnable tasks at
 once: start each stage for both with `task` calls in the same message, and
 keep the two pipelines apart. Each task has its own worktree, so they never
 share files. Both may be at the simulator stage at once: each
-`mobile-verifier` leases its own device, simlock queues a lease it cannot
-serve yet, and the lane's build slot keeps two Xcode builds from running
-together. After each merge, list again: merging closes the task, and the
+`mobile-verifier` starts its own Expo Simulators session and builds its own
+lane binary on EAS. After each merge, list again: merging closes the task, and the
 tasks that waited on it turn ready on their own.
 
 When a task parks, keep delivering the tasks that do not depend on it. Stop

@@ -12,7 +12,7 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0004](0004-opencode-with-one-model.md) | The factory runs on OpenCode with one model | Accepted (amended by 0008) |
 | [0005](0005-github-issues-are-spec-and-queue.md) | GitHub Issues are the spec and the queue | Accepted |
 | [0006](0006-wave-a-amendments.md) | Source-shipping packages are installed, not deployed; the OTA server is exempt from the OpenAPI rule | Accepted (amended by 0025) |
-| [0007](0007-device-lane-simlock-agent-device.md) | Devices are leased with simlock and driven with agent-device; appduct ships in the booth binary | Accepted |
+| [0007](0007-device-lane-simlock-agent-device.md) | Devices are leased with simlock and driven with agent-device; appduct ships in the booth binary | Superseded by 0028 |
 | [0008](0008-reasoning-variants-of-the-one-model.md) | Each agent picks a reasoning variant of the one model | Accepted |
 | [0009](0009-a-faster-delivery-loop.md) | A faster delivery loop: lean review proving, a severity gate, parallel checks, a quicker OTA path | Accepted |
 | [0010](0010-native-build-cache.md) | A native build cache keyed by the OTA fingerprint, shared by Expo and the device lanes | Superseded by 0027 |
@@ -32,3 +32,4 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0024](0024-feature-modules-events-and-ports.md) | Feature modules, a domain event bus, ports and adapters; rules are files | Accepted |
 | [0025](0025-ota-through-eas-update.md) | OTA updates through EAS Update | Accepted |
 | [0027](0027-lane-binaries-repacked-on-eas.md) | Lane binaries are the production build repacked on EAS | Accepted |
+| [0028](0028-device-lanes-on-expo-simulators.md) | Device lanes are Expo Simulators sessions on EAS | Accepted |

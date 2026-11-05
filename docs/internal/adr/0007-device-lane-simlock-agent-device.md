@@ -1,6 +1,6 @@
 # 0007 — Devices are leased with simlock and driven with agent-device; appduct ships in the booth binary
 
-Status: Accepted
+Status: Superseded by [0028](0028-device-lanes-on-expo-simulators.md)
 
 ## Context
 

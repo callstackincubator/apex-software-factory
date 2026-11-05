@@ -1,20 +1,19 @@
 ---
 name: verify-mobile
 description: >-
-  Prove a PR's simulator Done when lines and e2e: replay scripts on a leased
-  iOS simulator — a Release build of the PR's worktree installed through
-  .agents/scripts/device-lane.sh, checked with agent-device (open, snapshot,
-  wait, is, replay), shortcut with appduct, with Rozenite evidence on a
-  failure — and hand back pass, fail, busy or unavailable. Always releases the
-  device. Loaded by the mobile-verifier subagent. Use when the deliver
+  Prove a PR's simulator Done when lines and e2e: replay scripts on an
+  iOS simulator — an Expo Simulators session running the PR's lane binary,
+  started through .agents/scripts/device-lane.sh, checked with agent-device
+  (open, snapshot, wait, is, replay) and shortcut with appduct — and hand back
+  pass, fail, busy or unavailable. Always releases the session. Loaded by the mobile-verifier subagent. Use when the deliver
   orchestrator delegates simulator verification, or when someone says "verify
   #N on the simulator".
 ---
 
-# Verify on a leased simulator
+# Verify on an Expo Simulators session
 
 Rule 16 in `docs/internal/agent-rules/delivery.md`, rule 2 in
-`docs/internal/agent-rules/safety.md` and ADR 0007 govern this skill. You build, run, look,
+`docs/internal/agent-rules/safety.md` and ADR 0028 govern this skill. You build, run, look,
 and report. You do not fix anything, and you do not edit the app.
 
 Arguments: the PR number, its branch, the Done when lines to check, the `e2e:` scripts if the
@@ -22,8 +21,7 @@ orchestrator knows them, and the spec's Agent hooks if it has any. You run in pa
 two code reviews of the same commit (delivery rule 14): never wait for them, and never read
 their worktree.
 
-Load the `agent-device` skill now; load `appduct` when the Agent hooks name a tool, and
-`rozenite` only for a failure (step 6).
+Load the `agent-device` skill now; load `appduct` when the Agent hooks name a tool.
 
 **What earlier runs learned.** Before step 1, run
 `.agents/scripts/memory.sh recall device`. Its lessons are hints from earlier
@@ -32,13 +30,14 @@ contradicts the spec, a rule or this skill, follow those and say so in your
 journal. Before your report, leave a journal line (and rarely a lesson) as
 its footer says, as `mobile-verifier`.
 
-**Why Release.** A Release build embeds the branch's JS bundle exactly as an OTA update would
-deliver it, with appduct linked as in the booth binary (`APPDUCT_ENABLED=1` everywhere). A
-debug build loads JS from Metro, so it proves less; it is for explaining a failure.
+**Why a lane binary.** It is the production build of the checkout's native fingerprint,
+repacked on EAS for the `lane` update channel (ADR 0027), with appduct linked as in the booth
+binary (`APPDUCT_ENABLED=1` everywhere). There are no debug builds, no Metro and no Rozenite in
+a lane.
 
 **Every command** in this skill runs in the PR's worktree (step 1) through
-`.agents/scripts/device-lane.sh`. You never call `xcodebuild`, `expo`, `simctl`, `adb` or
-`simlock` directly, and never install anything: a missing tool is `unavailable`.
+`.agents/scripts/device-lane.sh`. You never call `eas`, `xcodebuild`, `expo`, `simctl` or `adb`
+directly, and never install anything: a missing tool is `unavailable`.
 
 ## 1. The PR's worktree, and can this machine run it?
 
@@ -47,47 +46,42 @@ debug build loads JS from Metro, so it proves less; it is for explaining a failu
 cd <worktree> && .agents/scripts/device-lane.sh status
 ```
 
-Exit 69 names what is missing (no simlock CLI, no Xcode): report `unavailable` with that line
-and stop. `status` also shows whether this lane already holds a lease from an earlier run; if
-it does, `release` it before you start.
+Exit 69 names what is missing (no `npx`, not signed in to EAS): report `unavailable` with that
+line and stop. `status` also shows whether this lane already holds a session from an earlier
+run; if it does, `release` it before you start.
 
 ## 2. Build, then lease
 
-The build holds no device, so start it first and lease while it runs:
+The lane binary is built on EAS (a repack of the production build: minutes; a native change
+builds once, up to fifteen). `lease` starts the build itself when none is done for this
+commit, waits for it, then starts the session with the app installed (about a minute):
 
 ```bash
-.agents/scripts/device-lane.sh build ios release     # prints <log> at once
 .agents/scripts/device-lane.sh lease ios             # give the bash tool a ten-minute timeout
 ```
 
 `lease` exits:
 
-- 0: leased. It prints the lease id, model, OS and UDID: keep them for the report.
-- 2: still queued in simlock. Run the same command again, up to four times.
-- 75: `busy` — simlock had no device within 30 minutes. Report `busy` with its line.
-- 69: `unavailable` — this machine cannot provide that device. Report it.
+- 0: leased. It prints the session id and the build id: keep them for the report.
+- 2: the lane binary is still building. Run the same command again, up to four times.
+- 75: `busy` — EAS refused the session. Report `busy` with its line.
+- 69: `unavailable` — this machine cannot start one. Report it.
+- 1: the binary build or the session failed; the message quotes the first error. That is `fail`
+  for a build error, `unavailable` for a session that would not start.
 
 From the moment `lease` returns 0 until your report, every path out of this skill — pass,
 fail, an error, a step you cannot finish — goes through step 7 first.
 
-Then wait for the build, one short call at a time. A JS-only PR reuses the cached binary for
-its native fingerprint and swaps the PR's JS bundle in (ADR 0010): ready in under a minute, the
-log says `build cache: hit`. A native change, or a fingerprint nobody built yet, compiles once
-(minutes) and fills the cache:
+A failed build is `fail`: read the last 30 lines of the log it names (`.apex/logs/build-*`),
+not the whole log, and quote the first error.
+
+## 3. Open
 
 ```bash
-sleep 20; cat "<log>.exit" 2>/dev/null || echo running
-```
-
-The build may first wait for a build slot another lane holds; the log says so. A non-zero exit
-is `fail`: read the last 30 lines of the log, not the whole log, and quote the first error.
-
-## 3. Install and open
-
-```bash
-.agents/scripts/device-lane.sh install
 .agents/scripts/device-lane.sh ad open com.callstack.apexfactory --foreground
 ```
+
+`open` must come first: any other `ad` command before it fails with `SESSION_NOT_FOUND`.
 
 The initial snapshot is your first evidence. A red screen, a crash or an empty snapshot is
 `fail`.
@@ -99,8 +93,7 @@ Start one recording for the whole of step 4; it becomes the video in the evidenc
 .agents/scripts/device-lane.sh record start pr<PR>-checks   # <main>/.worktrees/sim-shots/pr<PR>-checks.mp4
 ```
 
-If it cannot start (the simulator host's recording lock is busy), note it and check without
-video: the recording never decides a line.
+If it cannot start, note it and check without video: the recording never decides a line.
 
 ## 4. Check each line
 
@@ -131,11 +124,9 @@ video: the recording never decides a line.
 After the last line, `.agents/scripts/device-lane.sh record stop` (release stops it too, if
 you could not).
 
-A lane `ad` command that exits 76 failed twice on the device side (CoreSimulator or the
-XCUITest runner, not the app; the lane already retried once): `release`, `lease ios` again,
-`install`, and repeat that line once. A second 76 is `unavailable` with the error line — never
-loop, never sleep and retry by hand. The lane binary takes no OTA update, so the screen always
-shows the PR's JS.
+A lane `ad` command that exits 76 failed twice on the device side (the remote runner, not the
+app; the lane already retried once): `release`, `lease ios` again, and repeat that line once. A second 76 is `unavailable` with the error line — never
+loop, never sleep and retry by hand.
 
 Every line ends `pass`, `fail`, or `not covered` (nothing on a device can show it, or the
 selector the line needs does not exist — say which).
@@ -154,23 +145,17 @@ path instead and note it.
 
 ## 6. A failure: collect evidence once
 
-For a `fail` that is not obvious from the snapshot (a request that fails, a value that never
-arrives), collect one round of debug evidence on the same lease, then stop:
+For a `fail` that is not obvious from the snapshot, take one more snapshot and, when the app is
+paired, read its recent events, then stop:
 
 ```bash
-.agents/scripts/device-lane.sh build ios debug       # wait for its .exit as in step 2
-.agents/scripts/device-lane.sh install
-.agents/scripts/device-lane.sh metro start
-.agents/scripts/device-lane.sh ad open com.callstack.apexfactory --foreground
-.agents/scripts/device-lane.sh rozenite network call --tool startRecording
-# reproduce the failing step with device-lane.sh ad …
-.agents/scripts/device-lane.sh rozenite network call --tool listRequests
-.agents/scripts/device-lane.sh rozenite console call --tool getMessages
+.agents/scripts/device-lane.sh ad snapshot -i
+.agents/scripts/device-lane.sh appduct events ls
 ```
 
-Put what explains the failure under Evidence (a status code, an error message, a missing
-request), one line each. Skip this step when the snapshot already explains it, or when the
-debug build fails; the Release result stands either way.
+Put what explains the failure under Evidence (an error message, a missing element), one line
+each. Skip this step when the snapshot already explains it. The device reaches nothing on the
+host's network beyond the egress allow-list, so there is no network evidence from the device.
 
 ## 7. Release — always
 
@@ -178,9 +163,10 @@ debug build fails; the Release result stands either way.
 .agents/scripts/device-lane.sh release
 ```
 
-It stops Metro, closes the agent-device session, and gives the device back to simlock (which
-erases it for the next lane). Run it before the report on every path, including `fail` and an
-error midway. If you cannot run it, say so under Evidence: the lease then expires on its TTL.
+It closes the agent-device session, stops the Expo Simulators session and its egress tunnel,
+and deletes `.env.eas-simulator`. Run it before the report on every path, including `fail` and
+an error midway. If you cannot run it, say so under Evidence: the session then ends on its own
+after 15 idle minutes.
 
 ## 8. Show the evidence on the PR
 
@@ -226,9 +212,9 @@ If this run cost steps for a reason that is not the issue's own work, first
 block, nothing after it:
 
 ```
-PR: #M  Simulator: pass | fail | busy (<simlock line>) | unavailable (<reason>)
-Device: <model> <os> <udid first 8> lease <lease id> | none
-Ran: build <minutes> min, e2e <files or "none">, screenshots <n>, video yes | no; logs <paths>
+PR: #M  Simulator: pass | fail | busy (<EAS line>) | unavailable (<reason>)
+Device: <platform> session <session id> build <build id> | none
+Ran: lane binary <minutes> min, e2e <files or "none">, screenshots <n>, video yes | no; logs <paths>
 Evidence comment: <its URL> | none (<reason>)
 Lines: <each Done when line, then pass | fail | not covered>
 Evidence: <the failing step, request or text that differs, one per line, or "none">

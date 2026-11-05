@@ -14,18 +14,18 @@ every tool.
 
 ## Layout
 
-| Path                 | What                                                                                                                             |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/mobile`        | Expo app (expo-router, expo-updates, Jest). `@apex/mobile`                                                                       |
-| `apps/api`           | Product HTTP API, Hono on Node. `@apex/api`                                                                                      |
-| `apps/console`       | The factory console: local web page, host tooling. `@apex/console`                                                               |
-| `packages/contract`  | Every wire shape as zod schemas, plus the typed client. `@apex/contract`                                                         |
-| `packages/event-bus` | The typed, synchronous domain event bus both apps use. `@apex/event-bus`                                                         |
-| `docs/internal/`     | ADRs, agent rules, delivery manual, spec templates                                                                               |
-| `.agents/`           | Skills (`skills/<name>/SKILL.md`) and helper scripts (`scripts/`)                                                                |
-| `.opencode/`         | Subagents and primary agents (`agent/`), slash commands (`command/`)                                                             |
-| `tools/`             | Host tooling: the native build cache (`expo-build-cache/`, ADR 0010), the module boundary check (`module-boundaries/`, ADR 0024) |
-| `.worktrees/`        | Agent worktrees, one per branch (gitignored)                                                                                     |
+| Path                 | What                                                                     |
+| -------------------- | ------------------------------------------------------------------------ |
+| `apps/mobile`        | Expo app (expo-router, expo-updates, Jest). `@apex/mobile`               |
+| `apps/api`           | Product HTTP API, Hono on Node. `@apex/api`                              |
+| `apps/console`       | The factory console: local web page, host tooling. `@apex/console`       |
+| `packages/contract`  | Every wire shape as zod schemas, plus the typed client. `@apex/contract` |
+| `packages/event-bus` | The typed, synchronous domain event bus both apps use. `@apex/event-bus` |
+| `docs/internal/`     | ADRs, agent rules, delivery manual, spec templates                       |
+| `.agents/`           | Skills (`skills/<name>/SKILL.md`) and helper scripts (`scripts/`)        |
+| `.opencode/`         | Subagents and primary agents (`agent/`), slash commands (`command/`)     |
+| `tools/`             | Host tooling: the module boundary check (`module-boundaries/`, ADR 0024) |
+| `.worktrees/`        | Agent worktrees, one per branch (gitignored)                             |
 
 ## Commands
 
@@ -126,15 +126,14 @@ from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
   videos as GitHub attachments for a comment), `worktree.sh` (create a worktree under
   `.worktrees/` and install), `merge-pr.sh` (the merge gate),
   `review-inputs.sh` (blind review inputs), `native-check.sh` (can this ship
-  over the air?), `lane-binary.sh` (a lane binary built on EAS, ADR 0027), `device-lane.sh` (a simlock-leased device driven with
-  agent-device, appduct and Rozenite; reuses a cached native build for a
-  JS-only change), `factory-run.sh` (one unattended run with a watchdog),
+  over the air?), `lane-binary.sh` (a lane binary built on EAS, ADR 0027), `device-lane.sh` (an Expo Simulators session on EAS running a
+  lane binary, driven with agent-device and appduct, ADR 0028), `factory-run.sh` (one unattended run with a watchdog),
   `prewarm.sh` (the booth laptop's morning warm-up), `memory.sh` (the
   factory's memory: recall and leave lessons, journal lines, run records),
   `run-record.sh` (an attempt's digest and transcript, for the retro),
   `check-agent-permissions.sh` (no agent can reach "ask"), `ensure-pnpm.sh`.
-- **Devices**: simulators and emulators are leased through simlock and driven
-  through agent-device, only via `.agents/scripts/device-lane.sh`. The
+- **Devices**: simulators and emulators are Expo Simulators sessions on EAS
+  driven through agent-device, only via `.agents/scripts/device-lane.sh`. The
   `agent-device` and `appduct` MCP servers in `opencode.json` are for a
   person in the `build` agent; every other agent is denied their tools.
 
