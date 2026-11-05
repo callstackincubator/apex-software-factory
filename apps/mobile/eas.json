@@ -27,7 +27,11 @@
     "lane": {
       "extends": "base",
       "channel": "lane",
-      "environment": "preview"
+      "environment": "preview",
+      "env": {
+        "APPDUCT_ENABLED": "1",
+        "EXPO_PUBLIC_UPDATES_CHANNEL": "lane"
+      }
     }
   }
 }
