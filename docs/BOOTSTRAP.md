@@ -137,7 +137,7 @@ after any native change, including an edit to `eas.json`.
 ## 5. The product API
 
 In production the API is a Cloudflare Worker named `apex-api` on the free plan,
-at `https://apex-api.szymonchmal.workers.dev` (ADR 0026), deployed by
+at `https://apex-api.szymonchmal.workers.dev` ([ADR 0026](internal/adr/0026-product-api-on-cloudflare-workers.md)), deployed by
 `.github/workflows/api-deploy.yml` on every merge to `main` that touches the
 API. A pull request uploads a version under the alias `pr-<number>` and the
 workflow comments the preview URL. One-time setup:
