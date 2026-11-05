@@ -1,6 +1,6 @@
 // The booth's native build cache (ADR 0010): built simulator apps and APKs, keyed by the native
-// fingerprint hot-updater computes for OTA updates, so "same key" means "this binary runs this
-// JS". Shared by `expo run:[ios|android]` (through provider.plugin.js, Expo's build cache
+// fingerprint (@expo/fingerprint, the runtime version EAS Update matches on), so "same key"
+// means "this binary runs this JS". Shared by `expo run:[ios|android]` (through provider.plugin.js, Expo's build cache
 // provider) and by .agents/scripts/device-lane.sh (through cli.js), so people and agents fill
 // and use one cache.
 //
@@ -54,33 +54,32 @@ function cachedBinary(dir) {
   return name ? path.join(dir, name) : null;
 }
 
-/**
- * Parses `hot-updater fingerprint` output. Returns { ios, android } (either may be missing).
- * The CLI prints "iOS: <hash>" and "Android: <hash>" whether or not they match fingerprint.json.
- */
+/** The hash in `fingerprint:generate` JSON output, or undefined. */
 function parseFingerprintOutput(text) {
-  // oxlint-disable-next-line no-control-regex -- strips ANSI colour codes
-  const plain = String(text).replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
-  const pick = (label) => plain.match(new RegExp(`${label}:\\s+([0-9a-f]{40})`))?.[1];
-  return { ios: pick("iOS"), android: pick("Android") };
+  try {
+    const hash = JSON.parse(String(text)).hash;
+    return FINGERPRINT.test(hash) ? hash : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
- * The OTA fingerprint of the app at projectRoot (apps/mobile), computed by hot-updater itself
- * with the project's config (app.json as an extra source) and APPDUCT_ENABLED=1, so the cache
- * key is exactly the hash a binary built from this checkout embeds and an OTA bundle targets.
+ * The native fingerprint of the app at projectRoot (apps/mobile), computed by @expo/fingerprint
+ * with the project's fingerprint.config.js and APPDUCT_ENABLED=1, so the cache key is the
+ * runtime version a binary built from this checkout embeds (runtimeVersion policy "fingerprint").
  */
 function fingerprint(projectRoot, platform) {
-  const script = path.join(projectRoot, "scripts", "hot-updater.mjs");
-  const run = spawnSync(process.execPath, [script, "fingerprint"], {
+  const cli = resolveFrom(projectRoot, "@expo/fingerprint/bin/cli.js");
+  const run = spawnSync(process.execPath, [cli, "fingerprint:generate", "--platform", platform], {
     cwd: projectRoot,
     env: { ...process.env, APPDUCT_ENABLED: "1" },
     encoding: "utf8",
-    maxBuffer: 16 * 1024 * 1024,
+    maxBuffer: 64 * 1024 * 1024,
   });
-  const hash = parseFingerprintOutput(`${run.stdout}\n${run.stderr}`)[platform];
+  const hash = parseFingerprintOutput(run.stdout);
   if (!hash) {
-    throw new Error(`no ${platform} fingerprint from hot-updater:\n${run.stdout}${run.stderr}`);
+    throw new Error(`no ${platform} fingerprint from @expo/fingerprint:\n${run.stderr}`);
   }
   return hash;
 }

@@ -112,7 +112,7 @@ describe("agent tools", () => {
       fingerprint: "fake-fingerprint",
       pathname: "/",
       routes: ["/", "/features/[id]", "/settings"],
-      otaUrl: "http://ota.test/hot-updater",
+      otaUrl: "https://u.expo.dev/test",
       apiUrl: "http://192.168.1.20:3001",
     });
   });

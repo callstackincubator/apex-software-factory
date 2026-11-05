@@ -7,8 +7,8 @@ variant: medium
 steps: 80
 color: success
 # Allowed by default (ADR 0012): opencode.json's short deny list applies (no merge, no force
-# push or push to main, no skipped hooks, no OTA deploy, no .env files, no device-pool
-# operator commands). Nothing here can ask: a subagent's ask would wait forever.
+# push or push to main, no skipped hooks, no EAS publish, build, channel or env command, no
+# .env files, no device-pool operator commands). Nothing here can ask: a subagent's ask would wait forever.
 permission:
   # A question waits for a person, and nobody answers a subagent.
   question: deny

@@ -33,7 +33,7 @@ from an earlier experiment may be on the PATH: ignore it, it is older.
 
 | Variable | Set where | Value |
 | --- | --- | --- |
-| `APPDUCT_ENABLED` | package scripts; CI deploy | `1`, always. One build profile: Debug and Release link appduct's native module, OTA bundles keep its JS. It changes the iOS fingerprint, so every prebuild, fingerprint and deploy uses the same value; `hot-updater.config.ts` refuses anything else. |
+| `APPDUCT_ENABLED` | package scripts; every `eas.json` profile; CI publish | `1`, always. One build profile: Debug and Release link appduct's native module, OTA bundles keep its JS. It changes the iOS fingerprint, so every prebuild, fingerprint and publish uses the same value. |
 | `WITH_ROZENITE` | only `start:agent` | `true` turns Rozenite on in Metro. Never set in CI or for a release/OTA build. |
 | `AGENT_DEVICE_NO_UPDATE_NOTIFIER` | the agent's environment | `1`: no background npm check (safety rule 2). |
 | `ANDROID_HOME` | the shell / runner | `$HOME/Library/Android/sdk` (not set by default on a Mac). |
@@ -91,10 +91,10 @@ the laptop may connect to the same Metro.
 pnpm --filter @apex/mobile ios --device <UDID> --no-bundler
 pnpm --filter @apex/mobile start:agent
 
-# Release (the booth binary): LAN URLs baked in, appduct linked
+# Release (a local binary: API URL baked in, appduct linked, no EAS Update channel)
 cd apps/mobile
 LANG=en_US.UTF-8 APPDUCT_ENABLED=1 \
-  EXPO_PUBLIC_OTA_URL=http://<lan-ip>:3002/hot-updater EXPO_PUBLIC_API_URL=http://<lan-ip>:3001 \
+  EXPO_PUBLIC_API_URL=http://<lan-ip>:3001 \
   pnpm exec expo run:ios --configuration Release --no-bundler --device <UDID>
 pnpm exec appduct doctor ~/Library/Developer/Xcode/DerivedData/ApexFactory-*/Build/Products/Release-iphonesimulator/ApexFactory.app --assert-present
 
@@ -155,8 +155,8 @@ devDependency, `pnpm exec simlock` wins and the variables can go.
 ## Native build cache
 
 `device-lane.sh build` reuses a native build when it can (ADR 0010). The key
-is the platform, the profile and the OTA fingerprint
-(`pnpm --filter @apex/mobile run ota:fingerprint` prints it); the entries live
+is the platform, the profile and the native fingerprint
+(`node tools/expo-build-cache/cli.js fingerprint ios apps/mobile` prints it); the entries live
 in `~/.cache/apex-software-factory/native/<platform>/<fingerprint>/<profile>/`.
 
 - **Hit, Release**: a copy of the cached app with this worktree's JS bundle
@@ -184,8 +184,7 @@ agent-device's runner each morning.
 ## Machine setup log
 
 Machine-level steps taken on the **temporary dev Mac** (4 Oct 2026) while
-wiring these tools, in order (steps 12 on: the factory-speed wave). The OTA side is in
-[OTA.md](OTA.md#machine-setup-log). No secrets here.
+wiring these tools, in order (steps 12 on: the factory-speed wave). No secrets here.
 
 1. `pnpm install` in the agent worktree (nothing global). The rozenite CLI
    pulls in Electron; `pnpm-workspace.yaml` denies its build script, so
@@ -205,8 +204,7 @@ wiring these tools, in order (steps 12 on: the factory-speed wave). The OTA side
 7. One orphaned agent-device runner (`xcodebuild test-without-building`,
    parent launchd, for this UDID, alive 2 h 20 min) was killed after a
    session ended without `close`.
-8. Release build with appduct installed over the debug one (see
-   [OTA.md](OTA.md#machine-setup-log), step 9); Metro stopped first.
+8. Release build with appduct installed over the debug one (Metro stopped first).
 9. `~/.appduct/config.json` created with the policy above
    (`destructive: deny`) and the appduct daemon restarted; sessions re-paired.
 10. Android release APK with appduct (`ANDROID_HOME`, `JAVA_HOME` set per
@@ -214,8 +212,7 @@ wiring these tools, in order (steps 12 on: the factory-speed wave). The OTA side
     android --no-install`, then `cd android && APPDUCT_ENABLED=1 ./gradlew
     assembleRelease` — `[appduct] native module INCLUDED in this build`,
     `BUILD SUCCESSFUL in 7m 50s`; `appduct doctor app-release.apk
-    --assert-present` holds; manifest `com.hotupdater.FINGERPRINT_HASH` =
-    `c273005b…` (= `fingerprint.json`).
+    --assert-present` holds; the fingerprint was `c273005b…`.
 11. AVD `Pixel_8` booted headless (`emulator -avd Pixel_8 -no-window
     -no-audio -no-snapshot-save`), APK installed with `adb install -r`;
     `agent-device open com.callstack.apexfactory --platform android --serial

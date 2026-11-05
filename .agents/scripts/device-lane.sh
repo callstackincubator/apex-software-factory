@@ -465,11 +465,7 @@ build_job() {
     fi
   fi
   acquire_build_slot "$log"
-  # Prebuild rewrites apps/mobile/fingerprint.json for the binary it describes. That file is
-  # committed only with a native change (ADR 0003), so a lane build puts a clean one back.
-  fp=apps/mobile/fingerprint.json
-  if git diff --quiet -- "$fp" 2>/dev/null; then restore_fp=1; else restore_fp=; fi
-  trap 'rm -rf "$slot"; [ -z "$restore_fp" ] || git -C "$root" checkout -q -- "$fp"' EXIT
+  trap 'rm -rf "$slot"' EXIT
   trap 'exit 143' INT TERM
   echo "build slot $slot; $platform $profile of $root at $(git rev-parse --short HEAD)"
   case $profile in release) config=Release ;; debug) config=Debug ;; esac
@@ -515,11 +511,9 @@ build_job() {
   if [ "$platform" = ios ] && [ "$profile" = release ] && [ -f "$cache_cli" ]; then
     node "$cache_cli" stamp "$artifact" "$mobile" || echo "could not date the binary's OTA baseline"
   fi
-  # Fill the cache under the hash the binary embeds (prebuild just wrote it to fingerprint.json).
+  # Fill the cache under the fingerprint computed before the build.
   if [ -n "$native_fp" ]; then
-    embedded=$(node -e 'try { console.log(require(process.argv[1])[process.argv[2]].hash) } catch {}' "$mobile/fingerprint.json" "$platform")
-    [ -z "$embedded" ] || [ "$embedded" = "$native_fp" ] || echo "build cache: the binary embeds $embedded, not $native_fp; caching it under $embedded"
-    node "$cache_cli" store "$platform" "$profile" "${embedded:-$native_fp}" "$artifact" "$(git rev-parse --short HEAD)" \
+    node "$cache_cli" store "$platform" "$profile" "$native_fp" "$artifact" "$(git rev-parse --short HEAD)" \
       || echo "build cache: could not store the build (the build itself is fine)"
   fi
   echo "$artifact" >"$log.artifact"
@@ -542,9 +536,8 @@ cmd_build() {
     *) usage ;;
   esac
   case $profile in release | debug) ;; *) usage ;; esac
-  # One build per worktree at a time. A second one would recompute the fingerprint, and loading
-  # hot-updater's config restores node_modules files that a running pod install or native step
-  # writes (docs/internal/NATIVE-CAPABILITIES.md): it would corrupt the build in flight.
+  # One build per worktree at a time. A second one would prebuild into the same ios/ and
+  # android/ directories and DerivedData as the one in flight.
   running=$(cat "$state_dir/build.running" 2>/dev/null || true)
   if [ -n "$running" ] && [ ! -f "$running.exit" ] && alive "$(cat "$running.pid" 2>/dev/null)"; then
     die "a build of this worktree is still running: wait for $running.exit (cat it), then build again"

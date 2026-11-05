@@ -172,7 +172,7 @@ export function createAgentTools(deps: AgentToolDeps): AnyRegistration[] {
       name: "ota_check_now",
       group: "ota",
       description:
-        "Ask the OTA server for a newer JS bundle now instead of waiting up to 30 s; a new one is downloaded and staged, which shows the New feature landed banner. Release builds only: a debug build runs Metro's JS.",
+        "Ask EAS Update for a newer JS bundle now instead of waiting up to 30 s; a new one is downloaded and staged, which shows the New feature landed banner. Release builds only: a debug build runs Metro's JS.",
       inputSchema: z.object({}),
       outputSchema: z.object({
         status: z.enum(OTA_STATUSES).describe("staged = downloaded, banner showing"),

@@ -46,11 +46,12 @@ backstop, not a licence to try.
 
 5. **The `production` channel is deployed only by CI, from `main`.** No agent
    session runs a deploy, publish, or release command against any channel,
-   and none calls the OTA server's management routes. A merge through the
+   and none runs `eas update`, `build`, `channel`, `branch`, `workflow`,
+   `env` or `submit`. A merge through the
    gate is the only way an agent's work reaches a phone.
 
 6. **Agents never touch the booth laptop's infrastructure.** The self-hosted
-   GitHub Actions runner, `infra/` (Docker Compose, MinIO, the OTA database),
+   GitHub Actions runner,
    `.github/workflows/`, `opencode.json`, `.opencode/` and `.agents/scripts/`
    are changed only by a person, or by an agent session a maintainer started
    for that change and reviews. A delivery agent that finds one of them in its

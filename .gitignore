@@ -14,9 +14,6 @@ coverage/
 apps/mobile/ios/
 apps/mobile/android/
 apps/mobile/build/
-# OTA server local state
-apps/ota-server/data/
-infra/data/
 # Agent tooling, local state (apps/mobile/.appduct/config.json is committed)
 .rozenite/
 .agent-device/

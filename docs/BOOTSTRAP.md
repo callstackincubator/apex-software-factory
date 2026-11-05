@@ -28,15 +28,12 @@ the rollback are in [14.1](#141-the-order).
 | Port   | What                             | Listens on            |
 | ------ | -------------------------------- | --------------------- |
 | `3001` | Product API (`apps/api`)         | all interfaces        |
-| `3002` | OTA server (`apps/ota-server`)   | all interfaces        |
-| `9000` | MinIO S3 API (phones download here) | all interfaces     |
-| `9001` | MinIO console                    | `127.0.0.1` only      |
 | `8081` | Metro (dev loop)                 | the Mac               |
 | `8443` | appduct daemon (TLS WebSocket)   | the app connects here |
-| `1422` | hot-updater console (rollback)   | `localhost`, on demand |
 
-Phones must reach `3001`, `3002` and `9000` over the booth Wi-Fi. Allow `node`
-and Docker in the macOS firewall (System Settings → Network → Firewall).
+Phones must reach `3001` over the booth Wi-Fi. Allow `node` in the macOS
+firewall (System Settings → Network → Firewall). Updates come from Expo's
+servers, not from this Mac.
 
 ## 1. Requirements
 
@@ -46,7 +43,6 @@ and Docker in the macOS firewall (System Settings → Network → Firewall).
 - Xcode with an iOS simulator runtime. The temporary Mac has Xcode 26.6 and
   iOS 26.5. Lanes lease an "iPhone 17 Pro" by default.
 - CocoaPods, for iOS builds (`pod install`).
-- Docker Desktop, for MinIO.
 - Node 22.18 or newer, and pnpm through corepack. `package.json` pins the
   pnpm version (`packageManager`).
 - The GitHub CLI (`gh`), logged in with write access to
@@ -73,10 +69,6 @@ xcodebuild -version && xcrun simctl list runtimes
 
 ```bash
 pod --version
-```
-
-```bash
-docker --version
 ```
 
 ```bash
@@ -128,7 +120,7 @@ evidence only:
 gh auth login
 ```
 
-Install Docker Desktop and Xcode from their vendors, then open Xcode once to
+Install Xcode from its vendor, then open Xcode once to
 accept the license and install a simulator runtime.
 
 Install OpenCode v2 from [opencode.ai](https://opencode.ai). The factory
@@ -310,83 +302,17 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home
 
 Put `$ANDROID_HOME/platform-tools` and `$ANDROID_HOME/emulator` on the `PATH`.
 
-## 6. The OTA stack
+## 6. The OTA path
 
-MinIO stores the bundles; it runs in Docker. The OTA server runs on the host
-as a Node process. Both use the main checkout. Details:
-[OTA.md](internal/OTA.md).
+Updates are published to EAS Update from GitHub Actions
+(`ota-publish.yml`, on GitHub's own runners), and binaries are built on EAS:
+nothing for the OTA path runs on this Mac. What a maintainer needs:
 
-Create the two env files. They are gitignored; never commit them.
-
-```bash
-cp infra/.env.example infra/.env && cp apps/ota-server/.env.example apps/ota-server/.env
-```
-
-```bash
-chmod 600 infra/.env apps/ota-server/.env
-```
-
-Fill the secrets without printing them. `S3_SECRET_ACCESS_KEY` must be the same
-in both files:
-
-```bash
-s3=$(openssl rand -hex 24)
-sed -i '' "s/^MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=$(openssl rand -hex 24)/" infra/.env
-sed -i '' "s/^S3_SECRET_ACCESS_KEY=.*/S3_SECRET_ACCESS_KEY=$s3/" infra/.env apps/ota-server/.env
-sed -i '' "s/^HOT_UPDATER_AUTH_TOKEN=.*/HOT_UPDATER_AUTH_TOKEN=$(openssl rand -hex 32)/" apps/ota-server/.env
-unset s3
-```
-
-The other values (`S3_BUCKET=hot-updater`, `S3_ACCESS_KEY_ID=apex-ota`,
-`S3_REGION=us-east-1`, ports) can stay as the examples set them. Every
-variable is explained in the two `.env.example` files.
-
-Start Docker and MinIO. `minio-init` creates the bucket and the user on every
-`up`:
-
-```bash
-open -a Docker
-```
-
-```bash
-until docker info >/dev/null 2>&1; do sleep 2; done
-```
-
-```bash
-docker compose -f infra/docker-compose.yml up -d
-```
-
-```bash
-docker compose -f infra/docker-compose.yml logs minio-init
-```
-
-It must end with `bucket 'hot-updater' ready; user 'apex-ota' has policy apex-ota`.
-
-Create the OTA database (safe to run again), then start the server. It runs in
-the foreground; keep it in its own terminal tab. Ctrl-C drains and stops it.
-
-```bash
-pnpm --filter @apex/ota-server db:migrate
-```
-
-```bash
-pnpm --filter @apex/ota-server start
-```
-
-The OTA server does not start again after a restart of the Mac. Start it each
-morning ([section 10](#10-every-morning)). MinIO restarts with Docker
-(`restart: unless-stopped`).
-
-Check it from the Mac (the version must answer `{"version":"…"}`):
-
-```bash
-curl http://127.0.0.1:3002/hot-updater/version
-```
-
-Then, from a booth phone on the booth Wi-Fi, open
-`http://<lan-ip>:3002/hot-updater/version` in the browser (the LAN IP is in
-[section 9](#9-point-github-at-this-mac)). If that does not load, no update
-will reach the phone either.
+- `eas-cli` logged in to the `callstack.io` Expo account (`eas whoami`), for
+  building binaries and for the rollback commands.
+- The repository secret `EXPO_TOKEN` (section 9).
+- The EAS channels and environments from
+  [OTA.md, One-time setup](internal/OTA.md#one-time-setup).
 
 ## 7. The product API
 
@@ -418,19 +344,18 @@ pnpm --filter @apex/api start
 
 ## 8. Self-hosted runners
 
-Three runners, all on this Mac, all as the maintainer's user, all launchd
+Two runners, both on this Mac, both as the maintainer's user, both launchd
 services. Workflows pick runners by label only. Each Mac names its runners
 after its own host name, so two Macs never collide and the old one can stay
 registered until the new one is proven.
 
 | Directory                    | Name                       | Label     | Runs              |
 | ---------------------------- | -------------------------- | --------- | ----------------- |
-| `~/actions-runner`           | `<host name>-ota`          | `ota`     | `ota-publish.yml` |
 | `~/actions-runner-factory-1` | `<host name>-factory-1`    | `factory` | `factory.yml`     |
 | `~/actions-runner-factory-2` | `<host name>-factory-2`    | `factory` | `factory.yml`     |
 
 GitHub adds the labels `self-hosted`, `macOS` and `ARM64` by itself. The
-temporary Mac's runners are named `booth-laptop`, `booth-factory-1` and
+temporary Mac's runners are named `booth-factory-1` and
 `booth-factory-2`.
 
 **Download the runner.** Find the current macOS ARM64 package:
@@ -439,31 +364,21 @@ temporary Mac's runners are named `booth-laptop`, `booth-factory-1` and
 gh api repos/actions/runner/releases/latest -q '.assets[] | select(.name | test("osx-arm64.*tar.gz$")) | .browser_download_url'
 ```
 
-Then unpack it into each of the three directories (replace `<url>` with the
+Then unpack it into each of the two directories (replace `<url>` with the
 printed URL):
 
 ```bash
-for d in ~/actions-runner ~/actions-runner-factory-1 ~/actions-runner-factory-2; do mkdir -p "$d" && curl -fsSL "<url>" | tar xz -C "$d"; done
+for d in ~/actions-runner-factory-1 ~/actions-runner-factory-2; do mkdir -p "$d" && curl -fsSL "<url>" | tar xz -C "$d"; done
 ```
 
 **Register each runner.** Run `config.sh` from a normal login shell where
 `node`, `gh` and `opencode` are on the `PATH`: the runner keeps a snapshot of
 that `PATH` in its `.path` file. A registration token lasts an hour; get a
-fresh one per runner. Keep the same terminal for all three, so the name prefix
+fresh one per runner. Keep the same terminal for both, so the name prefix
 is set:
 
 ```bash
 name_prefix=$(scutil --get LocalHostName)
-```
-
-The OTA runner:
-
-```bash
-cd ~/actions-runner
-```
-
-```bash
-./config.sh --unattended --url https://github.com/callstackincubator/apex-software-factory --name "${name_prefix}-ota" --labels ota --token "$(gh api -X POST repos/callstackincubator/apex-software-factory/actions/runners/registration-token -q .token)"
 ```
 
 The two factory runners:
@@ -502,14 +417,9 @@ Once simlock is a workspace dependency, drop `SIMLOCK_BIN` and keep
 
 Node, pnpm and `gh` need nothing in `.env`: `scripts/ci/runner-env.sh` finds
 them on every job (see section 2). To force a Node, add
-`APEX_NODE_BIN=<directory containing node>` to the runner's `.env`. The OTA
-runner's `.env` can stay empty.
+`APEX_NODE_BIN=<directory containing node>` to the runner's `.env`.
 
-**Install and start the services**, in each of the three directories:
-
-```bash
-cd ~/actions-runner && ./svc.sh install && ./svc.sh start
-```
+**Install and start the services**, in each of the two directories:
 
 ```bash
 cd ~/actions-runner-factory-1 && ./svc.sh install && ./svc.sh start
@@ -522,7 +432,7 @@ cd ~/actions-runner-factory-2 && ./svc.sh install && ./svc.sh start
 After any change to a runner's `.env`, restart its service
 (`./svc.sh stop && ./svc.sh start` in its directory).
 
-**Check them.** All three must be `online`:
+**Check them.** Both must be `online`:
 
 ```bash
 gh api repos/callstackincubator/apex-software-factory/actions/runners -q '.runners[] | "\(.name) \(.status) \([.labels[].name] | join(","))"'
@@ -532,14 +442,14 @@ gh api repos/callstackincubator/apex-software-factory/actions/runners -q '.runne
 > land on either Mac. Stop the other Mac's runners straight away
 > ([14.2](#142-stop-the-old-runners)), before anything else.
 
-What each runner needs, and why: [DELIVERY.md, CI and OTA publishing and The
+What each runner needs, and why: [DELIVERY.md, The
 factory dispatcher](internal/DELIVERY.md#the-factory-dispatcher).
 
 ## 9. Point GitHub at this Mac
 
 > Do this only when no other Mac's runners are online
-> ([14.2](#142-stop-the-old-runners)). The values below change what every OTA
-> deploy builds and which server it talks to.
+> ([14.2](#142-stop-the-old-runners)). The values below change what the
+> booth binaries talk to.
 
 Find the Mac's LAN IP (Wi-Fi is `en0` on most Macs; try `en1` if it is empty):
 
@@ -548,56 +458,27 @@ ipconfig getifaddr en0
 ```
 
 Give this IP a DHCP reservation on the booth router. **The IP is compiled into
-the booth binary and into every OTA bundle**: a new IP means a new binary on
-every phone ([section 11](#11-the-booth-binary)).
+the product API address of the booth binary and of every OTA bundle**: a new IP
+means new EAS environment values and new binaries
+([section 11](#11-the-booth-binary)).
 
-Set the repository variables. Run these from the main checkout, so `gh` knows
-the repository. The two `EXPO_PUBLIC_*` values use the LAN IP; the others
-point at this Mac's own loopback, because the OTA runner runs here (they are
-the same on every Mac):
+Set the API address in the EAS `production` and `preview` environments, so
+builds and updates carry it (it uses the LAN IP):
 
 ```bash
 LAN_IP=$(ipconfig getifaddr en0)
 ```
 
 ```bash
-gh variable set EXPO_PUBLIC_OTA_URL --body "http://$LAN_IP:3002/hot-updater"
+(cd apps/mobile && eas env:set production --name EXPO_PUBLIC_API_URL --value "http://$LAN_IP:3001" --visibility plaintext --non-interactive && eas env:set preview --name EXPO_PUBLIC_API_URL --value "http://$LAN_IP:3001" --visibility plaintext --non-interactive)
 ```
 
-```bash
-gh variable set EXPO_PUBLIC_API_URL --body "http://$LAN_IP:3001"
-```
-
-```bash
-gh variable set HOT_UPDATER_SERVER_URL --body "http://127.0.0.1:3002/hot-updater"
-```
-
-```bash
-gh variable set S3_ENDPOINT --body "http://127.0.0.1:9000"
-```
-
-```bash
-gh variable set S3_REGION --body "$(grep '^S3_REGION=' apps/ota-server/.env | cut -d= -f2-)"
-```
-
-```bash
-gh variable set S3_BUCKET --body "$(grep '^S3_BUCKET=' infra/.env | cut -d= -f2-)"
-```
-
-Set the secrets from this Mac's env files: the OTA server and MinIO here only
-accept this Mac's values. `gh secret set NAME` reads the value from standard
+Set the Expo token as a secret (create it in the `callstack.io` account's
+access token settings). `gh secret set NAME` reads the value from standard
 input, so it never appears in the terminal or the shell history:
 
 ```bash
-grep '^HOT_UPDATER_AUTH_TOKEN=' apps/ota-server/.env | cut -d= -f2- | tr -d '\n' | gh secret set HOT_UPDATER_AUTH_TOKEN
-```
-
-```bash
-grep '^S3_ACCESS_KEY_ID=' infra/.env | cut -d= -f2- | tr -d '\n' | gh secret set S3_ACCESS_KEY_ID
-```
-
-```bash
-grep '^S3_SECRET_ACCESS_KEY=' infra/.env | cut -d= -f2- | tr -d '\n' | gh secret set S3_SECRET_ACCESS_KEY
+gh secret set EXPO_TOKEN
 ```
 
 Unattended runs act on GitHub as the factory's GitHub App (ADR 0020). It
@@ -632,11 +513,8 @@ Check the names (values are never shown):
 gh variable list && gh secret list
 ```
 
-`OTA_MISMATCH_PATTERN` is an optional variable; leave it unset.
-
-Then run the OTA publish in preflight mode. It checks the OTA runner, the
-settings above, the OTA server and MinIO, prints the fingerprints, and deploys
-nothing:
+Then run the OTA publish in preflight mode. It prints the fingerprints, looks
+for their `production` builds on EAS, and publishes nothing:
 
 ```bash
 gh workflow run ota-publish.yml -f preflight_only=true
@@ -650,10 +528,8 @@ gh run watch "$(gh run list --workflow ota-publish.yml --limit 1 --json database
 
 From the main checkout, in this order:
 
-1. Start Docker and MinIO, migrate, and start the OTA server
-   ([section 6](#6-the-ota-stack)).
-2. Start the product API ([section 7](#7-the-product-api)).
-3. Warm the machine: the pnpm store, the native build cache for the current
+1. Start the product API ([section 7](#7-the-product-api)).
+2. Warm the machine: the pnpm store, the native build cache for the current
    fingerprint, simlock's simulators and agent-device's runner on each. It
    needs `SIMLOCK_BIN` and `SIMLOCK_HOME` in the shell. A cold run compiles
    one Release build (several minutes); later runs take seconds.
@@ -665,7 +541,7 @@ From the main checkout, in this order:
    Options: `--devices <n>` (default 2, one per factory runner), `--android`,
    `--debug`, `--metro`.
 
-4. Pair each booth phone with appduct (booth Wi-Fi, app running). Scan the QR
+3. Pair each booth phone with appduct (booth Wi-Fi, app running). Scan the QR
    code with the phone's camera; the link works once, for 5 minutes:
 
    ```bash
@@ -678,22 +554,22 @@ From the main checkout, in this order:
 
 ## 11. The booth binary
 
-The booth phones run a **Release** build: hot-updater does not run in a debug
-build. Build one binary per native fingerprint, per platform, and install it
-on every phone. Detail: [OTA.md, Mobile release builds](internal/OTA.md#mobile-release-builds)
+The booth binaries run a **Release** build on the `production` channel:
+expo-updates does not run in a debug build. EAS builds one binary per native
+fingerprint and platform (`eas build --profile production`). Detail:
+[OTA.md, Production builds](internal/OTA.md#production-builds)
 and [apps/mobile/README.md](../apps/mobile/README.md#release-builds-and-over-the-air-updates).
 
 Every build of it must have:
 
 - `APPDUCT_ENABLED=1`. It links appduct and changes the iOS fingerprint;
-  `hot-updater.config.ts` refuses any other value.
-- `EXPO_PUBLIC_OTA_URL` and `EXPO_PUBLIC_API_URL` set to exactly the repository
-  variables from section 9. Every OTA bundle is built with those values and
-  replaces the binary's JavaScript; a mismatch strands the phone after its
-  first update.
-- A clean `main` checkout. Building rewrites `apps/mobile/fingerprint.json`.
-  If it changes, the binary does not match `main`, and no bundle the factory
-  ships will reach it: stop and find out why.
+  every `eas.json` profile sets it.
+- `EXPO_PUBLIC_API_URL` set to the EAS environment value from section 9 (EAS
+  supplies it to builds and updates). Every OTA bundle replaces the binary's
+  JavaScript with its own inlined values.
+- A `main` checkout. The binary's runtime version is the fingerprint of the
+  commit it was built from; a bundle reaches it only when the fingerprints
+  match.
 
 Set the build environment once per terminal:
 
@@ -702,7 +578,7 @@ LAN_IP=$(ipconfig getifaddr en0)
 ```
 
 ```bash
-export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 APPDUCT_ENABLED=1 EXPO_PUBLIC_OTA_URL=http://$LAN_IP:3002/hot-updater EXPO_PUBLIC_API_URL=http://$LAN_IP:3001
+export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 APPDUCT_ENABLED=1 EXPO_PUBLIC_API_URL=http://$LAN_IP:3001
 ```
 
 **iPhone.** Connect the phone by USB, then from `apps/mobile` build and
@@ -853,9 +729,10 @@ To take a test feature off the phones, a maintainer disables its bundle
 
 ## 14. Move off the temporary Mac
 
-The temporary Mac (user `aitwar`) runs the three runners named in
-[section 8](#8-self-hosted-runners), in `~/actions-runner` and
-`~/actions-runner-factory-{1,2}`, MinIO and the OTA server from `/Users/aitwar/Projects/apex-software-factory`,
+The temporary Mac (user `aitwar`) was set up before ADR 0025: besides the two
+factory runners of [section 8](#8-self-hosted-runners) it still has the `ota`
+runner in `~/actions-runner`, and MinIO and the OTA server running from
+`/Users/aitwar/Projects/apex-software-factory`,
 simlock with `SIMLOCK_HOME=/tmp/apex-slk`, and the native build cache. The
 repository variables point at its LAN IP, `192.168.1.61`.
 
@@ -866,8 +743,7 @@ repository variables point at its LAN IP, `192.168.1.61`.
    still point at the old IP.
 2. **Stop the old Mac's runners** ([14.2](#142-stop-the-old-runners)), right
    after step 1. Do not uninstall or deregister them yet. Two Macs online with
-   the same labels could run an `ota` job on the old Mac, publishing to the
-   wrong OTA server, or a factory job there.
+   the same labels could run a factory job on the old Mac.
 3. **Switch and prove the new Mac**: point GitHub at it
    ([section 9](#9-point-github-at-this-mac)), build and install the booth
    binary ([section 11](#11-the-booth-binary)), run the smoke test
@@ -879,9 +755,7 @@ repository variables point at its LAN IP, `192.168.1.61`.
 **Rollback, before step 4:** stop the new Mac's three runner services
 (`./svc.sh stop` in each directory), start the old Mac's again
 (`./svc.sh start`), and set the repository variables and secrets back to the
-old Mac's values. The old values are still in its env files; the
-`EXPO_PUBLIC_*` variables were `http://192.168.1.61:3002/hot-updater` and
-`http://192.168.1.61:3001`.
+old Mac's values. The old values are still in its env files.
 
 ### 14.2 Stop the old runners
 
@@ -961,7 +835,8 @@ lsof -nP -iTCP:3002 -sTCP:LISTEN
 lsof -nP -iTCP:3001 -sTCP:LISTEN
 ```
 
-Stop and remove the MinIO containers:
+On the old Mac only, in a checkout from before ADR 0025 (the new setup has no
+MinIO): stop and remove the MinIO containers:
 
 ```bash
 docker compose -f infra/docker-compose.yml down

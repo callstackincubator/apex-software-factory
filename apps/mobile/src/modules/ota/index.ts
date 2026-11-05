@@ -1,13 +1,7 @@
-import { getUpdater } from "@/modules/updater";
-
 declare module "@apex/event-bus" {
   interface DomainEvents {
     "ota/update-staged": { id: string; message: string | null; rollback: boolean };
   }
-}
-
-export function initOta(): void {
-  getUpdater().start();
 }
 
 export {

@@ -191,8 +191,7 @@ Search `docs/`, `README.md` and every user-facing string you touched (screen
 copy, error bodies, OpenAPI descriptions) for claims your change makes false,
 and fix them in the same branch (documentation rule 7). Do not widen scope:
 something you notice that is not in the spec becomes a `bug:new` issue or one
-line under Open. Never touch `infra/`, `.github/workflows/`, `apps/ota-server`
-for a product feature, `opencode.json`, `.opencode/` or `.agents/` (safety
+line under Open. Never touch `.github/workflows/`, `opencode.json`, `.opencode/` or `.agents/` (safety
 rule 6).
 
 ## 5. Prove it

@@ -1,6 +1,6 @@
 # 0003 — OTA updates through a self-hosted hot-updater server
 
-Status: Accepted
+Status: Superseded by [0025](0025-ota-through-eas-update.md)
 
 ## Context
 

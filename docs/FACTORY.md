@@ -27,7 +27,7 @@ to them instead of repeating them. To set up a machine, see
 | Technical spec       | Developer                 | The console's Specs tab or `/spec <n> technical` (the `spec` agent), ending with the `spec-checker` | The Technical spec in the same issue         |
 | Signature            | Developer                 | Adds `feature:ready`                                    | A factory run starts on the booth Mac        |
 | Delivery             | Agents                    | `factory.yml` → `factory-run.sh` → the `factory` agent  | A merged PR                                  |
-| Ship                 | GitHub Actions            | `ota-publish.yml` on the booth Mac                      | An OTA bundle on the phones                  |
+| Ship                 | GitHub Actions            | `ota-publish.yml` on a GitHub-hosted runner             | An EAS Update on the `production` channel    |
 | Did it land?         | Agent                     | `ota-verifier` on a simulator                           | A line in the run's `## Delivery run` comment |
 
 A spec template pre-filled with the house defaults keeps the developer's part
@@ -48,9 +48,9 @@ flowchart LR
     FR --> FY["factory.yml<br/>self-hosted factory runner"]
     FY --> AG["factory agent<br/>implement, review, verify"]
     AG --> M["merge-pr.sh<br/>squash merge to main"]
-    M --> OP["ota-publish.yml<br/>self-hosted ota runner"]
-    OP --> S["OTA server :3002<br/>+ MinIO :9000"]
-    S --> P["Booth phones<br/>banner: New feature landed"]
+    M --> OP["ota-publish.yml<br/>GitHub-hosted runner"]
+    OP --> S["EAS Update<br/>channel production"]
+    S --> P["Booth binaries<br/>banner: New feature landed"]
     AG -.->|"native change"| NB["needs-native-build<br/>parked for a maintainer"]
 ```
 
@@ -141,7 +141,7 @@ sequenceDiagram
     participant MV as mobile-verifier
     participant RV as review-verifier
     participant MG as merge-pr.sh
-    participant OP as ota-publish.yml<br/>(ota runner)
+    participant OP as ota-publish.yml<br/>(GitHub-hosted)
     participant OV as ota-verifier
 
     GH->>FY: label feature:ready / task:ready / bug:ready
@@ -205,37 +205,33 @@ to `<kind>:blocked`. The walkthroughs are in
 
 ## The OTA path
 
-The mobile app uses [hot-updater](https://github.com/gronxb/hot-updater)
-with a self-hosted server ([`apps/ota-server`](../apps/ota-server)) and MinIO
-for storage. The strategy is **fingerprint**: a bundle reaches only binaries
-whose native fingerprint matches. [`apps/mobile/fingerprint.json`](../apps/mobile/fingerprint.json)
-records the fingerprint of the binary on the booth phones. A change to native
-code, a native dependency, `app.json` or a config plugin changes the
-fingerprint, so it cannot ship over the air.
+The mobile app uses `expo-updates` with
+[EAS Update](https://docs.expo.dev/eas-update/introduction/) (ADR 0025). The
+runtime version is the **fingerprint**: an update reaches only binaries whose
+native fingerprint matches, and binaries are built on EAS (`production` and
+`lane` profiles in [`apps/mobile/eas.json`](../apps/mobile/eas.json)). A change
+to native code, a native dependency, `app.json`, `eas.json` or a config plugin
+changes the fingerprint, so it cannot ship over the air.
 
 ```mermaid
 flowchart TD
     PR["Delivery PR"] --> NC{"native-check.sh<br/>(implementer, CI, merge gate)"}
     NC -->|native| PARK["PR labelled needs-native-build<br/>merge-pr.sh refuses it"]
-    PARK --> MAINT["Maintainer: merge by hand,<br/>build a new binary,<br/>commit fingerprint.json,<br/>reinstall every booth phone"]
+    PARK --> MAINT["Maintainer: merge by hand,<br/>build a new production binary<br/>on EAS"]
     NC -->|JS only| MERGE["merge-pr.sh: squash merge to main"]
-    MERGE --> OP["ota-publish.yml on the ota runner<br/>(push to main touching apps/mobile, packages, lockfile)"]
-    OP --> PRE["ota-preflight.sh<br/>settings, OTA server, MinIO"]
-    PRE --> WAIT["wait-for-check.sh<br/>CI check, or same tree as the tested PR head"]
-    WAIT --> DEP["ota-deploy.sh<br/>iOS and Android at the same time"]
-    DEP --> FP{"fingerprint matches<br/>fingerprint.json?"}
-    FP -->|no| NNB["Job fails: Needs a native build<br/>merged PR labelled needs-native-build"]
+    MERGE --> OP["ota-publish.yml on a GitHub-hosted runner<br/>(push to main touching apps/mobile, packages, lockfile)"]
+    OP --> FPR["eas fingerprint:generate<br/>iOS and Android"]
+    FPR --> HAVE{"finished production<br/>EAS build with it?"}
+    HAVE -->|no| NNB["Job fails: Needs a native build<br/>merged PR labelled needs-native-build"]
     NNB --> MAINT
-    FP -->|yes| UP["Bundle uploaded to MinIO,<br/>registered with the OTA server"]
-    UP --> NUDGE["ota-nudge.sh: appduct ota_check_now<br/>on paired booth phones"]
+    HAVE -->|yes| WAIT["wait-for-check.sh<br/>CI check, or same tree as the tested PR head"]
+    WAIT --> UP["eas update<br/>channel production"]
     UP --> POLL["Phones check every 30 s,<br/>on start and on foreground"]
-    NUDGE --> BANNER["Banner: New feature landed — tap to reload"]
-    POLL --> BANNER
+    POLL --> BANNER["Banner: New feature landed — tap to reload"]
 ```
 
-The publish job never runs for a pull request: its runner holds the OTA token
-and the S3 credentials. Phones keep the last bundle until a maintainer ships a
-new binary. Detail, rollback and troubleshooting:
+The publish job never runs for a pull request: it holds `EXPO_TOKEN`. Binaries
+keep the last update until a maintainer builds a new one. Detail, rollback and troubleshooting:
 [OTA.md](internal/OTA.md). What the booth binary can do without a native
 build: [NATIVE-CAPABILITIES.md](internal/NATIVE-CAPABILITIES.md).
 
@@ -351,11 +347,10 @@ agent uses each tool: [apps/mobile/README.md, Agent tooling](../apps/mobile/READ
   CI's `check` job is the required check the gate waits for.
 - **Only CI deploys, and only from `main`.** `ota-publish.yml` has no
   `pull_request` trigger and must never get one; a dispatch from another
-  branch runs the preflight only. No agent deploys, rolls back or disables a
-  bundle.
-- **Secrets stay in `.env` files agents cannot read.** The OTA token and S3
-  credentials live in `infra/.env`, `apps/ota-server/.env` and the repo's
-  Actions secrets.
+  branch checks the builds only. No agent publishes, rolls back or republishes
+  an update, or runs `eas build`, `channel`, `branch`, `env` or `workflow`.
+- **Secrets stay out of agents' reach.** `EXPO_TOKEN` lives in the repo's
+  Actions secrets; agents cannot read `.env` files.
 - **The dispatcher trusts little.** `factory.yml` acts only on a label set by
   someone with write access or by this repository's automation, never on a
   pull request, and always runs code from `main`.
@@ -430,16 +425,16 @@ files ([BOOTSTRAP.md](BOOTSTRAP.md#8-self-hosted-runners)).
 ### A change needs a native build
 
 Either the PR carries `needs-native-build` (caught before the merge) or the
-OTA publish job failed with "Needs a native build — not shipped over the air"
-(caught after the merge). The phones keep running the last bundle. A
+OTA publish job failed with "Needs a native build"
+(caught after the merge). The binaries keep running the last update. A
 maintainer decides:
 
 1. Whether the change is worth a new binary at all. If not, close the PR or
    revert it.
-2. If yes: merge it by hand (the gate refuses native diffs), build a new booth
-   binary from `main` ([BOOTSTRAP.md](BOOTSTRAP.md#11-the-booth-binary)),
-   commit the regenerated `apps/mobile/fingerprint.json`, and install the new
-   binary on every booth phone.
+2. If yes: merge it by hand (the gate refuses native diffs), then build a new
+   `production` binary from `main` on EAS
+   ([OTA.md](internal/OTA.md#production-builds)). The next merge that touches
+   the bundle publishes.
 
 ### The model endpoint is down
 

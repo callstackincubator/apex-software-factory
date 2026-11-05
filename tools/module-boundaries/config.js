@@ -35,7 +35,7 @@ module.exports = [
       "zod",
     ],
     owners: {
-      "@hot-updater/react-native": ["modules/updater/**"],
+      "expo-updates": ["modules/updater/**"],
       "@appduct/react-native": [
         "modules/agent-tools/**",
         "modules/*/agent-tools.ts",

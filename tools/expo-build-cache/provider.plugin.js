@@ -3,8 +3,8 @@
 //
 //   "buildCacheProvider": { "plugin": "../../tools/expo-build-cache/provider.plugin.js" }
 //
-// The key is hot-updater's OTA fingerprint (calculateFingerprintHash), not Expo's default
-// fingerprint, so a cached binary is exactly the one an OTA bundle for that hash targets. A
+// The key is the native fingerprint (calculateFingerprintHash), computed with the project's
+// fingerprint.config.js and APPDUCT_ENABLED=1, the runtime version EAS Update matches on. A
 // Release hit comes back with this checkout's JS already in it (Expo itself would install the
 // cached binary's old JS). .agents/scripts/device-lane.sh uses the same module through cli.js.
 "use strict";

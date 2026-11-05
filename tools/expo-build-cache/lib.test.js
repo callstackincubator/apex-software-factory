@@ -31,9 +31,10 @@ function fakeApp(dir, text) {
   return app;
 }
 
-test("reads both platform hashes from hot-updater's fingerprint output, colours and all", () => {
-  const out = `│  Fingerprint\n│      iOS:      \x1b[1m${FP_A}\x1b[22m\n│      Android:  ${FP_B}\n◆  Fingerprint mismatch.`;
-  assert.deepEqual(lib.parseFingerprintOutput(out), { ios: FP_A, android: FP_B });
+test("reads the hash from fingerprint:generate output and nothing else", () => {
+  assert.equal(lib.parseFingerprintOutput(JSON.stringify({ sources: [], hash: FP_A })), FP_A);
+  assert.equal(lib.parseFingerprintOutput("not json"), undefined);
+  assert.equal(lib.parseFingerprintOutput(JSON.stringify({ hash: "nope" })), undefined);
 });
 
 test("maps Expo's run options to the cache profile per platform", () => {
