@@ -4,7 +4,7 @@ import type { Updater } from "./port";
 let current: Updater | null = null;
 
 export function getUpdater(): Updater {
-  current ??= createExpoUpdater();
+  current ??= createExpoUpdater({ channel: process.env.EXPO_PUBLIC_UPDATES_CHANNEL });
   return current;
 }
 

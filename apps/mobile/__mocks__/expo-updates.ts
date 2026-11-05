@@ -16,3 +16,4 @@ export const fetchUpdateAsync = jest.fn(async () => ({
   isRollBackToEmbedded: false,
 }));
 export const reloadAsync = jest.fn(async () => {});
+export const setUpdateRequestHeadersOverride = jest.fn();

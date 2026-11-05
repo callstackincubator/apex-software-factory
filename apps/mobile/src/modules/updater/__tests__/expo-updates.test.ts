@@ -65,4 +65,35 @@ describe("expo-updates adapter", () => {
     });
     expect(updater.fingerprint()).toBe(Updates.runtimeVersion);
   });
+
+  describe("update channel", () => {
+    beforeEach(() => {
+      jest.mocked(Updates.setUpdateRequestHeadersOverride).mockClear();
+      jest.mocked(Updates.checkForUpdateAsync).mockClear();
+    });
+
+    it("asks the requested channel, before the first check, when the binary embeds another", async () => {
+      const updater = createExpoUpdater({ channel: "lane" });
+      await updater.check();
+
+      expect(Updates.setUpdateRequestHeadersOverride).toHaveBeenCalledWith({
+        "expo-channel-name": "lane",
+      });
+      const [overrideOrder] = jest.mocked(Updates.setUpdateRequestHeadersOverride).mock
+        .invocationCallOrder;
+      const [checkOrder] = jest.mocked(Updates.checkForUpdateAsync).mock.invocationCallOrder;
+      expect(overrideOrder).toBeLessThan(checkOrder as number);
+      expect(updater.runningBundle().channel).toBe("lane");
+    });
+
+    it.each([undefined, "", "production"])(
+      "keeps the embedded channel when the request is %p",
+      (channel) => {
+        const updater = createExpoUpdater({ channel });
+
+        expect(Updates.setUpdateRequestHeadersOverride).not.toHaveBeenCalled();
+        expect(updater.runningBundle().channel).toBe("production");
+      },
+    );
+  });
 });
