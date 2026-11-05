@@ -145,7 +145,9 @@ jobs:
 
       # EXPO_PUBLIC_API_URL and the rest of the bundle's public environment come
       # from the `production` EAS environment (--environment), the same one the
-      # production binary was built with.
+      # production binary was built with. One update per platform: `--platform all`
+      # also exports web, which the app does not ship, and an `expo.platforms` list in
+      # app.json would change the native fingerprint.
       - name: Publish to EAS Update
         id: publish
         if: github.ref == 'refs/heads/main' && !inputs.preflight_only && steps.builds.outputs.result == 'ready'
@@ -153,11 +155,15 @@ jobs:
         env:
           MESSAGE: ${{ steps.commit.outputs.message }}
         run: |
-          eas update --channel "$CHANNEL" --environment production \
-            --message "$MESSAGE" --json --non-interactive >"$RUNNER_TEMP/update.json"
-          cat "$RUNNER_TEMP/update.json"
-          group=$(jq -r '[.[]?.group] | map(select(. != null)) | first // empty' "$RUNNER_TEMP/update.json" || true)
-          echo "group=$group" >>"$GITHUB_OUTPUT"
+          groups=()
+          for platform in ios android; do
+            eas update --platform "$platform" --channel "$CHANNEL" --environment production \
+              --message "$MESSAGE" --json --non-interactive >"$RUNNER_TEMP/update-$platform.json"
+            cat "$RUNNER_TEMP/update-$platform.json"
+            group=$(jq -r '[.[]?.group] | map(select(. != null)) | first // empty' "$RUNNER_TEMP/update-$platform.json" || true)
+            groups+=("$platform ${group:-unknown}")
+          done
+          echo "group=$(IFS=,; echo "${groups[*]}")" >>"$GITHUB_OUTPUT"
 
       - name: Summary
         if: always()
@@ -189,7 +195,7 @@ jobs:
             row Android "$ANDROID_STATUS" "$ANDROID_FINGERPRINT"
             echo
             echo "- Channel: \`$CHANNEL\`"
-            if [ -n "$GROUP" ]; then echo "- Update group: \`$GROUP\`"; fi
+            if [ -n "$GROUP" ]; then echo "- Update groups: \`$GROUP\`"; fi
             echo "- Commit: [\`${GITHUB_SHA:0:7}\`]($url/commit/$GITHUB_SHA) — $MESSAGE"
             if [ -n "$PR" ]; then echo "- PR: [#$PR]($url/pull/$PR)"; else echo "- PR: none (pushed to main directly)"; fi
             if [ "$RESULT" = needs-native-build ]; then
