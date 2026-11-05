@@ -13,3 +13,8 @@ allowBuilds:
   # dependencies (react-native-skia-apple-*, react-native-skia-android) into
   # libs/; it downloads nothing. The native build needs them.
   "@shopify/react-native-skia": true
+  # Wrangler's local runtime; its postinstall only links the prebuilt binary.
+  workerd: true
+minimumReleaseAgeExclude:
+  - miniflare@5.20261103.0-beta
+  - wrangler@4.157.0

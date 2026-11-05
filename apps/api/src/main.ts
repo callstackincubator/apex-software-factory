@@ -1,11 +1,11 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./app.ts";
-import { ConfigError, loadConfig, type Config } from "./config.ts";
+import { ConfigError, loadNodeConfig, type NodeConfig } from "./config.ts";
 import { createLogger } from "./logger.ts";
 
-let config: Config;
+let config: NodeConfig;
 try {
-  config = loadConfig();
+  config = loadNodeConfig();
 } catch (error) {
   if (!(error instanceof ConfigError)) throw error;
   console.error(error.message);
