@@ -16,7 +16,9 @@ recover the pieces. Decision record:
 Flow: a merge to `main` starts `ota-publish.yml`. For iOS and Android it
 computes the fingerprint of the merged commit, looks for a finished
 `production` EAS build with that fingerprint and, when both exist, runs
-`eas update --channel production --environment production`. A binary on the
+`eas update --platform <ios|android> --channel production --environment production`
+once per platform (`--platform all` would also export web, which the app does
+not ship), so a merge makes two update groups. A binary on the
 `production` channel with that runtime version checks (on start, on
 foreground, every 30 s), downloads the update, shows the banner, and applies
 it when the visitor taps.
@@ -116,6 +118,9 @@ A maintainer, from `apps/mobile`:
 ```sh
 eas update:rollback <update-group-id> --non-interactive
 ```
+
+A merge publishes one group per platform (the run summary lists both): roll back
+each.
 
 `<GROUPID>` must be the latest update group of its branch and runtime version.
 The group published before it is republished; if there is none, binaries are
