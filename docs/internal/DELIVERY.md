@@ -274,26 +274,17 @@ Configuration (repository settings → Secrets and variables → Actions):
 | `EXPO_TOKEN`             | secret   | an access token of the `callstack.io` Expo account    |
 | `FACTORY_APP_ID`         | secret   | the factory GitHub App (ADR 0021)                     |
 | `FACTORY_APP_PRIVATE_KEY`| secret   | the factory GitHub App (ADR 0021)                     |
+| `CALLSTACK_AI_API_KEY`   | secret   | the callstack.ai key OpenCode uses (ADR 0029)         |
 
 `EXPO_PUBLIC_API_URL` and the other public values of the bundle are EAS
 environment variables (`production`), not repository settings
 ([OTA.md](OTA.md#one-time-setup)).
 
-`scripts/ci/runner-env.sh`, which the factory dispatcher runs on the
-self-hosted runners, does not rely on the runner service's `PATH` snapshot,
-which can point at directories that no longer exist (an fnm shell directory,
-for example). It looks for Node 22.18 or newer in the fnm default alias,
-Volta, Homebrew and `/usr/local/bin`. It gets the pinned pnpm through
-`.agents/scripts/ensure-pnpm.sh`, and finds `gh` in Homebrew. To force a Node,
-set `APEX_NODE_BIN=<dir>` in the runner's `.env` and restart the service.
-
 ## The factory dispatcher
 
-`.github/workflows/factory.yml` turns labels into runs (ADR 0012). It runs on
-the booth laptop's self-hosted runners labelled `factory` —
-`booth-factory-1` and `booth-factory-2`, launchd services in
-`~/actions-runner-factory-1` and `-2`, registered to this repository and
-running as the maintainer's user — so two issues are delivered side by side.
+`.github/workflows/factory.yml` turns labels into runs (ADR 0012, amended by
+0029). It runs on GitHub-hosted `ubuntu-latest` runners, one fresh VM per
+issue, so any number of issues are delivered side by side.
 
 | Trigger | Run |
 | --- | --- |
@@ -316,26 +307,15 @@ the logs, journals and transcripts in the job's artifact
 `.worktrees/factory-runs/`. The `retro` agent reads them from any machine:
 [MEMORY.md](MEMORY.md).
 
-Runner setup (once per runner directory, as the maintainer's user):
+Setup (repository secrets; nothing to install on a machine):
 
-- **simlock**: until it is on npm, the lanes need the CLI and its state
-  directory. Put them in the runner's `.env` (key=value lines the runner
-  hands to every job) and restart the service:
-
-  ```sh
-  cd ~/actions-runner-factory-1
-  printf 'SIMLOCK_BIN=node /Users/aitwar/Projects/simlock/dist/cli/main.js\nSIMLOCK_HOME=/tmp/apex-slk\n' >> .env
-  ./svc.sh stop && ./svc.sh start
-  ```
-
-  `SIMLOCK_HOME` must be the one the running simlock daemon uses
-  (`/tmp/apex-slk` on the dev Mac). Without `SIMLOCK_BIN` the job warns and
-  simulator checks report `unavailable`.
-- **OpenCode**: `~/.opencode/bin/opencode`, with the provider definition in
-  the repository's `opencode.json` (ADR 0014) and the login in
-  `~/.local/share/opencode/auth.json` — the runner runs as the same user, so
-  the maintainer's login applies. The run uses `--standalone`, so it inherits
-  the job's environment.
+- **OpenCode**: the job installs `@opencode/cli@2.2.5` from npm. The provider
+  definition is the repository's `opencode.json` (ADR 0014); the key is the
+  secret `CALLSTACK_AI_API_KEY`, which the factory step writes to OpenCode's
+  `auth.json` (the file `opencode auth login` writes) and then unsets. Locally
+  nothing changes: people still run `opencode auth login`.
+- **EAS**: the secret `EXPO_TOKEN` (as for the OTA publish) reaches the lanes'
+  `eas` calls through `expo/expo-github-action`.
 - **GitHub**: the agents post, push, open PRs and merge as the factory's
   GitHub App (ADR 0020). The job mints an installation token for this
   repository from the secrets `FACTORY_APP_ID` and `FACTORY_APP_PRIVATE_KEY`
@@ -344,8 +324,8 @@ Runner setup (once per runner directory, as the maintainer's user):
   run's commits are authored by the app's bot. Nothing on the runner needs a
   GitHub login for this. The workflow token is never used for it: a push made
   with that token would start no CI.
-- **Node, pnpm, gh** come from `scripts/ci/runner-env.sh`, as for the OTA
-  runner.
+- **Node, pnpm** come from `actions/setup-node` (`.nvmrc`) and `pnpm/action-setup`
+  (`packageManager`), `gh` and `jq` from the runner image.
 
 ## Pointers
 
@@ -359,7 +339,7 @@ Runner setup (once per runner directory, as the maintainer's user):
   `opencode.json`
 - Scripts: `.agents/scripts/` — `claim.sh`, `attach.sh`, `worktree.sh`, `review-inputs.sh`,
   `native-check.sh`, `device-lane.sh`, `merge-pr.sh`, `factory-run.sh`,
-  `run-record.sh`, `memory.sh`, `prewarm.sh`, `check-agent-permissions.sh`,
+  `run-record.sh`, `memory.sh`, `check-agent-permissions.sh`,
   `ensure-pnpm.sh`; the native
   build cache in `tools/expo-build-cache/`
 - Workflows: `.github/workflows/` — `ci.yml`, `ota-publish.yml`,

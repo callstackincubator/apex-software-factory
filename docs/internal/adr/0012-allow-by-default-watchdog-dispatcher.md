@@ -1,6 +1,6 @@
 # 0012 — Allow by default with a short deny list, a watchdog per run, and a GitHub Actions dispatcher
 
-Status: Accepted
+Status: Accepted (amended by 0029)
 
 ## Context
 

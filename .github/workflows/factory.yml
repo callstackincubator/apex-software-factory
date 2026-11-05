@@ -1,21 +1,24 @@
 name: Factory
 
-# The dispatcher (ADR 0012): starts one unattended OpenCode run per issue on the booth laptop's
-# self-hosted `factory` runners (booth-factory-1/2), so a label is all it takes.
+# The dispatcher (ADR 0012, amended by 0029): starts one unattended OpenCode run per issue on a
+# GitHub-hosted ubuntu runner, so a label is all it takes.
 #   - feature:ready, task:ready, bug:ready added -> deliver (the factory agent)
 #   - bug:triage added                           -> triage (the triager agent)
 #   - workflow_dispatch with an issue            -> either, by the issue's current label
 # issue-state.yml's promotions (task:ready, bug:triage) start a run by the label: it acts as the
 # factory's GitHub App, and the app's labels start workflows (ADR 0021).
 #
-# SECURITY: the runner runs as the maintainer's user, with OpenCode's provider credentials and
-# the device pool. On GitHub the agents act as the factory's GitHub App (ADR 0020): its
+# SECURITY: the runner is a fresh VM per job, thrown away afterwards. It holds OpenCode's
+# provider key (CALLSTACK_AI_API_KEY, written to OpenCode's auth file by the factory step only)
+# and EXPO_TOKEN (EAS builds and Expo Simulators sessions; the OTA publish uses the same secret in
+# its own workflow). Agents can read both inside the run, so a run must only ever execute code
+# from main. The agents act as the factory's GitHub App (ADR 0020): its
 # installation token, minted per job for this repository only, is the run's GH_TOKEN. It runs
 # only code from main (this workflow checks out the default branch, never a PR), only for a
 # label set by someone with write access or by this repository's own automation, and never on
 # pull_request or pull_request_target. Do not add such a trigger.
 #
-# Setup (runners, SIMLOCK_BIN, OpenCode auth, the app's secrets): docs/internal/DELIVERY.md,
+# Setup (the app's secrets, CALLSTACK_AI_API_KEY, EXPO_TOKEN): docs/internal/DELIVERY.md,
 # "The factory dispatcher".
 
 on:
@@ -46,7 +49,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       contains(fromJSON('["feature:ready","task:ready","bug:ready","bug:triage"]'), github.event.label.name)
-    runs-on: [self-hosted, factory]
+    runs-on: ubuntu-latest
     # The app token lasts an hour; factory-run.sh ends the run five minutes before it expires.
     timeout-minutes: 75
     permissions:
@@ -57,6 +60,8 @@ jobs:
       SENDER: ${{ github.event.sender.login || github.actor }}
       APEX_DISPATCH: "1"
       AGENT_DEVICE_NO_UPDATE_NOTIFIER: "1"
+      # appduct is linked into every binary (ADR 0028); the lanes' eas calls read EXPO_TOKEN.
+      APPDUCT_ENABLED: "1"
     steps:
       # The factory's GitHub identity (ADR 0020): an installation token of the factory app, for
       # this repository only, revoked when the job ends. It expires after an hour, which bounds
@@ -115,13 +120,32 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Put Node, pnpm, gh and opencode on PATH
+      # Reads the version from package.json's packageManager pin.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        if: steps.what.outputs.mode != 'none'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.what.outputs.mode != 'none'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # The device lanes and lane-binary.sh run `npx -y eas-cli@27.4.1` from apps/mobile, which
+      # reads EXPO_TOKEN from the environment; the action exports it for the rest of the job.
+      - name: Set up EAS CLI
+        if: steps.what.outputs.mode != 'none'
+        uses: expo/expo-github-action@9da89d3617bb88139671bad31b09c65714c2ee06 # 9.0.1
+        with:
+          eas-version: 27.4.1
+          packager: npm
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # OpenCode 2 ships as the npm package @opencode/cli (a postinstall picks the native binary).
+      - name: Install OpenCode
         if: steps.what.outputs.mode != 'none'
         run: |
-          scripts/ci/runner-env.sh
-          for dir in "$HOME/.opencode/bin" /opt/homebrew/bin; do
-            [ -d "$dir" ] && echo "$dir" >>"$GITHUB_PATH"
-          done
+          npm install --global @opencode/cli@2.2.5
+          opencode --version
+          command -v sqlite3 >/dev/null || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends sqlite3; }
 
       # Run the factory from the newest main, not the commit that was main when the label
       # event fired: a run that waited in the queue, or a re-run of an old run, would otherwise
@@ -147,14 +171,7 @@ jobs:
 
       - name: Install
         if: steps.what.outputs.mode != 'none'
-        run: |
-          pnpm install --frozen-lockfile
-          command -v opencode >/dev/null || { echo "::error::opencode not found on the runner"; exit 1; }
-          opencode --version
-          # simlock is not on npm yet: the lanes run the CLI named by SIMLOCK_BIN, set in the
-          # runner's .env file (docs/internal/DELIVERY.md).
-          [ -n "${SIMLOCK_BIN:-}" ] && echo "simlock: SIMLOCK_BIN set${SIMLOCK_HOME:+, SIMLOCK_HOME=$SIMLOCK_HOME}" \
-            || echo "::warning::SIMLOCK_BIN is not set on this runner: simulator checks will report unavailable."
+        run: pnpm install --frozen-lockfile
 
       - name: Run the factory
         id: factory
@@ -164,8 +181,17 @@ jobs:
           # Every gh and git call of the run, the agents' included, is the app's bot.
           GH_TOKEN: ${{ steps.app.outputs.token }}
           FACTORY_APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          CALLSTACK_AI_API_KEY: ${{ secrets.CALLSTACK_AI_API_KEY }}
         run: |
           unset GITHUB_TOKEN
+          # The provider key goes where `opencode auth login` would put it (type api, entry
+          # callstack.ai), so opencode.json is the same here as on a laptop. Only the file keeps
+          # it: the variable is gone before the agents start.
+          [ -n "$CALLSTACK_AI_API_KEY" ] || { echo "::error::the CALLSTACK_AI_API_KEY secret is not set"; exit 1; }
+          auth_dir=${XDG_DATA_HOME:-$HOME/.local/share}/opencode
+          mkdir -p "$auth_dir"
+          (umask 077 && jq -n --arg key "$CALLSTACK_AI_API_KEY" '{"callstack.ai": {type: "api", key: $key}}' >"$auth_dir/auth.json")
+          unset CALLSTACK_AI_API_KEY
           if [ "$MODE" = triage ]; then
             .agents/scripts/factory-run.sh --triage "$ISSUE"
           else

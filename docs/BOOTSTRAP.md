@@ -6,6 +6,14 @@ binary on the booth phones. It ends with moving off the **temporary dev Mac**
 (user `aitwar`), where everything runs today. The booth laptop is a different
 Mac.
 
+> **Out of date for the factory runners.** The factory dispatcher
+> (`factory.yml`) now runs on GitHub-hosted ubuntu runners (ADR 0029): no
+> self-hosted `factory` runners, no simlock, no `scripts/ci/runner-env.sh` and
+> no `prewarm.sh`. Sections 2 (the Node lookup), 5 (simlock), 8 (runners) and
+> 10 (the morning warm-up) describe the old setup and are rewritten in the docs
+> sweep. For the dispatcher, [DELIVERY.md](internal/DELIVERY.md#the-factory-dispatcher)
+> is current.
+
 How the factory works: [FACTORY.md](FACTORY.md). The runbooks this page draws
 on, with the reasons behind each step, are
 [OTA.md](internal/OTA.md), [DEVICES.md](internal/DEVICES.md) and
@@ -89,18 +97,13 @@ opencode --version
 
 ## 2. Install the missing tools
 
-Install Node 22 where the runners will find it.
-[`scripts/ci/runner-env.sh`](../scripts/ci/runner-env.sh) looks, in order, in
-`APEX_NODE_BIN`, the `PATH`, fnm's **default alias**, Volta, Homebrew
-(`/opt/homebrew/opt/node@22/bin`, `/opt/homebrew/bin`) and `/usr/local/bin`.
-Homebrew is the simplest:
+Install Node 22 where your shell finds it. Homebrew is the simplest:
 
 ```bash
 brew install node@22 gh cocoapods
 ```
 
-If you use fnm instead, set a default (`fnm default 22`): the runner cannot use
-fnm's per-shell directories.
+If you use fnm instead, set a default (`fnm default 22`).
 
 Turn on corepack, so `pnpm` follows the repository's pin:
 
@@ -232,7 +235,7 @@ pnpm exec appduct daemon stop
 
 ### simlock
 
-simlock leases the simulators. `device-lane.sh` and `prewarm.sh` find it this
+simlock leases the simulators. `device-lane.sh` found it this
 way: `pnpm exec simlock` when the workspace has it
 (`node_modules/.bin/simlock`), otherwise the command line in `SIMLOCK_BIN`.
 Without either, simulator checks report `unavailable`. `SIMLOCK_HOME` moves
@@ -259,7 +262,7 @@ gh repo clone callstackincubator/simlock ~/Projects/simlock
 cd ~/Projects/simlock && pnpm install && pnpm build
 ```
 
-Add both variables to your shell profile, for `prewarm.sh` and for people
+Add both variables to your shell profile, for people
 using the `build` agent:
 
 ```bash
@@ -277,7 +280,7 @@ The factory runners get the same two variables from their `.env` files
 
 > `/tmp/apex-slk` is what the temporary Mac uses. macOS clears `/tmp` on a
 > restart, so simlock then starts with no simulators and creates them again
-> (`prewarm.sh` does it). A short path outside `/tmp` would survive restarts;
+> (`prewarm.sh` did it). A short path outside `/tmp` would survive restarts;
 > that has not been tried.
 
 ### Rozenite
@@ -415,9 +418,7 @@ printf 'SIMLOCK_BIN=node %s/Projects/simlock/dist/cli/main.js\nSIMLOCK_HOME=/tmp
 Once simlock is a workspace dependency, drop `SIMLOCK_BIN` and keep
 `SIMLOCK_HOME`.
 
-Node, pnpm and `gh` need nothing in `.env`: `scripts/ci/runner-env.sh` finds
-them on every job (see section 2). To force a Node, add
-`APEX_NODE_BIN=<directory containing node>` to the runner's `.env`.
+The factory dispatcher no longer uses these runners (ADR 0029).
 
 **Install and start the services**, in each of the two directories:
 
@@ -529,23 +530,13 @@ gh run watch "$(gh run list --workflow ota-publish.yml --limit 1 --json database
 From the main checkout, in this order:
 
 1. Start the product API ([section 7](#7-the-product-api)).
-2. Warm the machine: the pnpm store, the native build cache for the current
-   fingerprint, simlock's simulators and agent-device's runner on each. It
-   needs `SIMLOCK_BIN` and `SIMLOCK_HOME` in the shell. A cold run compiles
-   one Release build (several minutes); later runs take seconds.
-
-   ```bash
-   .agents/scripts/prewarm.sh
-   ```
-
-   Options: `--devices <n>` (default 2, one per factory runner), `--android`,
-   `--debug`, `--metro`.
+2. (Removed: `prewarm.sh` went with the native build cache, ADRs 0027 and 0028.)
 
 3. Pair each booth phone with appduct (booth Wi-Fi, app running). Scan the QR
    code with the phone's camera; the link works once, for 5 minutes:
 
    ```bash
-   .agents/scripts/prewarm.sh --pair-phone
+   (cd apps/mobile && pnpm exec appduct sessions link --qr)
    ```
 
    Check the pairings (from `apps/mobile`): `pnpm exec appduct sessions ls`.

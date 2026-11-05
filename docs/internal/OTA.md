@@ -109,7 +109,7 @@ binary checks for itself, and an agent asks it to check now with the
 Pair a phone (from the main checkout, booth Wi-Fi, app running):
 
 ```sh
-.agents/scripts/prewarm.sh --pair-phone     # or: cd apps/mobile && pnpm exec appduct sessions link --qr
+cd apps/mobile && pnpm exec appduct sessions link --qr
 ```
 
 Scan the QR code with the phone's camera; the app opens and claims the

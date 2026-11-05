@@ -5,7 +5,7 @@
 #   .agents/scripts/factory-run.sh --triage <issue>    triage #<issue> (the triager agent)
 #
 # Wraps `opencode run --standalone --auto` (a private server: the run inherits this shell's
-# environment, SIMLOCK_BIN included) and watches it. `opencode run --agent` ignores the agent's
+# environment, EXPO_TOKEN included) and watches it. `opencode run --agent` ignores the agent's
 # own `variant` (it sent the model's default effort), so the script passes the agent file's
 # `model` and `variant` as `-m <model>#<variant>` (ADR 0008):
 #   - hard timeout: FACTORY_TIMEOUT_MIN (default 80) minutes for the whole run, and never later
@@ -15,7 +15,7 @@
 #     (the run's own or a subagent's) wrote to OpenCode's database
 #     (~/.local/share/opencode/opencode.db: session_v2 / session_message time_updated) and the
 #     run's log did not grow. Longer than the longest single legitimate wait (merge-pr.sh 9
-#     minutes, a simlock lease call 9 minutes).
+#     minutes, a device-lane.sh lease waiting for its binary up to 15).
 # A run that stalls or times out is stopped and started once more, from the branch: the deliver
 # skill resumes from GitHub (claim, branch, PR Status line). If the second attempt stops too,
 # this script leaves the issue's `## Handoff` (delivery rule 2), releases the claim and moves it
@@ -122,7 +122,7 @@ record() {
     echo "factory-run: no run record for attempt $1" >&2
 }
 
-size_of() { stat -f %z "$1" 2>/dev/null || stat -c %s "$1" 2>/dev/null || echo 0; }
+size_of() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || echo 0; }
 
 # run_attempt <n> <prompt>: 0 ended on its own, 124 timed out, 125 stalled.
 run_attempt() {

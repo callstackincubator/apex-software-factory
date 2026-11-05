@@ -276,7 +276,7 @@ worktree, one lease, one agent-device session. The script never calls raw
 
 | Tool                                                           | What it does here                                                                                                                                                         | Used by                                                                                        |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [simlock](https://github.com/callstackincubator/simlock)       | Leases booted, exclusive simulators and emulators, with a queue and a TTL. Its devices live in a private device set no other tool touches.                                 | `mobile-verifier`, `ota-verifier`, `triager`, `prewarm.sh`. Never the implementer.              |
+| [simlock](https://github.com/callstackincubator/simlock)       | Leases booted, exclusive simulators and emulators, with a queue and a TTL. Its devices live in a private device set no other tool touches.                                 | `mobile-verifier`, `ota-verifier`, `triager`. Never the implementer.              |
 | agent-device                                                   | Every interaction with a device: accessibility snapshots, taps, waits, screenshots, and `.ad` replay scripts (`apps/mobile/e2e/<name>.ad`, a spec's `e2e:` tests).         | The same lanes; the `build` agent through MCP, for people.                                     |
 | appduct                                                        | Tools the running app registers (`app_info`, `open_route`, `ota_check_now`, `native_capabilities`, a feature's own shortcuts), called from the Mac. It is in the booth binary and every OTA bundle (`APPDUCT_ENABLED=1`). | `mobile-verifier` (the spec's Agent hooks), `ota-verifier` (`ota_check_now`), `triager`, `scripts/ci/ota-nudge.sh` after a deploy. |
 | Rozenite                                                       | React Native DevTools data for agents, through Metro. Debug builds only (`WITH_ROZENITE=true`); never in a Release build or an OTA bundle.                                 | `mobile-verifier` for evidence on a failure, `triager`.                                        |
@@ -322,9 +322,6 @@ agent uses each tool: [apps/mobile/README.md, Agent tooling](../apps/mobile/READ
   comes back garbled (hits the output limit or has no text), after a 60 s
   pause. The `deliver` skill runs a subagent up to three times when it returns
   no report block (a dropped stream or a 503).
-- **Morning warm-up.** `.agents/scripts/prewarm.sh` fills the pnpm store and
-  the native build cache, and boots simlock's simulators before the first
-  visitor.
 - **It learns from its runs.** Each stage starts by recalling the lessons
   earlier runs left on the `factory-memory` branch, and may leave one, or a
   journal line about what cost it time. Every attempt leaves a record of its
