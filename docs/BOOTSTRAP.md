@@ -400,7 +400,7 @@ In production the API is a Cloudflare Worker (ADR 0026), deployed by
 3. Add the repository secrets `CLOUDFLARE_API_TOKEN` and
    `CLOUDFLARE_ACCOUNT_ID` (Settings, Secrets and variables, Actions).
 4. First deploy, from `apps/api`: `pnpm exec wrangler login`, then
-   `pnpm deploy`. This registers the account's `workers.dev` subdomain; the
+   `pnpm run deploy` (plain `pnpm deploy` is pnpm's own command). This registers the account's `workers.dev` subdomain; the
    API is then at `https://apex-api.<subdomain>.workers.dev`. Later deploys
    come from the workflow on every merge to `main`.
 
