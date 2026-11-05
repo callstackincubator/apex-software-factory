@@ -112,7 +112,7 @@ gh secret set EXPO_TOKEN
 updates carry the same value:
 
 ```bash
-(cd apps/mobile && eas env:set production --name EXPO_PUBLIC_API_URL --value "https://apex-api.szymonchmal.workers.dev" --visibility plaintext --non-interactive && eas env:set preview --name EXPO_PUBLIC_API_URL --value "https://apex-api.szymonchmal.workers.dev" --visibility plaintext --non-interactive)
+(cd apps/mobile && eas env:set --name EXPO_PUBLIC_API_URL --value "https://apex-api.szymonchmal.workers.dev" --environment production --visibility plaintext && eas env:set --name EXPO_PUBLIC_API_URL --value "https://apex-api.szymonchmal.workers.dev" --environment preview --visibility plaintext)
 ```
 
 **The channels.** `production` and `lane` ([OTA.md, One-time

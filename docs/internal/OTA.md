@@ -28,8 +28,8 @@ it when the visitor taps.
 - **EAS environments**: `EXPO_PUBLIC_API_URL` and any other public value the
   bundle needs live in the `production` environment (used by the `production`
   build profile and `eas update --environment production`) and the `preview`
-  environment (the `lane` profile): `eas env:set production --name
-  EXPO_PUBLIC_API_URL --value <url> --visibility plaintext`. Bundles and
+  environment (the `lane` profile): `eas env:set --name
+  EXPO_PUBLIC_API_URL --value <url> --environment production --visibility plaintext`. Bundles and
   binaries must see the same values, because an update replaces the binary's
   JavaScript with its inlined `EXPO_PUBLIC_*` values.
 - **Channels**: `eas channel:create production` and `eas channel:create lane`.
