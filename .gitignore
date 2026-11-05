@@ -21,5 +21,7 @@ infra/data/
 .rozenite/
 .agent-device/
 .apex/
+# Wrangler's local dev state
+.wrangler/
 # The factory console's built page
 apps/console/dist/

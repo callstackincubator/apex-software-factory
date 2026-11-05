@@ -7,7 +7,7 @@ binding: change it with a new record that supersedes it, never by editing.
 | ADR | Title | Status |
 | --- | --- | --- |
 | [0001](0001-pnpm-monorepo-with-shared-contract.md) | A pnpm monorepo with one shared contract package | Accepted |
-| [0002](0002-hono-on-node-for-http-services.md) | Hono on Node for every HTTP service | Accepted |
+| [0002](0002-hono-on-node-for-http-services.md) | Hono on Node for every HTTP service | Accepted (amended by 0026) |
 | [0003](0003-ota-through-self-hosted-hot-updater.md) | OTA updates through a self-hosted hot-updater server | Accepted |
 | [0004](0004-opencode-with-one-model.md) | The factory runs on OpenCode with one model | Accepted (amended by 0008) |
 | [0005](0005-github-issues-are-spec-and-queue.md) | GitHub Issues are the spec and the queue | Accepted |
@@ -30,3 +30,4 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0022](0022-implementer-only-mobile-guides.md) | Expo and React Native guides for the implementer only, loaded by name | Accepted |
 | [0023](0023-simulator-evidence-as-pr-attachments.md) | Simulator screenshots and a recording go on the PR as attachments | Accepted |
 | [0024](0024-feature-modules-events-and-ports.md) | Feature modules, a domain event bus, ports and adapters; rules are files | Accepted |
+| [0026](0026-product-api-on-cloudflare-workers.md) | The product API runs on Cloudflare Workers | Accepted |
