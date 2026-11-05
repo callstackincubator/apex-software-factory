@@ -177,9 +177,8 @@ APEX_BUILD_CACHE=0 .agents/scripts/device-lane.sh build ios release   # force a 
 The same cache serves `npx expo run:ios|android` for simulator and emulator
 builds once `apps/mobile/app.json` has
 `"buildCacheProvider": { "plugin": "../../tools/expo-build-cache/provider.plugin.js" }`.
-Delete a bad entry with `rm -rf` on its directory. `.agents/scripts/prewarm.sh`
-fills the cache for the current fingerprint and warms simlock's pool and
-agent-device's runner each morning.
+Delete a bad entry with `rm -rf` on its directory. `prewarm.sh`, which
+filled the cache each morning, is gone (ADR 0029).
 
 ## Machine setup log
 

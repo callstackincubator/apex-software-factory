@@ -17,7 +17,7 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0009](0009-a-faster-delivery-loop.md) | A faster delivery loop: lean review proving, a severity gate, parallel checks, a quicker OTA path | Accepted |
 | [0010](0010-native-build-cache.md) | A native build cache keyed by the OTA fingerprint, shared by Expo and the device lanes | Superseded by 0027 |
 | [0011](0011-fewer-stopped-runs.md) | Fewer stopped runs: a spec check before ready, house defaults, assumptions instead of parking | Accepted |
-| [0012](0012-allow-by-default-watchdog-dispatcher.md) | Allow by default with a short deny list, a watchdog per run, and a GitHub Actions dispatcher | Accepted (amended by 0016, 0020, 0021, 0025) |
+| [0012](0012-allow-by-default-watchdog-dispatcher.md) | Allow by default with a short deny list, a watchdog per run, and a GitHub Actions dispatcher | Accepted (amended by 0016, 0020, 0021, 0025, 0029) |
 | [0013](0013-booth-binary-bundles-native-capabilities.md) | The booth binary carries the native libraries booth features are likely to need | Accepted |
 | [0014](0014-keep-the-models-reasoning-between-steps.md) | Keep the model's reasoning between steps | Accepted |
 | [0015](0015-step-caps-and-no-implementer-device.md) | Hard step caps per agent; the implementer never leases a device; the dispatcher runs the newest main | Accepted (amended by 0023) |
@@ -33,3 +33,4 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0025](0025-ota-through-eas-update.md) | OTA updates through EAS Update | Accepted |
 | [0027](0027-lane-binaries-repacked-on-eas.md) | Lane binaries are the production build repacked on EAS | Accepted |
 | [0028](0028-device-lanes-on-expo-simulators.md) | Device lanes are Expo Simulators sessions on EAS | Accepted |
+| [0029](0029-factory-on-github-hosted-runners.md) | The factory runs on GitHub-hosted ubuntu runners | Accepted |

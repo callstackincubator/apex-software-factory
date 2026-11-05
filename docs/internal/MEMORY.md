@@ -150,4 +150,4 @@ nothing it or any agent writes to the memory branch is binding until a
 person merges the change into a skill, a rule or a script.
 
 A good rhythm at the booth: one retro each evening on the day's runs, and the
-accepted proposals merged before the next morning's prewarm.
+accepted proposals merged before the next morning.

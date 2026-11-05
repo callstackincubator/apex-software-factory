@@ -128,7 +128,7 @@ from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
   `review-inputs.sh` (blind review inputs), `native-check.sh` (can this ship
   over the air?), `lane-binary.sh` (a lane binary built on EAS, ADR 0027), `device-lane.sh` (an Expo Simulators session on EAS running a
   lane binary, driven with agent-device and appduct, ADR 0028), `factory-run.sh` (one unattended run with a watchdog),
-  `prewarm.sh` (the booth laptop's morning warm-up), `memory.sh` (the
+  `memory.sh` (the
   factory's memory: recall and leave lessons, journal lines, run records),
   `run-record.sh` (an attempt's digest and transcript, for the retro),
   `check-agent-permissions.sh` (no agent can reach "ask"), `ensure-pnpm.sh`.
