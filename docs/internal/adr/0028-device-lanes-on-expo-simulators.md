@@ -20,7 +20,7 @@ tunnel to the machine that started it, restricted to an allow-list of `host:port
 
 1. **A device is an Expo Simulators session** started with
    `eas simulator:start --type agent-device --build-id <id>`, named `apex-<branch>` and tagged
-   `apex`, with a duration cap (60 minutes) and an idle cap (15 minutes) as the backstop when an
+   `apex`, with a duration cap (40 minutes, the account maximum) and an idle cap (15 minutes) as the backstop when an
    agent dies without releasing it. `eas simulator:stop` ends it.
 2. **The build is a build id.** By default it is the lane binary of the checkout
    (`lane-binary.sh`, ADR 0027), built by the first `lease` when none exists for HEAD.

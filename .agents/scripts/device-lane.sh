@@ -45,7 +45,7 @@
 #
 # `eas simulator:start` writes apps/mobile/.env.eas-simulator (the daemon URL and token): a
 # secret. It is read only to run agent-device and the egress client, never printed, and deleted
-# by release. Sessions end by themselves after APEX_SESSION_MAX_MINUTES (default 60) or
+# by release. Sessions end by themselves after APEX_SESSION_MAX_MINUTES (default 40, the account maximum) or
 # APEX_SESSION_IDLE_MINUTES (default 15) without a command.
 #
 # Egress: the simulator reaches only the host:port entries it was started with, through a tunnel
@@ -152,8 +152,9 @@ load_eas_env() {
       AGENT_DEVICE_DAEMON_BASE_URL=* | AGENT_DEVICE_DAEMON_AUTH_TOKEN=* | EAS_SIMULATOR_SESSION_ID=*)
         key=${line%%=*}
         val=${line#*=}
-        val=${val#\"}
-        val=${val%\"}
+        case $val in
+          \'*\' | \"*\") val=${val#?} val=${val%?} ;;
+        esac
         export "$key=$val"
         ;;
     esac
@@ -473,7 +474,7 @@ cmd_lease() {
   # Until the state names the session, a failure must not strand it.
   trap 'cmd_release >/dev/null 2>&1 || true' EXIT
   sweep_orphans
-  max=${APEX_SESSION_MAX_MINUTES:-60}
+  max=${APEX_SESSION_MAX_MINUTES:-40}
   idle=${APEX_SESSION_IDLE_MINUTES:-15}
   set -- simulator:start -p "$platform" --type agent-device --build-id "$build_id" \
     --max-duration-minutes "$max" --max-idle-time-minutes "$idle" --name "$session" --tag apex \
