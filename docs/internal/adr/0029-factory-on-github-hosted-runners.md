@@ -22,10 +22,12 @@ on the laptop any more.
    `pnpm/action-setup` (`packageManager`), `expo/expo-github-action` for `eas-cli` and
    `EXPO_TOKEN` (as in `ota-publish.yml`), and OpenCode pinned as the npm package
    `@opencode/cli@2.2.5`. `scripts/ci/runner-env.sh` and `prewarm.sh` are deleted.
-3. **OpenCode gets its key from the secret `CALLSTACK_AI_API_KEY`.** The factory step writes
-   it to `~/.local/share/opencode/auth.json` (entry `callstack.ai`, type `api`, the file
-   `opencode auth login` writes) with mode 0600 and unsets the variable before the run starts.
-   `opencode.json` is unchanged, so a laptop keeps using its own login.
+3. **OpenCode gets its key from the secret `CALLSTACK_AI_API_KEY`.** The factory step sets
+   `OPENCODE_CONFIG_CONTENT` to `{"providers":{"callstack.ai":{"settings":{"apiKey":"{env:CALLSTACK_AI_API_KEY}"}}}}`,
+   which OpenCode merges over `opencode.json`. `opencode run --standalone`, which
+   `factory-run.sh` uses, does not read `auth.json`: the first hosted run failed with "No api
+   key passed in" when the key was written there. `opencode.json` is unchanged, so a laptop
+   keeps using its own login.
 
 ## Consequences
 

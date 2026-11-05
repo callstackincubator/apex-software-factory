@@ -9,7 +9,7 @@ name: Factory
 # factory's GitHub App, and the app's labels start workflows (ADR 0021).
 #
 # SECURITY: the runner is a fresh VM per job, thrown away afterwards. It holds OpenCode's
-# provider key (CALLSTACK_AI_API_KEY, written to OpenCode's auth file by the factory step only)
+# provider key (CALLSTACK_AI_API_KEY, given to OpenCode by the factory step only)
 # and EXPO_TOKEN (EAS builds and Expo Simulators sessions; the OTA publish uses the same secret in
 # its own workflow). Agents can read both inside the run, so a run must only ever execute code
 # from main. The agents act as the factory's GitHub App (ADR 0020): its
@@ -182,16 +182,13 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           FACTORY_APP_SLUG: ${{ steps.app.outputs.app-slug }}
           CALLSTACK_AI_API_KEY: ${{ secrets.CALLSTACK_AI_API_KEY }}
+          # factory-run.sh runs `opencode run --standalone`, which ignores the auth.json that
+          # `opencode auth login` writes. This inline config is merged over opencode.json and
+          # points the provider at the variable, so opencode.json stays the same as on a laptop.
+          OPENCODE_CONFIG_CONTENT: '{"providers":{"callstack.ai":{"settings":{"apiKey":"{env:CALLSTACK_AI_API_KEY}"}}}}'
         run: |
           unset GITHUB_TOKEN
-          # The provider key goes where `opencode auth login` would put it (type api, entry
-          # callstack.ai), so opencode.json is the same here as on a laptop. Only the file keeps
-          # it: the variable is gone before the agents start.
           [ -n "$CALLSTACK_AI_API_KEY" ] || { echo "::error::the CALLSTACK_AI_API_KEY secret is not set"; exit 1; }
-          auth_dir=${XDG_DATA_HOME:-$HOME/.local/share}/opencode
-          mkdir -p "$auth_dir"
-          (umask 077 && jq -n --arg key "$CALLSTACK_AI_API_KEY" '{"callstack.ai": {type: "api", key: $key}}' >"$auth_dir/auth.json")
-          unset CALLSTACK_AI_API_KEY
           if [ "$MODE" = triage ]; then
             .agents/scripts/factory-run.sh --triage "$ISSUE"
           else

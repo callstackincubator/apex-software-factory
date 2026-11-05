@@ -196,8 +196,8 @@ token from the secrets.
 
 ## 7. The remaining secrets and a check
 
-The model key, which the factory job writes to OpenCode's `auth.json` and then
-unsets (ADR 0029):
+The model key, which the factory job hands to OpenCode through
+`OPENCODE_CONFIG_CONTENT` (ADR 0029):
 
 ```bash
 gh secret set CALLSTACK_AI_API_KEY
