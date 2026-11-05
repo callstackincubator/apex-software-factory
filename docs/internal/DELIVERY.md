@@ -316,9 +316,11 @@ Setup (repository secrets; nothing to install on a machine):
 
 - **OpenCode**: the job installs `@opencode/cli@2.2.5` from npm. The provider
   definition is the repository's `opencode.json` (ADR 0014); the key is the
-  secret `CALLSTACK_AI_API_KEY`, which the factory step writes to OpenCode's
-  `auth.json` (the file `opencode auth login` writes) and then unsets. Locally
-  nothing changes: people still run `opencode auth login`.
+  secret `CALLSTACK_AI_API_KEY`, which the factory step hands to OpenCode
+  through `OPENCODE_CONFIG_CONTENT` (`"apiKey": "{env:CALLSTACK_AI_API_KEY}"`
+  on the `callstack.ai` provider). `opencode run --standalone` ignores
+  `auth.json`, so writing that file does not work. Locally nothing changes:
+  people still run `opencode auth login`.
 - **EAS**: the secret `EXPO_TOKEN` (as for the OTA publish) reaches the lanes'
   `eas` calls through `expo/expo-github-action`.
 - **GitHub**: the agents post, push, open PRs and merge as the factory's
