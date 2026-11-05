@@ -1,6 +1,6 @@
 # 0010 — A native build cache keyed by the OTA fingerprint, shared by Expo and the device lanes
 
-Status: Accepted
+Status: Superseded by [0027](0027-lane-binaries-repacked-on-eas.md)
 
 ## Context
 
