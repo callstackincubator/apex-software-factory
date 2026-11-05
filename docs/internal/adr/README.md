@@ -15,7 +15,7 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0007](0007-device-lane-simlock-agent-device.md) | Devices are leased with simlock and driven with agent-device; appduct ships in the booth binary | Accepted |
 | [0008](0008-reasoning-variants-of-the-one-model.md) | Each agent picks a reasoning variant of the one model | Accepted |
 | [0009](0009-a-faster-delivery-loop.md) | A faster delivery loop: lean review proving, a severity gate, parallel checks, a quicker OTA path | Accepted |
-| [0010](0010-native-build-cache.md) | A native build cache keyed by the OTA fingerprint, shared by Expo and the device lanes | Accepted (amended by 0025) |
+| [0010](0010-native-build-cache.md) | A native build cache keyed by the OTA fingerprint, shared by Expo and the device lanes | Superseded by 0027 |
 | [0011](0011-fewer-stopped-runs.md) | Fewer stopped runs: a spec check before ready, house defaults, assumptions instead of parking | Accepted |
 | [0012](0012-allow-by-default-watchdog-dispatcher.md) | Allow by default with a short deny list, a watchdog per run, and a GitHub Actions dispatcher | Accepted (amended by 0016, 0020, 0021, 0025) |
 | [0013](0013-booth-binary-bundles-native-capabilities.md) | The booth binary carries the native libraries booth features are likely to need | Accepted |
@@ -32,3 +32,4 @@ binding: change it with a new record that supersedes it, never by editing.
 | [0024](0024-feature-modules-events-and-ports.md) | Feature modules, a domain event bus, ports and adapters; rules are files | Accepted |
 | [0025](0025-ota-through-eas-update.md) | OTA updates through EAS Update | Accepted |
 | [0026](0026-product-api-on-cloudflare-workers.md) | The product API runs on Cloudflare Workers | Accepted |
+| [0027](0027-lane-binaries-repacked-on-eas.md) | Lane binaries are the production build repacked on EAS | Accepted |

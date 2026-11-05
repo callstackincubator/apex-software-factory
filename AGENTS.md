@@ -126,7 +126,7 @@ from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
   videos as GitHub attachments for a comment), `worktree.sh` (create a worktree under
   `.worktrees/` and install), `merge-pr.sh` (the merge gate),
   `review-inputs.sh` (blind review inputs), `native-check.sh` (can this ship
-  over the air?), `device-lane.sh` (a simlock-leased device driven with
+  over the air?), `lane-binary.sh` (a lane binary built on EAS, ADR 0027), `device-lane.sh` (a simlock-leased device driven with
   agent-device, appduct and Rozenite; reuses a cached native build for a
   JS-only change), `factory-run.sh` (one unattended run with a watchdog),
   `prewarm.sh` (the booth laptop's morning warm-up), `memory.sh` (the

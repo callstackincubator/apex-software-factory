@@ -5,7 +5,14 @@ import type { Updater } from "./port";
 
 export const ROLLBACK_TO_EMBEDDED_ID = "rollback-to-embedded";
 
-export function createExpoUpdater(): Updater {
+export type ExpoUpdaterOptions = { channel?: string };
+
+export function createExpoUpdater({ channel }: ExpoUpdaterOptions = {}): Updater {
+  const requestedChannel = channel && channel !== Updates.channel ? channel : null;
+  if (requestedChannel && Updates.isEnabled) {
+    Updates.setUpdateRequestHeadersOverride({ "expo-channel-name": requestedChannel });
+  }
+
   return {
     serverUrl: Constants.expoConfig?.updates?.url ?? "",
     async check() {
@@ -27,7 +34,7 @@ export function createExpoUpdater(): Updater {
     runningBundle: () => ({
       id: Updates.updateId ?? "",
       embedded: !Updates.isEnabled || Updates.isEmbeddedLaunch,
-      channel: Updates.channel ?? "none",
+      channel: requestedChannel ?? Updates.channel ?? "none",
     }),
     fingerprint: () => Updates.runtimeVersion,
   };

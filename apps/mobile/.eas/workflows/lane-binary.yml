@@ -1,0 +1,42 @@
+name: lane-binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        options:
+          - ios
+          - android
+        required: true
+
+jobs:
+  fingerprint:
+    type: fingerprint
+    environment: preview
+    env:
+      APPDUCT_ENABLED: "1"
+
+  get_build:
+    needs: [fingerprint]
+    type: get-build
+    params:
+      platform: ${{ inputs.platform }}
+      fingerprint_hash: ${{ inputs.platform == 'ios' && needs.fingerprint.outputs.ios_fingerprint_hash || needs.fingerprint.outputs.android_fingerprint_hash }}
+      wait_for_in_progress: true
+
+  repack:
+    needs: [get_build]
+    if: ${{ needs.get_build.outputs.build_id }}
+    type: repack
+    params:
+      build_id: ${{ needs.get_build.outputs.build_id }}
+      profile: lane
+
+  build:
+    needs: [get_build]
+    if: ${{ !needs.get_build.outputs.build_id }}
+    type: build
+    params:
+      platform: ${{ inputs.platform }}
+      profile: lane
