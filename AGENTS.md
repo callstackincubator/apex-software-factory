@@ -17,7 +17,7 @@ every tool.
 | Path                 | What                                                                                                                             |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/mobile`        | Expo app (expo-router, expo-updates, Jest). `@apex/mobile`                                                                       |
-| `apps/api`           | Product HTTP API, Hono on Node. `@apex/api`                                                                                      |
+| `apps/api`           | Product HTTP API, Hono on Cloudflare Workers (ADR 0026). `@apex/api`                                                             |
 | `apps/console`       | The factory console: local web page, host tooling. `@apex/console`                                                               |
 | `packages/contract`  | Every wire shape as zod schemas, plus the typed client. `@apex/contract`                                                         |
 | `packages/event-bus` | The typed, synchronous domain event bus both apps use. `@apex/event-bus`                                                         |
