@@ -105,7 +105,7 @@ feature, and keep working (with a message) if the answer is no.
 | Calendar | `NSCalendarsUsageDescription`, `NSCalendarsFullAccessUsageDescription` | `READ_CALENDAR`, `WRITE_CALENDAR` | reads and adds events, e.g. saving a reactCon session |
 | Motion | `NSMotionUsageDescription` | `ACTIVITY_RECOGNITION` (from expo-sensors, for the pedometer) | reads motion sensors, e.g. a step counter |
 | Notifications | — (runtime prompt) | `POST_NOTIFICATIONS` (from expo-notifications) | — |
-| Local network | `NSLocalNetworkUsageDescription` | cleartext to the laptop | OTA updates from the booth laptop (not new) |
+| Local network | `NSLocalNetworkUsageDescription` | cleartext to the local network | appduct's pairing with a device on the same network; the string in `app.json` still names the booth laptop, and changing it is a native change (not new) |
 
 Blocked on purpose (`android.blockedPermissions`, and the matching iOS keys
 left out): microphone (`RECORD_AUDIO`), background location
@@ -133,7 +133,7 @@ reminders. A feature that needs one of these is **needs native build**.
 - **No audio capture**: no microphone permission, so no voice recording,
   speech recognition or video with sound.
 - **Simulators**: no camera, few sensors, Apple Maps works. On a freshly
-  erased simlock simulator, reading the clipboard (`getStringAsync`) and
+  erased simulator, reading the clipboard (`getStringAsync`) and
   listing speech voices (`getAvailableVoicesAsync`) did not answer within 5 s;
   on a simulator that had been used before both answered (68 voices). Verify
   camera, sensor, clipboard and speech features on a phone.

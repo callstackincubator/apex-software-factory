@@ -6,7 +6,7 @@ leaves a record; the `retro` agent reads all of it, from any machine, and
 proposes changes that a person accepts or not.
 
 ```text
-  factory run (booth Mac)                       factory-memory branch            retro (any machine)
+  factory run (GitHub runner)                   factory-memory branch            retro (any machine)
   ───────────────────────                       ─────────────────────            ───────────────────
   stage recalls lessons  ◄──────────────────── curated/ + lessons/  ◄─────────── curates, archives
   stage writes lesson    ─────────────────────► lessons/<topic>/
@@ -55,7 +55,7 @@ revoked; deleting the file does not remove it from history (safety rule 1).
 | Topic       | Recalled by                                | About                                                 |
 | ----------- | ------------------------------------------ | ----------------------------------------------------- |
 | `implement` | implementer, triager                       | the monorepo, its tests and tooling, `pnpm check`     |
-| `device`    | mobile-verifier, ota-verifier, triager     | device lanes, builds, agent-device, appduct, Rozenite |
+| `device`    | mobile-verifier, ota-verifier, triager     | device lanes, builds, agent-device, appduct           |
 | `ota`       | ota-verifier                               | the publish run, update checks                        |
 | `triage`    | triager                                    | reproducing and reporting bugs                        |
 | `deliver`   | factory                                    | orchestrating stages, the gate, parking               |

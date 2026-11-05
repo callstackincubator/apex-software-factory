@@ -7,8 +7,7 @@ name: CI
 # - `native-check` runs `.agents/scripts/native-check.sh` on a PR and keeps the
 #   `needs-native-build` label in step with it (delivery rule 17). It never
 #   fails on a native change: the label parks the PR, the merge gate refuses it.
-# Runs on GitHub-hosted runners only. The self-hosted booth runner never runs
-# CI: it would execute unreviewed pull request code on the booth laptop.
+# Runs on GitHub-hosted runners with no factory secrets: a pull request's code runs here.
 
 on:
   pull_request:

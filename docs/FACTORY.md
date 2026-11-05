@@ -6,12 +6,13 @@ becomes a GitHub issue. A product owner writes the product requirements, and a
 developer writes the technical spec and adds the `feature:ready` label. From
 there agents work alone: they implement the change tests-first, review it
 twice without seeing each other's context, check it on a simulator, and merge
-it. The merge to `main` publishes an over-the-air (OTA) update, and the phones
-at the booth show "New feature landed — tap to reload" within a minute. Every
+it. The merge to `main` publishes an over-the-air (OTA) update, and the app
+shows "New feature landed — tap to reload" within a minute. Every
 agent runs in [OpenCode](https://opencode.ai) on one model,
 `callstack.ai/callstack/Apex`, set once in [`opencode.json`](../opencode.json).
-Everything runs on one Mac at the booth: the GitHub Actions runners, the
-simulators, the OTA server and its storage.
+Nothing runs on a machine of ours: the agents run on GitHub-hosted runners,
+binaries, updates and simulator sessions are Expo's services, and the product
+API is a Cloudflare Worker.
 
 This page explains how the pieces fit. The binding rules and the detail are in
 [`AGENTS.md`](../AGENTS.md) and [`docs/internal/`](internal/); this page links
@@ -25,7 +26,7 @@ to them instead of repeating them. To set up a machine, see
 | Idea                 | Visitor, with a facilitator | The console's Ideas tab or `/intent` (the `intake` agent), or the "Idea for the app" issue form | A `request:new` issue, in the visitor's words |
 | Product requirements | Product owner             | The console's Specs tab or `/spec <request>` (the `spec` agent) | A `feature:spec` issue with the business sections |
 | Technical spec       | Developer                 | The console's Specs tab or `/spec <n> technical` (the `spec` agent), ending with the `spec-checker` | The Technical spec in the same issue         |
-| Signature            | Developer                 | Adds `feature:ready`                                    | A factory run starts on the booth Mac        |
+| Signature            | Developer                 | Adds `feature:ready`                                    | A factory run starts on a GitHub runner     |
 | Delivery             | Agents                    | `factory.yml` → `factory-run.sh` → the `factory` agent  | A merged PR                                  |
 | Ship                 | GitHub Actions            | `ota-publish.yml` on a GitHub-hosted runner             | An EAS Update on the `production` channel    |
 | Did it land?         | Agent                     | `ota-verifier` on a simulator                           | A line in the run's `## Delivery run` comment |
@@ -45,12 +46,12 @@ flowchart LR
     PO --> FS["feature:spec issue<br/>business sections"]
     FS --> DEV["Developer<br/>/spec &lt;n&gt; technical<br/>+ spec-checker"]
     DEV --> FR["feature:ready<br/>(the signature)"]
-    FR --> FY["factory.yml<br/>self-hosted factory runner"]
+    FR --> FY["factory.yml<br/>GitHub-hosted runner"]
     FY --> AG["factory agent<br/>implement, review, verify"]
     AG --> M["merge-pr.sh<br/>squash merge to main"]
     M --> OP["ota-publish.yml<br/>GitHub-hosted runner"]
     OP --> S["EAS Update<br/>channel production"]
-    S --> P["Booth binaries<br/>banner: New feature landed"]
+    S --> P["Production binaries<br/>banner: New feature landed"]
     AG -.->|"native change"| NB["needs-native-build<br/>parked for a maintainer"]
 ```
 
@@ -117,9 +118,9 @@ promotion); `labels.yml` keeps them equal to
 ## One delivery run
 
 Adding a ready label (or `bug:triage`) starts
-[`.github/workflows/factory.yml`](../.github/workflows/factory.yml) on one of
-the booth Mac's two self-hosted runners labelled `factory`. So two issues can
-be delivered side by side. The job checks that the person who set the label
+[`.github/workflows/factory.yml`](../.github/workflows/factory.yml) on a fresh
+GitHub-hosted `ubuntu-latest` VM, one per issue, so any number of issues can be
+delivered side by side. The job installs the toolchain, checks that the person who set the label
 has write access, checks out the newest `main`, and runs
 [`.agents/scripts/factory-run.sh`](../.agents/scripts/factory-run.sh). That
 script runs `opencode run --standalone --agent factory --auto "deliver #<n>"`
@@ -253,9 +254,9 @@ text answer ([ADR 0015](internal/adr/0015-step-caps-and-no-implementer-device.md
 | `spec-reviewer`   | subagent | Blind spec review: is every Scope and Done when line delivered, nothing extra                  | Only its inputs directory: issue, parent, linked ADRs and rules, `defaults.md`, `Assumption:` lines, diff. Not the repo | medium  | 20       |
 | `code-reviewer`   | subagent | Blind code review: what input or state breaks each changed function; rule breaches              | All agent rules, the ADR index, the diff, a detached worktree of the PR head. No issue, PR body, commit messages, `gh` or web | medium  | 40       |
 | `review-verifier` | subagent | Reproduces each blocking finding; confirms or rejects it                                        | The review worktree and the findings. No PR body, commit messages, `gh` or web                                           | low     | 30       |
-| `mobile-verifier` | subagent | Proves Done when lines and `e2e:` replays on a leased iOS simulator; posts screenshots and a recording on the PR                             | `device-lane.sh`; no edits                                                                                               | medium  | 44       |
+| `mobile-verifier` | subagent | Proves Done when lines and `e2e:` replays in an Expo Simulators session; posts screenshots and a recording on the PR                             | `device-lane.sh`; no edits                                                                                               | medium  | 44       |
 | `ota-verifier`    | subagent | After a merge, checks the OTA update landed on a simulator                                      | `device-lane.sh`; no edits, never deploys or rolls back                                                                  | low     | 40       |
-| `triager`         | subagent | Reproduces a bug as a failing test, finds the root cause, posts a report; no fix                | The repo; a leased simulator when only a running app shows the bug                                                       | medium  | 60       |
+| `triager`         | subagent | Reproduces a bug as a failing test, finds the root cause, posts a report; no fix                | The repo; a simulator session when only a running app shows the bug                                                       | medium  | 60       |
 | `spec-checker`    | subagent | Checks a Technical spec before the developer signs it                                           | Read-only: the issue, rules, ADRs, native capabilities, the code                                                         | medium  | 25       |
 | `build`           | primary  | OpenCode's default agent, for people                                                            | The only agent allowed the `agent-device` and `appduct` MCP tools                                                        | default | none     |
 
@@ -271,37 +272,30 @@ a subagent's question would wait forever. The `triager` is a subagent, but
 The factory is also a showcase for Callstack's tools for agentic React Native
 work. Agents reach devices only through
 [`.agents/scripts/device-lane.sh`](../.agents/scripts/device-lane.sh): one
-worktree, one lease, one agent-device session. The script never calls raw
-`simctl` or `adb`.
+worktree, one [Expo Simulators](https://docs.expo.dev/) session on EAS, one
+agent-device session. The script never calls raw `simctl` or `adb`; the
+runners have no simulator at all.
 
-| Tool                                                           | What it does here                                                                                                                                                         | Used by                                                                                        |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [simlock](https://github.com/callstackincubator/simlock)       | Leases booted, exclusive simulators and emulators, with a queue and a TTL. Its devices live in a private device set no other tool touches.                                 | `mobile-verifier`, `ota-verifier`, `triager`. Never the implementer.              |
-| agent-device                                                   | Every interaction with a device: accessibility snapshots, taps, waits, screenshots, and `.ad` replay scripts (`apps/mobile/e2e/<name>.ad`, a spec's `e2e:` tests).         | The same lanes; the `build` agent through MCP, for people.                                     |
-| appduct                                                        | Tools the running app registers (`app_info`, `open_route`, `ota_check_now`, `native_capabilities`, a feature's own shortcuts), called from the Mac. It is in the booth binary and every OTA bundle (`APPDUCT_ENABLED=1`). | `mobile-verifier` (the spec's Agent hooks), `ota-verifier` (`ota_check_now`), `triager`, `scripts/ci/ota-nudge.sh` after a deploy. |
-| Rozenite                                                       | React Native DevTools data for agents, through Metro. Debug builds only (`WITH_ROZENITE=true`); never in a Release build or an OTA bundle.                                 | `mobile-verifier` for evidence on a failure, `triager`.                                        |
+| Tool         | What it does here                                                                                                                                                                  | Used by                                                                                                        |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| agent-device | Every interaction with a device: accessibility snapshots, taps, waits, screenshots, and `.ad` replay scripts (`apps/mobile/e2e/<name>.ad`, a spec's `e2e:` tests).                 | `mobile-verifier`, `ota-verifier`, `triager`; the `build` agent through MCP, for people. Never the implementer. |
+| appduct      | Tools the running app registers (`app_info`, `open_route`, `ota_check_now`, `native_capabilities`, a feature's own shortcuts), called from the runner. It is in every binary (`APPDUCT_ENABLED=1`). | `mobile-verifier` (the spec's Agent hooks), `ota-verifier` (`ota_check_now`), `triager`.                       |
 
 Host setup and recovery: [DEVICES.md](internal/DEVICES.md). The decision:
-[ADR 0007](internal/adr/0007-device-lane-simlock-agent-device.md). How an
+[ADR 0028](internal/adr/0028-device-lanes-on-expo-simulators.md). How an
 agent uses each tool: [apps/mobile/README.md, Agent tooling](../apps/mobile/README.md#agent-tooling).
 
 ## What keeps it fast
 
-- **Native build cache.** A simulator build is cached by platform, profile and
-  OTA fingerprint in `~/.cache/apex-software-factory/native/`. Most booth PRs
-  change only JavaScript, so the lane copies the cached binary and swaps in the
-  PR's JS bundle instead of compiling. On the temporary dev Mac a full Release
-  build took 244 s; a JS-only change built in 15–17 s. A lane binary takes no
-  OTA update, so it always runs the PR's JS.
-  ([ADR 0010](internal/adr/0010-native-build-cache.md),
-  [`tools/expo-build-cache/`](../tools/expo-build-cache/))
-- **Cheap worktrees.** `.agents/scripts/worktree.sh` clones the main
-  checkout's `node_modules` with APFS `clonefile` (no data copied), then runs
-  `pnpm install --offline`, which only relinks.
+- **Repacked lane binaries.** Most PRs change only JavaScript, so a lane
+  binary is the finished `production` EAS build with the same native
+  fingerprint, repacked with the PR's JS and the `lane` channel: no compile.
+  A native change pays one full `lane` build. A lane binary reads a channel
+  nothing publishes to, so it always runs the PR's JS.
+  ([ADR 0027](internal/adr/0027-lane-binaries-repacked-on-eas.md))
 - **Parallel work.** The two reviews and the simulator check run at the same
-  time on the same commit. Two `factory` runners deliver two issues side by
-  side; simlock queues device leases, and a build slot keeps two Xcode builds
-  apart.
+  time on the same commit, and every issue gets its own runner VM and its own
+  simulator session.
 - **Lean reviews.** A reviewer proves a claim with the affected test file only,
   at most three break-and-rerun probes, and never runs the full `pnpm check`
   (CI does). Only confirmed blocking findings start another round, and there
@@ -316,7 +310,7 @@ agent uses each tool: [apps/mobile/README.md, Agent tooling](../apps/mobile/READ
   [ADR 0015](internal/adr/0015-step-caps-and-no-implementer-device.md))
 - **A quicker OTA path.** The publish skips waiting for a second CI run when
   the merge commit's tree equals the tested PR head's tree. iOS and Android
-  deploy at the same time, and paired phones are nudged to check at once.
+  deploy at the same time.
 - **Retries on endpoint faults.** `factory-run.sh` restarts a run once when
   it stalls, times out, its turn ends on a provider error, or its last turn
   comes back garbled (hits the output limit or has no text), after a 60 s
@@ -335,8 +329,9 @@ agent uses each tool: [apps/mobile/README.md, Agent tooling](../apps/mobile/READ
 - **Allow by default, with a short deny list.** Nothing asks for permission,
   because an unanswered question hangs a run. `opencode.json` denies, for every
   agent: `gh pr merge`, force pushes and pushes to `main`, skipping hooks
-  (`--no-verify`, `LEFTHOOK=0`), OTA deploys and rollbacks, reading or editing
-  `.env` files, and simlock's, agent-device's and appduct's operator commands.
+  (`--no-verify`, `LEFTHOOK=0`), OTA deploys and rollbacks, `eas` builds,
+  environments and simulator sessions, reading or editing `.env` files, and
+  agent-device's and appduct's operator commands.
   Reviewers keep their blind-review limits in their own agent files.
   `.agents/scripts/check-agent-permissions.sh` fails if any agent can reach
   "ask". ([ADR 0012](internal/adr/0012-allow-by-default-watchdog-dispatcher.md))
@@ -346,8 +341,9 @@ agent uses each tool: [apps/mobile/README.md, Agent tooling](../apps/mobile/READ
   `pull_request` trigger and must never get one; a dispatch from another
   branch checks the builds only. No agent publishes, rolls back or republishes
   an update, or runs `eas build`, `channel`, `branch`, `env` or `workflow`.
-- **Secrets stay out of agents' reach.** `EXPO_TOKEN` lives in the repo's
-  Actions secrets; agents cannot read `.env` files.
+- **Secrets stay out of agents' reach.** `EXPO_TOKEN`, the model key and the
+  Cloudflare token live in the repo's Actions secrets; the factory job runs
+  on a throwaway VM with no `.env` files, and agents cannot read them anyway.
 - **The dispatcher trusts little.** `factory.yml` acts only on a label set by
   someone with write access or by this repository's automation, never on a
   pull request, and always runs code from `main`.
@@ -375,7 +371,7 @@ The issue carries `<kind>:blocked` (or the PR carries a parking label) and a
 1. Read the latest `## Handoff` comment. "Blocked on" says what is needed.
 2. Fix the cause. A spec problem ("spec needs: …") is fixed in a spec session
    (`/spec <n>` or `/spec <n> technical`), never by editing the body by hand.
-   A device or machine problem is fixed on the booth Mac.
+   A device or EAS problem is fixed in the Expo account.
 3. Give the issue back to the agents by adding the ready label it came from.
    The issue-state workflow removes `<kind>:blocked`:
 
@@ -406,18 +402,17 @@ gh workflow run factory.yml -f issue=<n>
 
 ### A PR is labelled `needs-simulator`
 
-simlock found no device within 30 minutes, or the machine could not run the
-check. The PR stays open and ready, and the gate refuses it while the label is
-there. Either verify the Done when lines yourself and merge it, or fix the
-device side, remove `needs-simulator` from the PR and start a new run (restore
-the ready label, as above). Check the pool on the booth Mac:
+EAS would not start a simulator session within 30 minutes (no capacity, or
+the concurrency limit), or the lane binary could not be built. The PR stays
+open and ready, and the gate refuses it while the label is there. Either
+verify the Done when lines yourself and merge it, or fix the cause (the EAS
+account's capacity and minutes, a failed `lane-binary` workflow), remove
+`needs-simulator` from the PR and start a new run (restore the ready label, as
+above). From a checkout, signed in to EAS:
 
 ```bash
 .agents/scripts/device-lane.sh status
 ```
-
-The factory runners need `SIMLOCK_BIN` and `SIMLOCK_HOME` in their `.env`
-files ([BOOTSTRAP.md](BOOTSTRAP.md#8-self-hosted-runners)).
 
 ### A change needs a native build
 
@@ -474,11 +469,11 @@ opencode run "Reply with the single word ok."
   gh run download <run-id> -n factory-run-<n>-<run-id>-<attempt>
   ```
 
-  While the job runs, the log is on the booth Mac, in the runner's checkout:
-  `~/actions-runner-factory-<1|2>/_work/apex-software-factory/apex-software-factory/.worktrees/factory-runs/<n>-<attempt>-<time>.log`.
-- **OpenCode's database** has every session and step:
-  `~/.local/share/opencode/opencode.db`. Open it read-only, so you never block
-  a running agent:
+  The runner VM is thrown away when the job ends, so the artifact is the only
+  copy of the log; while the job runs, the Actions log shows its progress.
+- **OpenCode's database** of a run on your own machine has every session and
+  step: `~/.local/share/opencode/opencode.db`. Open it read-only, so you never
+  block a running agent:
 
   ```bash
   sqlite3 -readonly ~/.local/share/opencode/opencode.db "select datetime(time_created / 1000, 'unixepoch', 'localtime'), agent, title from session_v2 order by time_created desc limit 10"
