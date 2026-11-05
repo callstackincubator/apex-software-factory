@@ -99,33 +99,15 @@ labels the merged PR `needs-native-build` and comments on it. Binaries keep the
 last update until a maintainer builds with `eas build --profile production`;
 the next merge that touches the bundle then publishes.
 
-## Booth phones: appduct pairing
+## Checking an update with appduct
 
-appduct pairing lets an agent or a person drive an app on a device through the
-laptop's appduct daemon. The publish job no longer nudges paired phones: a
-binary checks for itself, and an agent asks it to check now with the
-`ota_check_now` tool.
-
-Pair a phone (from the main checkout, booth Wi-Fi, app running):
-
-```sh
-cd apps/mobile && pnpm exec appduct sessions link --qr
-```
-
-Scan the QR code with the phone's camera; the app opens and claims the
-session (the link works once, for 5 minutes). `pnpm exec appduct sessions ls`
-(from `apps/mobile`) lists it as `active`. The booth binary trusts the pin in
-the link and only connects to private LAN addresses, so the laptop and the
-phone must be on the booth router.
-
-A pairing survives JS reloads — including applying an update — and
-backgrounding; a Wi-Fi drop suspends it and it resumes within
-`graceSeconds` (default 600; set `"graceSeconds": 3600` in
-`~/.appduct/config.json` next to the policy for a booth day, then restart the
-daemon once). It ends when the app process dies (swiped away, crashed, phone
-restarted) or the daemon restarts (laptop reboot, `appduct daemon stop`):
-pair again. Check it each morning with `appduct sessions ls`, and after
-anyone relaunches the app.
+A binary checks for itself (on start, on foreground, every 30 s). An agent or
+a person asks it to check now with the `ota_check_now` tool of appduct, which
+pairs through `device-lane.sh appduct link` in a lane
+([DEVICES.md](DEVICES.md)). Use `device-lane.sh lease <platform>
+--production`: a `lane` binary reads a channel nothing publishes to. A pairing
+survives JS reloads, including applying an update, and ends when the app
+process dies or the daemon restarts.
 
 ## Rollback
 
