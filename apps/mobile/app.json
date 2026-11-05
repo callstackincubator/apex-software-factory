@@ -7,9 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "apexfactory",
-    "buildCacheProvider": {
-      "plugin": "../../tools/expo-build-cache/provider.plugin.js"
-    },
     "runtimeVersion": {
       "policy": "fingerprint"
     },
