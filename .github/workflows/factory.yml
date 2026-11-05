@@ -145,7 +145,7 @@ jobs:
         run: |
           npm install --global @opencode/cli@2.2.5
           opencode --version
-          command -v sqlite3 >/dev/null || sudo apt-get install -y --no-install-recommends sqlite3
+          command -v sqlite3 >/dev/null || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends sqlite3; }
 
       # Run the factory from the newest main, not the commit that was main when the label
       # event fired: a run that waited in the queue, or a re-run of an old run, would otherwise
