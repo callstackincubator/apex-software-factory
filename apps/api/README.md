@@ -1,17 +1,20 @@
 # @apex/api
 
-The product API behind the showcase app: Hono on Node, running TypeScript
-directly (no build step), with routes declared from `@apex/contract` schemas.
+The product API behind the showcase app: Hono, with routes declared from
+`@apex/contract` schemas. Deployed as a Cloudflare Worker (ADR 0026); also runs
+on Node locally, executing TypeScript directly (no build step).
 
 ## Run
 
 ```sh
 pnpm --filter @apex/api dev     # node --watch src/main.ts
 pnpm --filter @apex/api start   # node src/main.ts
+pnpm --filter @apex/api dev:worker  # wrangler dev, the Worker locally on :8787
+pnpm --filter @apex/api deploy      # wrangler deploy (CI does this on main)
 pnpm --filter @apex/api test    # vitest, in-process via app.request()
 ```
 
-Logs are JSON lines on stdout; pipe through `npx pino-pretty` to read them.
+On Node, logs are JSON lines on stdout; pipe through `npx pino-pretty` to read them.
 
 Docker, from the repository root:
 
@@ -30,7 +33,10 @@ docker run --rm -p 3001:3001 apex-api
 | `APP_VERSION`         | `version` in package.json | Reported by `/health` and the OpenAPI document          |
 | `SHUTDOWN_TIMEOUT_MS` | `10000`                   | How long SIGTERM/SIGINT waits for in-flight requests    |
 
-An invalid value stops the process at startup with a message naming the variable.
+`PORT`, `HOST` and `SHUTDOWN_TIMEOUT_MS` are read by the Node entry only. The
+Worker reads `LOG_LEVEL` and `APP_VERSION` from its bindings (`vars` in
+`wrangler.jsonc`). An invalid value stops the Node process at startup, and
+fails each Worker request, with a message naming the variable.
 
 ## Endpoints
 
