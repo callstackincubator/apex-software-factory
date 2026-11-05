@@ -1,6 +1,6 @@
 # 0002 — Hono on Node for every HTTP service
 
-Status: Accepted
+Status: Accepted (amended by [0026](0026-product-api-on-cloudflare-workers.md))
 
 ## Context
 

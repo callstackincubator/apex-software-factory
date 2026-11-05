@@ -316,7 +316,21 @@ nothing for the OTA path runs on this Mac. What a maintainer needs:
 
 ## 7. The product API
 
-The app reads `apps/api` on port `3001` for its status footer and for any
+In production the API is a Cloudflare Worker (ADR 0026), deployed by
+`.github/workflows/api-deploy.yml`. One-time setup, by a maintainer:
+
+1. Create a free Cloudflare account and note its Account ID (dashboard,
+   Workers & Pages).
+2. Create an API token from the "Edit Cloudflare Workers" template (My
+   Profile, API Tokens), limited to that account.
+3. Add the repository secrets `CLOUDFLARE_API_TOKEN` and
+   `CLOUDFLARE_ACCOUNT_ID` (Settings, Secrets and variables, Actions).
+4. First deploy, from `apps/api`: `pnpm exec wrangler login`, then
+   `pnpm run deploy` (plain `pnpm deploy` is pnpm's own command). This registers the account's `workers.dev` subdomain; the
+   API is then at `https://apex-api.<subdomain>.workers.dev`. Later deploys
+   come from the workflow on every merge to `main`.
+
+The rest of this section is the local Node API on the booth Mac. The app reads `apps/api` on port `3001` for its status footer and for any
 feature that crosses the wire. Run it from the main checkout, in its own tab:
 
 ```bash
