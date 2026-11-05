@@ -58,8 +58,8 @@ tunnel to the machine that started it, restricted to an allow-list of `host:port
 - Expo Simulators sessions are remote, so `ad replay` and `ad test` run through the daemon;
   scripts that need the host's network (`api-latency.ad` needs the product API) need that
   endpoint in `APEX_EGRESS_ALLOW`.
-- Open: a lane binary embeds the JavaScript of the `production` build it was repacked from and
-  nothing publishes to the `lane` channel (ADR 0027), so how the PR's own JavaScript reaches
-  the session is not settled by this record.
+- A lane binary runs the PR's own JavaScript: the lane workflow uploads the checkout, and
+  repack bundles it into the production build's native shell (ADR 0027). Nothing publishes to
+  the `lane` channel, so the session keeps that bundle.
 - Delivery rule 16, safety rule 2, `docs/internal/DEVICES.md`, `BOOTSTRAP.md`, `prewarm.sh`
   and the factory workflow still describe the simlock lane and follow in later changes.
