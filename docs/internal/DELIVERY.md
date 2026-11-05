@@ -55,7 +55,7 @@ PR and review → deploy record (ADR 0005).
 
 ## Walkthrough 1: booth intent to a feature request
 
-1. The facilitator opens OpenCode on the booth laptop and runs `/intent`. It
+1. The facilitator opens OpenCode and runs `/intent`. It
    switches to the `intake` agent, which can talk, read the issue form, and
    file one issue — nothing else.
 2. The `intent` skill interviews the visitor in plain words: the problem, who
@@ -97,7 +97,7 @@ PR and review → deploy record (ADR 0005).
 4. When Open questions is empty, every ADR is accepted, the Technical spec is
    complete and the spec checker says ready, the developer adds
    `feature:ready`. That label is the developer's signature: everything after
-   it is unattended, and it starts a run on the booth laptop by itself (see
+   it is unattended, and it starts a run on a GitHub-hosted runner by itself (see
    [The factory dispatcher](#the-factory-dispatcher)).
 
 ## Walkthrough 4: unattended delivery
@@ -136,16 +136,18 @@ their report blocks.
 5. **Simulator, in parallel with the review.** Lines that need the app
    running go to `mobile-verifier`, started in the same message as the
    reviewers. It
-   leases an iOS simulator from simlock, installs a Release build of the PR's
-   worktree (appduct included, as in the booth binary; for a JS-only PR the
-   cached binary with the PR's JS swapped in, ADR 0010), checks each line with
-   agent-device — snapshots, waits, the PR's `e2e:` replay scripts, appduct
-   shortcuts the spec's Agent hooks name — and on a failure adds Rozenite
-   evidence from a debug build. Everything goes through `device-lane.sh`, and
-   the device is always released. Two tasks can be at this stage at once:
-   simlock queues, and a build slot keeps Xcode builds apart. No device within
-   30 minutes, or a machine that cannot run it → `needs-simulator`. The
-   implementer never leases a device; this run is the only simulator check. See [ADR 0007](adr/0007-device-lane-simlock-agent-device.md).
+   starts an Expo Simulators session on EAS with the lane binary of the PR's
+   worktree (the `production` build of the same fingerprint, repacked with the
+   PR's JS, appduct included; a native change waits for a full `lane` build,
+   ADR 0027), checks each line with agent-device — snapshots, waits, the PR's
+   `e2e:` replay scripts, appduct shortcuts the spec's Agent hooks name — and
+   on a failure reads appduct events and agent-device snapshots to explain it.
+   Everything goes through `device-lane.sh`, and the session is always
+   released; it ends by itself after 40 minutes. Every task has its own
+   session. No session within 30 minutes (EAS capacity or concurrency limit),
+   or a lane binary that cannot be built → `needs-simulator`. The implementer
+   never starts a device; this run is the only simulator check. See
+   [ADR 0028](adr/0028-device-lanes-on-expo-simulators.md).
 6. **Native.** A native change gets `needs-native-build` and is parked for the
    maintainer.
 7. **Merge.** The factory fills the PR's `## Review` section, marks it ready,
@@ -156,7 +158,8 @@ their report blocks.
    fingerprint as its runtime version, so only compatible binaries take it.
    See [OTA.md](OTA.md).
 9. **Did it land?** `ota-verifier` waits for the publish run, installs a
-   Release build of `main` from before the merge on a leased simulator, asks
+   `production` build of `main` from before the merge in a simulator session
+   (`device-lane.sh lease --production`), asks
    the app to check now (appduct `ota_check_now`), taps the update banner, and
    confirms the new bundle id and the feature on screen. A miss is a note for
    the maintainer, never a reason to park.
@@ -169,7 +172,7 @@ their report blocks.
    if it sounds real, adds `bug:triage`.
 2. `/triage <n>` runs the `triager` subagent: it reproduces the bug as a
    failing test on `bug/<n>-repro` (an `e2e:` replay script on a leased
-   simulator when only a running app shows it, with Rozenite and appduct
+   simulator session when only a running app shows it, with appduct
    evidence), finds the root cause, and posts a report
    (Reproduction, Root cause, Simplest fix, Alternatives rejected, Risk). No
    fix, no PR. Cannot reproduce → `bug:needs-info`.
@@ -275,6 +278,8 @@ Configuration (repository settings → Secrets and variables → Actions):
 | `FACTORY_APP_ID`         | secret   | the factory GitHub App (ADR 0021)                     |
 | `FACTORY_APP_PRIVATE_KEY`| secret   | the factory GitHub App (ADR 0021)                     |
 | `CALLSTACK_AI_API_KEY`   | secret   | the callstack.ai key OpenCode uses (ADR 0029)         |
+| `CLOUDFLARE_API_TOKEN`   | secret   | deploys the product API Worker (ADR 0026)             |
+| `CLOUDFLARE_ACCOUNT_ID`  | secret   | the Cloudflare account the Worker lives in            |
 
 `EXPO_PUBLIC_API_URL` and the other public values of the bundle are EAS
 environment variables (`production`), not repository settings
@@ -340,12 +345,11 @@ Setup (repository secrets; nothing to install on a machine):
 - Scripts: `.agents/scripts/` — `claim.sh`, `attach.sh`, `worktree.sh`, `review-inputs.sh`,
   `native-check.sh`, `device-lane.sh`, `merge-pr.sh`, `factory-run.sh`,
   `run-record.sh`, `memory.sh`, `check-agent-permissions.sh`,
-  `ensure-pnpm.sh`; the native
-  build cache in `tools/expo-build-cache/`
+  `ensure-pnpm.sh`, `lane-binary.sh`
 - Workflows: `.github/workflows/` — `ci.yml`, `ota-publish.yml`,
   `factory.yml`, `issue-state.yml`, `labels.yml`; their helpers are in
   `scripts/ci/`
 - OTA: [OTA.md](OTA.md)
 - Memory, run records and the retro: [MEMORY.md](MEMORY.md)
-- Devices (simlock, agent-device, appduct, Rozenite host setup): [DEVICES.md](DEVICES.md),
-  [ADR 0007](adr/0007-device-lane-simlock-agent-device.md)
+- Devices (Expo Simulators sessions, agent-device, appduct): [DEVICES.md](DEVICES.md),
+  [ADR 0028](adr/0028-device-lanes-on-expo-simulators.md)

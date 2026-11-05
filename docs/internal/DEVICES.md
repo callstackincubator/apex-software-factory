@@ -1,230 +1,136 @@
-# Devices runbook (booth laptop)
+# Devices runbook (Expo Simulators)
 
-How agents reach a simulator or emulator on the booth laptop, and how to set
-up, check and recover the host side. The tools:
+How agents reach a simulator or emulator, and how to run, check and recover a
+lane. Decision records: [ADR 0028](adr/0028-device-lanes-on-expo-simulators.md)
+(sessions), [ADR 0027](adr/0027-lane-binaries-repacked-on-eas.md) (the
+binary). A device is an [Expo Simulators](https://docs.expo.dev/) session on
+EAS; nothing runs on the machine that drives it except the CLIs and a tunnel.
 
-| Tool | Pinned | Installed by | Role |
-| --- | --- | --- | --- |
-| agent-device | `0.21.20`, root devDependency | `pnpm install` | every agent interaction with a device |
-| appduct | `0.14.0`, root devDependency (CLI) + `@appduct/react-native` in the app | `pnpm install` | shortcuts into the running app (tools, events) |
-| Rozenite | `2.4.0`, `apps/mobile` devDependencies | `pnpm install` | debugging a debug build through Metro |
-| simlock | 0.3.0, not on npm yet | the maintainer (`SIMLOCK_BIN`) | simulator and emulator leasing; see [simlock](#simlock) |
+| Tool         | Pinned                                                        | Installed by   | Role                                               |
+| ------------ | ------------------------------------------------------------- | -------------- | -------------------------------------------------- |
+| agent-device | `0.21.20`, root devDependency                                 | `pnpm install` | every agent interaction with a device              |
+| appduct      | `0.14.0`, root devDependency (CLI) + `@appduct/react-native`  | `pnpm install` | shortcuts into the running app (tools, events)     |
+| `eas-cli`    | `27.4.1`, run as `npx -y eas-cli@27.4.1` by the lane scripts  | the scripts    | the session, the egress tunnel, the lane binary    |
 
 How an agent uses them, command by command, is in
-[apps/mobile/README.md](../../apps/mobile/README.md#agent-tooling). This file
-is the host side. Nothing here is installed globally; everything runs as
-`pnpm exec <tool>` from the checkout (safety rule 2). A global `agent-device`
-from an earlier experiment may be on the PATH: ignore it, it is older.
+[apps/mobile/README.md](../../apps/mobile/README.md#agent-tooling). Nothing
+here is installed globally; everything runs as `pnpm exec <tool>` from the
+checkout (safety rule 2). A global `agent-device` on the PATH is older: ignore
+it.
 
-## Ports and state
+## What a lane is
+
+One worktree, one session, one agent-device session, all through
+[`.agents/scripts/device-lane.sh`](../../.agents/scripts/device-lane.sh)
+(delivery rule 16). `device-lane.sh` with no arguments prints its usage.
+
+1. **`lease <ios|android>`** takes the lane binary of the checkout: the
+   `production` EAS build with the same native fingerprint, repacked by the
+   `lane-binary` EAS workflow with this checkout's JS and the `lane` channel
+   (`.agents/scripts/lane-binary.sh`). The first lease of a commit waits for
+   it (a repack takes minutes, a full `lane` build up to fifteen) and exits 2
+   while waiting: run it again. `--production` takes the finished
+   `production` build instead, for the OTA check (a lane binary never adopts
+   an update); `--build-id <id>` takes any build.
+2. It starts `eas simulator:start --type agent-device`, named
+   `apex-<branch>` and tagged `apex`, with a 40-minute cap (the account
+   maximum) and a 15-minute idle cap, and an egress tunnel to this machine
+   (`eas simulator:egress`).
+3. **`appduct link`** pairs the running app: it mints a link and opens it
+   through agent-device, accepting iOS's "Open in Apex Factory?" alert. The
+   simulator can reach only the appduct daemon on this machine, through the
+   tunnel.
+4. **`ad …`**, **`appduct …`**, **`screenshot`**, **`record`** drive and
+   record the app. Screenshots and videos land in
+   `<main checkout>/.worktrees/sim-shots/`.
+5. **`release`** stops the session and the tunnel and deletes the session
+   file. Safe to repeat, and after a lease that failed halfway. The caps are
+   only the backstop for an agent that died.
+
+Exit codes: 0 done, 1 failed, 2 still building the binary, 64 usage, 69
+unavailable (no `npx`, not signed in to EAS), 75 busy (EAS refused the session
+for capacity or a concurrency limit), 76 an `ad` command failed twice on the
+device side.
+
+## State and environment
 
 | What | Where | Notes |
 | --- | --- | --- |
-| agent-device daemon | `127.0.0.1`, random port, token in `~/.agent-device/daemon.json` | one per user; replaces an older-version daemon on first use |
-| agent-device iOS runner | `~/.agent-device/apple-runner/derived` | XCUITest runner built on first use per Xcode version (minutes) |
-| appduct daemon | `~/.appduct/daemon.sock` (0600) + TLS WebSocket `:8443` | auto-spawned by the first `appduct` command; the app connects to 8443 |
-| appduct state | `~/.appduct/` (`key.pem`, `audit/`, `daemon.log`, optional `config.json`) | never commit; never point `--state-dir` at a project |
+| Lane state | `<worktree>/.apex/` (gitignored) | `device.json` (session, tunnel, appduct session), `logs/`, `build-<platform>` (the last binary's build id and commit) |
+| Session credentials | `apps/mobile/.env.eas-simulator` (gitignored) | The agent-device daemon URL and token that `simulator:start` writes. A secret: never printed, deleted by `release` |
+| appduct daemon | `~/.appduct/` on the machine running the lane; TLS WebSocket `:8443` | Starts with the first `appduct` command; the app connects to it through the tunnel |
 | appduct project config | `apps/mobile/.appduct/config.json` (committed) | scheme `apexfactory`, app ids |
-| Metro (dev loop) | `:8081` | `pnpm --filter @apex/mobile start:agent` = Metro with `WITH_ROZENITE=true APPDUCT_ENABLED=1` |
-| Rozenite agent routes | Metro `/rozenite/agent/*` | only while Metro runs with `WITH_ROZENITE=true` |
-| Rozenite artifacts | `apps/mobile/.rozenite/` (gitignored) | traces, heap snapshots |
 
-## Environment variables
+| Variable | Value |
+| --- | --- |
+| `EXPO_TOKEN` | The EAS robot token. On a runner it comes from the job; on a laptop, `eas login` also works |
+| `APEX_APPDUCT_ENDPOINT` | `host:port` the app should reach the appduct daemon on, when the probe cannot read it |
+| `APEX_EGRESS_ALLOW` | Space-separated `host:port` entries the session may also reach, for example the product API when an `.ad` script needs it (`api-latency.ad`) |
+| `APEX_LEASE_WAIT` | Seconds one `lease` call waits for the binary (default 540) |
+| `APEX_SESSION_MAX_MINUTES`, `APEX_SESSION_IDLE_MINUTES` | The caps (default 40 and 15) |
+| `APPDUCT_ENABLED` | `1`, always: every `eas.json` profile and the workflows set it, and it changes the iOS fingerprint |
+| `AGENT_DEVICE_NO_UPDATE_NOTIFIER` | `1`: no background npm check (safety rule 2) |
 
-| Variable | Set where | Value |
-| --- | --- | --- |
-| `APPDUCT_ENABLED` | package scripts; every `eas.json` profile; CI publish | `1`, always. One build profile: Debug and Release link appduct's native module, OTA bundles keep its JS. It changes the iOS fingerprint, so every prebuild, fingerprint and publish uses the same value. |
-| `WITH_ROZENITE` | only `start:agent` | `true` turns Rozenite on in Metro. Never set in CI or for a release/OTA build. |
-| `AGENT_DEVICE_NO_UPDATE_NOTIFIER` | the agent's environment | `1`: no background npm check (safety rule 2). |
-| `ANDROID_HOME` | the shell / runner | `$HOME/Library/Android/sdk` (not set by default on a Mac). |
-| `JAVA_HOME` | the shell / runner | `/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home` (JDK 17). |
-| `LANG`, `LC_ALL` | any iOS build | `en_US.UTF-8`, or CocoaPods may fail. |
+## Run a lane yourself
 
-## One-time host setup
-
-```sh
-pnpm install                                         # all three CLIs, pinned
-export AGENT_DEVICE_NO_UPDATE_NOTIFIER=1
-pnpm exec agent-device doctor --platform ios         # Xcode, devices; warms the runner cache
-pnpm exec agent-device prepare ios-runner --platform ios --udid <UDID> --timeout 240000
-pnpm exec appduct --version                          # 0.14.0
-```
-
-- `agent-device doctor` must end `Doctor: pass`. It also starts building the
-  iOS runner in the background; `prepare ios-runner` does it in the
-  foreground (several minutes the first time per Xcode version).
-- appduct needs no key or config for simulators: its daemon makes a key on
-  first start and the pairing link carries the pin (`trust: "link"`, no
-  `cliPins` in the binary). `allowPrivateLanOnly: true` keeps the app from
-  connecting to anything but loopback/private addresses.
-- Operator policy for unattended runs — create `~/.appduct/config.json`:
-
-  ```json
-  { "policy": { "default": "allow", "destructive": "deny" } }
-  ```
-
-  Tools marked `destructiveHint: true` (today `reload_app`) are then refused
-  with `policy_denied` for every caller; agents use the UI instead (tap the
-  banner). The daemon reads this file only at start:
-  `pnpm exec appduct daemon stop` (drops all sessions; apps re-pair).
-  Every call is logged in `~/.appduct/audit/`.
-- Android: `export ANDROID_HOME=$HOME/Library/Android/sdk JAVA_HOME=…zulu-17…`
-  and put `$ANDROID_HOME/platform-tools` and `$ANDROID_HOME/emulator` on the
-  PATH. AVDs present: `Pixel_8`.
-
-## Every booth day
+From a checkout with the app's JS you want to see, signed in to EAS (`eas
+whoami`, or `EXPO_TOKEN` set):
 
 ```sh
-xcrun simctl list devices booted                     # which simulator, its UDID
-pnpm exec agent-device doctor --platform ios
-pnpm exec appduct daemon status                      # starts on demand anyway
+pnpm install
+.agents/scripts/device-lane.sh lease ios        # run again while it exits 2
+.agents/scripts/device-lane.sh appduct link
+.agents/scripts/device-lane.sh ad snapshot -i
+.agents/scripts/device-lane.sh ad replay apps/mobile/e2e/home.ad
+.agents/scripts/device-lane.sh screenshot home
+.agents/scripts/device-lane.sh release
 ```
 
-Agents always pass the device explicitly (`--udid` for agent-device,
-`--device` for appduct) — several simulators may be booted, and other apps on
-the laptop may connect to the same Metro.
+The `agent-device` and `appduct` MCP servers in `opencode.json` are for a
+person in the `build` agent; every other agent is denied their tools and uses
+the script.
 
-## Build, install, pair (what the agent does)
+## Operator policy
+
+appduct refuses tools marked `destructiveHint: true` (today `reload_app`) when
+`~/.appduct/config.json` says so:
+
+```json
+{ "policy": { "default": "allow", "destructive": "deny" } }
+```
+
+A runner VM starts without that file, so the daemon uses its defaults. Create
+it on a machine you run lanes from; the daemon reads it only at start
+(`pnpm exec appduct daemon stop`). Every call is logged in
+`~/.appduct/audit/`.
+
+## Debugging in a debug build
+
+A lane cannot run Metro: its binary is a Release build and the session
+reaches no dev server. To debug with React DevTools data (Rozenite), use your
+own simulator or phone:
 
 ```sh
-# Debug (dev loop): build once, then Metro
-pnpm --filter @apex/mobile ios --device <UDID> --no-bundler
-pnpm --filter @apex/mobile start:agent
-
-# Release (a local binary: API URL baked in, appduct linked, no EAS Update channel)
-cd apps/mobile
-LANG=en_US.UTF-8 APPDUCT_ENABLED=1 \
-  EXPO_PUBLIC_API_URL=http://<lan-ip>:3001 \
-  pnpm exec expo run:ios --configuration Release --no-bundler --device <UDID>
-pnpm exec appduct doctor ~/Library/Developer/Xcode/DerivedData/ApexFactory-*/Build/Products/Release-iphonesimulator/ApexFactory.app --assert-present
-
-# Pair appduct with the running app (from apps/mobile)
-pnpm exec appduct sessions link --open ios-sim --device <UDID> --json
+pnpm --filter @apex/mobile ios --no-bundler
+pnpm --filter @apex/mobile start:agent        # Metro with WITH_ROZENITE=true APPDUCT_ENABLED=1
 ```
 
-The first link on a simulator raises iOS's "Open in Apex Factory?" sheet:
-`pnpm exec agent-device press 'label="Open"'`. Or let agent-device deliver
-the link (it accepts the sheet): `appduct sessions link --json`, then
-`agent-device open com.callstack.apexfactory '<data.deepLink>' --udid <UDID>`.
-A session survives JS reloads and backgrounding; a relaunch (`open
---relaunch`, `replay` with `open … --relaunch`) kills the process, so pair
-again.
+Rozenite is never in CI, a lane or an OTA bundle (safety rule 9).
 
 ## Recovery
 
 | Symptom | Fix |
 | --- | --- |
-| `DEVICE_IN_USE` / "owned by session" from agent-device | Another agent-device session holds the simulator. `pnpm exec agent-device device status --platform ios --udid <UDID>`; the owner closes with `agent-device close`. A lane's own leftover session (a lease that died): `device-lane.sh release` in that worktree closes it even without a lease, and every new lease closes it first. |
-| `device-lane.sh ad …` exits 76 | The command failed twice on the device side (CoreSimulator late, XCUITest runner lost); the lane already retried once. Release, lease again, retry once; then report `unavailable`. |
-| "a build of this worktree is still running" | One build per worktree at a time: a second would recompute the fingerprint while `pod install` or a native step writes files it hashes. Wait for the first build's `.exit`. |
-| Android lane commands fail on a device "name" | Fixed: the lane drives the emulator's adb serial (simlock's `device.address`), not the AVD name simlock reports as `driverDeviceId`. Lease again. |
-| An `xcodebuild test-without-building … AgentDeviceRunner` process outlives its session | Orphaned runner. Check its `-xctestrun` path names your UDID, then `kill <pid>`; the next `open` starts a fresh one. |
+| `lease` exits 2 | The lane binary is still building; run `lease` again. A full `lane` build means the `production` build for this fingerprint does not exist (a native change, or an `eas.json` edit). |
+| `lease` exits 69 | Not signed in to EAS, or no `npx`: set `EXPO_TOKEN` or run `eas login`. |
+| `lease` exits 75 | EAS refused the session (capacity or the account's concurrency limit). Wait, or release stale sessions: `device-lane.sh status`, and in the Expo dashboard sessions tagged `apex`. Delivery parks the PR `needs-simulator` after 30 minutes. |
+| `lane-binary.sh` fails | The EAS workflow `lane-binary` failed: open its run in the Expo dashboard. A changed `eas.json` moves the fingerprint, so no `production` build matches until one is built. |
+| `ad …` exits 76 | The command failed twice on the device side (the remote runner, not the app); the lane already retried once. Release, lease again, retry once; then report `unavailable`. |
+| The session ended mid-run | The 40-minute cap or the idle cap. `lease` notices the session is gone and starts another; the app is installed fresh, so pair appduct again. |
+| `appduct link` says the app did not claim the link | The app is not running, or the "Open in" alert is up: `device-lane.sh ad alert accept`, then link again (a link works once, for 5 minutes). |
+| "the link advertises X but the session only reaches Y" | The appduct daemon's address changed after the lease. `release` and lease again, or set `APEX_APPDUCT_ENDPOINT`. |
+| An `.ad` script needs the product API and fails | The session cannot reach it. Add its `host:port` to `APEX_EGRESS_ALLOW` before `lease`. |
 | `Replacing daemon … version mismatch` | Normal after a version bump; the pinned CLI replaces the old daemon. |
-| `appduct tools ls` → `unknown_session` right after `link --open` | The app never claimed the link: the "Open in" sheet is up (press Open), or the app was not running. Mint a new link (one use, 5 min). |
 | appduct `ambiguous_session` | Two apps paired: pass the session id or alias (`appduct sessions ls`). |
 | appduct version mismatch after an upgrade | `pnpm exec appduct daemon stop` (drops sessions), re-pair. |
-| `policy_denied` | The operator policy refuses that tool (`~/.appduct/config.json`); use the UI path. |
-| `rozenite agent targets` empty | Metro not started with `start:agent`, or the app is a release build. |
-| `rozenite agent domains` lacks `app`/`controls`/`network-activity` | The session was created before the app (re)loaded: `session stop`, reload the app, `session create` again. |
-| `rozenite agent session stop` hangs | Seen on 2.4.0; interrupt it — the session ends with Metro or the app. |
-| Two targets with the same name in `rozenite agent targets` | Another app on the laptop uses this Metro. Read `app_info` through `app.app_info` to confirm the target. |
-
-## simlock
-
-Every lane leases its device from simlock through
-`.agents/scripts/device-lane.sh` (ADR 0007, delivery rule 16). simlock 0.3.0
-keeps its simulators in a private device set and its emulators behind its
-own adb server; the lane passes both to agent-device on every call, and pairs
-appduct by opening the link with agent-device, because `appduct sessions link
---open ios-sim` only sees the default set.
-
-simlock is not on npm yet, so the lane runs the CLI named by `SIMLOCK_BIN`, a
-command line, with its state under `SIMLOCK_HOME` (keep it short: it holds
-sockets):
-
-```sh
-export SIMLOCK_BIN="node /Users/aitwar/Projects/simlock/dist/cli/main.js"
-export SIMLOCK_HOME=/tmp/apex-slk
-.agents/scripts/device-lane.sh status       # the daemon, its capacity and queue
-```
-
-The factory runners get both from their `.env` files (see
-[DELIVERY.md](DELIVERY.md#the-factory-dispatcher)). Once simlock is a root
-devDependency, `pnpm exec simlock` wins and the variables can go.
-
-## Native build cache
-
-`device-lane.sh build` reuses a native build when it can (ADR 0010). The key
-is the platform, the profile and the native fingerprint
-(`node tools/expo-build-cache/cli.js fingerprint ios apps/mobile` prints it); the entries live
-in `~/.cache/apex-software-factory/native/<platform>/<fingerprint>/<profile>/`.
-
-- **Hit, Release**: a copy of the cached app with this worktree's JS bundle
-  (Hermes bytecode), assets and Expo config swapped in. No Xcode, no build
-  slot; well under a minute.
-- **Hit, Debug**: the cached app as it is (it loads JS from Metro).
-- **Miss**: a full build in a build slot, then the binary is stored under the
-  hash it embeds. Precompiled Expo modules and React Native's prebuilt core
-  keep a warm-machine Release build around 4 minutes; third-party native
-  libraries compile from source.
-
-```sh
-node tools/expo-build-cache/cli.js list                       # what is cached
-node tools/expo-build-cache/cli.js fingerprint ios apps/mobile
-APEX_BUILD_CACHE=0 .agents/scripts/device-lane.sh build ios release   # force a full build
-```
-
-The same cache serves `npx expo run:ios|android` for simulator and emulator
-builds once `apps/mobile/app.json` has
-`"buildCacheProvider": { "plugin": "../../tools/expo-build-cache/provider.plugin.js" }`.
-Delete a bad entry with `rm -rf` on its directory. `prewarm.sh`, which
-filled the cache each morning, is gone (ADR 0029).
-
-## Machine setup log
-
-Machine-level steps taken on the **temporary dev Mac** (4 Oct 2026) while
-wiring these tools, in order (steps 12 on: the factory-speed wave). No secrets here.
-
-1. `pnpm install` in the agent worktree (nothing global). The rozenite CLI
-   pulls in Electron; `pnpm-workspace.yaml` denies its build script, so
-   nothing was downloaded.
-2. `pnpm exec agent-device doctor --platform ios` replaced a running
-   agent-device daemon v0.21.4 (an earlier global install) with 0.21.20 in
-   `~/.agent-device`, and built the iOS runner cache in the background
-   (Xcode 26.6, iPhone 17 Pro / iOS 26.5, UDID `395064D5…`).
-3. First `appduct` command spawned the daemon: `~/.appduct/` created
-   (`key.pem`, `daemon.sock`, `audit/`, logs), listening on `127.0.0.1:8443`.
-4. Debug build installed on the booted iPhone 17 Pro:
-   `LANG=en_US.UTF-8 APPDUCT_ENABLED=1 pnpm exec expo run:ios --configuration Debug --device <UDID> --no-bundler`
-   (prebuild + `pod install` + compile, ≈ 10 min cold).
-5. Metro started with `pnpm --filter @apex/mobile start:agent` (port 8081).
-6. Product API started from the worktree for `api_health` (`node src/main.ts`
-   in `apps/api`, port 3001), stopped afterwards.
-7. One orphaned agent-device runner (`xcodebuild test-without-building`,
-   parent launchd, for this UDID, alive 2 h 20 min) was killed after a
-   session ended without `close`.
-8. Release build with appduct installed over the debug one (Metro stopped first).
-9. `~/.appduct/config.json` created with the policy above
-   (`destructive: deny`) and the appduct daemon restarted; sessions re-paired.
-10. Android release APK with appduct (`ANDROID_HOME`, `JAVA_HOME` set per
-    command, never globally): `APPDUCT_ENABLED=1 … expo prebuild --platform
-    android --no-install`, then `cd android && APPDUCT_ENABLED=1 ./gradlew
-    assembleRelease` — `[appduct] native module INCLUDED in this build`,
-    `BUILD SUCCESSFUL in 7m 50s`; `appduct doctor app-release.apk
-    --assert-present` holds; the fingerprint was `c273005b…`.
-11. AVD `Pixel_8` booted headless (`emulator -avd Pixel_8 -no-window
-    -no-audio -no-snapshot-save`), APK installed with `adb install -r`;
-    `agent-device open com.callstack.apexfactory --platform android --serial
-    emulator-5554` worked (its helper APKs installed themselves);
-    `appduct sessions link --open android --device emulator-5554` paired;
-    `app_info` and `show_update_banner` answered from the Release build.
-    The emulator was shut down afterwards (`adb emu kill`). An OTA deploy to
-    Android was not exercised.
-12. Native build cache created by the first lane build:
-    `~/.cache/apex-software-factory/native/ios/e69a1971…/release/ApexFactory.app`
-    (a full Release build, 244 s). Nothing else is installed for it.
-13. The factory runners' `~/actions-runner-factory-{1,2}/.env` got
-    `SIMLOCK_BIN=node /Users/aitwar/Projects/simlock/dist/cli/main.js` and
-    `SIMLOCK_HOME=/tmp/apex-slk` (the simlock daemon already running from
-    earlier testing), and both services were restarted
-    (`./svc.sh stop && ./svc.sh start` in each directory).
+| `policy_denied` | The operator policy refuses that tool; use the UI path (tap the banner). |

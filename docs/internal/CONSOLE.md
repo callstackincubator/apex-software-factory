@@ -61,8 +61,7 @@ number of open tabs (one in-flight refresh, shared). The page asks
 
 ### 1.2 OpenCode database
 
-- The factory runs **OpenCode v2** (`docs/BOOTSTRAP.md`; v2.0.22 on the
-  temporary Mac). Path: `OPENCODE_DB`, else
+- The factory runs **OpenCode v2** (`docs/BOOTSTRAP.md`). Path: `OPENCODE_DB`, else
   `~/.local/share/opencode/opencode.db` (v2's name for the stable channels).
 - **Tables** (v2's `packages/core/src/session/sql.ts`): `session_v2` and
   `session_message`. At start the console checks with `PRAGMA table_info`
