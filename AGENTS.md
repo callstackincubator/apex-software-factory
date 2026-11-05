@@ -4,7 +4,7 @@ Apex Software Factory is a showcase of an AI-native delivery line. Booth
 visitors at reactCon Berlin (Oct 7–9, 2026) describe an idea for an
 almost-empty Expo app; it becomes product requirements, a developer writes the
 technical spec, and agents implement, test, review and merge it unattended —
-the merge ships an over-the-air update to the phone at the booth.
+the merge ships an over-the-air update to the app.
 
 The factory runs on **OpenCode with one model**, `callstack.ai/callstack/Apex`,
 set once in `opencode.json` (ADR 0004). No agent, command or skill names
@@ -17,7 +17,7 @@ every tool.
 | Path                 | What                                                                     |
 | -------------------- | ------------------------------------------------------------------------ |
 | `apps/mobile`        | Expo app (expo-router, expo-updates, Jest). `@apex/mobile`               |
-| `apps/api`           | Product HTTP API, Hono on Node. `@apex/api`                              |
+| `apps/api`           | Product HTTP API, Hono; a Cloudflare Worker. `@apex/api`                 |
 | `apps/console`       | The factory console: local web page, host tooling. `@apex/console`       |
 | `packages/contract`  | Every wire shape as zod schemas, plus the typed client. `@apex/contract` |
 | `packages/event-bus` | The typed, synchronous domain event bus both apps use. `@apex/event-bus` |
@@ -59,7 +59,7 @@ Accepted ADRs in [docs/internal/adr/](docs/internal/adr/) and the rules in
 - [documentation.md](docs/internal/agent-rules/documentation.md) — end-user
   docs versus `docs/internal/`.
 - [safety.md](docs/internal/agent-rules/safety.md) — secrets, downloads, OTA,
-  the booth laptop, visitors' data.
+  the factory's infrastructure, visitors' data.
 - [delivery.md](docs/internal/agent-rules/delivery.md) — GitHub Issues as spec
   and queue, labels, claims, handoffs, reviews, the merge gate, native changes.
 - [defaults.md](docs/internal/agent-rules/defaults.md) — the house answers
@@ -77,8 +77,8 @@ blind to the rules — keep it that way.
    issue (`/spec <n>`).
 3. A developer writes the Technical spec (`/spec <n> technical`, ending with
    the spec checker) and sets `feature:ready` — the signature that allows
-   unattended delivery. The label starts a run on the booth's `factory`
-   runners (`.github/workflows/factory.yml`).
+   unattended delivery. The label starts a run on a GitHub-hosted runner
+   (`.github/workflows/factory.yml`).
 4. `/deliver <n>` claims it, splits it into tasks if the spec lists them, and
    per issue: implements tests-first in a worktree, opens a draft PR,
 5. runs two blind reviews (spec, code) and, in parallel, proves mobile lines
@@ -105,7 +105,8 @@ from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
 - **Skills** (`.agents/skills/`, loaded with the `skill` tool): `intent`,
   `spec-session`, `deliver`, `implement`, `review`, `triage-bug`,
   `verify-mobile`, `verify-ota`, `retro`; and the device tools `agent-device`,
-  `appduct`, `rozenite` (vendored upstream skills, each with a `SOURCE.md`).
+  `appduct`, `rozenite` (vendored upstream skills, each with a `SOURCE.md`;
+  nothing loads `rozenite`, as lanes run Release builds without Metro).
   Also vendored: eleven Expo and React Native guides (`expo-*`,
   `swm-react-native-best-practices`, `callstack-react-native-best-practices`,
   `vercel-composition-patterns`, `react-native-mmkv`,
@@ -139,7 +140,7 @@ from zero is [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
 
 Permissions are allow-by-default with a short deny list (ADR 0012): no
 `gh pr merge`, no force push or push to `main`, no skipped hooks, no OTA
-deploy, no `.env` files, no device-pool operator commands; reviewers keep
+deploy, no `.env` files, no `eas` or device-daemon operator commands; reviewers keep
 their blind-review isolation. Nothing asks, for any agent: a subagent's ask
 would wait forever. Unattended runs go through
 `.agents/scripts/factory-run.sh <n>`, which runs

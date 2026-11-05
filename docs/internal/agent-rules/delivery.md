@@ -265,28 +265,27 @@ pull request is open, done means closed as completed.
     writes it into the empty body field GitHub offers (the repository
     proposes none).
 
-16. **Devices are leased, one lane per lease, through the script.** Every
-    simulator or emulator an agent uses is leased from simlock and driven
-    with agent-device, and only through `.agents/scripts/device-lane.sh`
-    (ADR 0007). No agent runs `simctl`, `adb`, `emulator`, `simlock` or
-    `agent-device` against a device itself. A lane is one worktree, one lease
-    and one agent-device session; simlock queues a lease it cannot serve
-    yet, so lanes run in parallel safely. A native build holds no lease, runs
-    detached, logs to a file, and waits for one of the machine's build slots.
-    The `mobile-verifier`, `ota-verifier` and `triager` lease a device; the
-    `implementer` never does (ADR 0015): the `mobile-verifier`'s Release run,
-    in parallel with the code review, is the check. Whoever leases a device
-    releases it on every path, finished or not; the lease's TTL is only the
-    backstop for a crash. With a person present the agent asks before
-    starting a build. When simlock finds no device within 30 minutes, or the
-    machine cannot run the step, the PR gets `needs-simulator` and waits for
-    the maintainer.
+16. **Devices are Expo Simulators sessions, one lane per session, through the
+    script.** Every simulator or emulator an agent uses is an Expo Simulators
+    session on EAS, driven with agent-device, and only through
+    `.agents/scripts/device-lane.sh` (ADR 0028). No agent runs `eas`,
+    `simctl`, `adb` or `agent-device` against a device itself. A lane is one
+    worktree, one session and one agent-device session, so lanes run in
+    parallel safely. A lane binary comes from `lane-binary.sh` (ADR 0027), runs
+    detached, and logs to a file. The `mobile-verifier`, `ota-verifier` and
+    `triager` start a session; the `implementer` never does (ADR 0015): the
+    `mobile-verifier`'s Release run, in parallel with the code review, is the
+    check. Whoever starts a session releases it on every path, finished or
+    not; the session's duration and idle caps are only the backstop for a
+    crash. With a person present the agent asks before starting a build. When
+    EAS gives no session within 30 minutes, or the step cannot run, the PR
+    gets `needs-simulator` and waits for the maintainer.
 
 17. **A native change never ships unattended.** OTA updates use the
-    fingerprint strategy (ADR 0003): a JS bundle reaches only binaries with
+    fingerprint strategy (ADR 0025): a JS bundle reaches only binaries with
     the same native fingerprint. A change that adds, removes or re-versions an
     app dependency, edits `app.json`/`app.config.*` or a config plugin, or
-    touches native sources cannot reach the booth phone over the air.
+    touches native sources cannot reach the binaries over the air.
     `.agents/scripts/native-check.sh` flags it; the implementer reports it,
     the PR gets `needs-native-build`, and the gate refuses it. The maintainer
     decides whether to merge it and ship a new binary. A Technical spec that
@@ -319,7 +318,7 @@ OpenCode subagent that starts in a fresh context and returns a fixed report —
 `implementer`; `spec-reviewer`, `code-reviewer` and `review-verifier`, started
 by the `review` skill; `mobile-verifier`; and after a merge `ota-verifier`.
 Subagents never start subagents. `intent`, `spec-session` (which ends a technical session with the `spec-checker` subagent) and `triage-bug`
-cover the rest; `agent-device`, `appduct` and `rozenite` are how any of them
+cover the rest; `agent-device` and `appduct` are how any of them
 works with a device.
 
 ## Automation
@@ -348,8 +347,8 @@ works with a device.
 - A pull request from a `<kind>/<n>` branch fails its check unless its body
   closes `#<n>` and nothing else.
 
-`.github/workflows/factory.yml` is the dispatcher (ADR 0012). On the booth
-laptop's self-hosted `factory` runners it starts one unattended run per
+`.github/workflows/factory.yml` is the dispatcher (ADR 0012, ADR 0029). On a
+GitHub-hosted runner it starts one unattended run per
 issue — `deliver` when `feature:ready`, `task:ready` or `bug:ready` is added,
 `triage` when `bug:triage` is — through `.agents/scripts/factory-run.sh`, a
 watchdog with a hard and a no-progress timeout. It acts only on a label set
