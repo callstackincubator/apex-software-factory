@@ -1,11 +1,11 @@
 ---
 name: verify-ota
-description: After a delivery PR merges, check on a leased iOS simulator that its OTA update actually landed — wait for the OTA publish run of the merge commit, install a Release build of main from just before the merge, make the app check now with appduct's ota_check_now, apply the staged bundle by tapping the update banner with agent-device, and confirm the bundle id and the feature on screen. Always releases the device. Loaded by the ota-verifier subagent. Use when the deliver orchestrator hands over a merged PR, or when someone asks "did the update for #N land?".
+description: After a delivery PR merges, check on an Expo Simulators iOS session that its OTA update actually landed — wait for the OTA publish run of the merge commit, start a session on the production build with the merge's native fingerprint, make the app check now with appduct's ota_check_now, apply the staged bundle by tapping the update banner with agent-device, and confirm the bundle id and the feature on screen. Always releases the session. Loaded by the ota-verifier subagent. Use when the deliver orchestrator hands over a merged PR, or when someone asks "did the update for #N land?".
 ---
 
 # Did the update land?
 
-ADR 0025 (OTA through EAS Update), ADR 0007 (device lanes), rule 16 in
+ADR 0025 (OTA through EAS Update), ADR 0028 (device lanes), rule 16 in
 `docs/internal/agent-rules/delivery.md` and rules 4 and 5 in
 `docs/internal/agent-rules/safety.md` govern this skill. You observe and report. You never
 publish, roll back or republish an update, or run any `eas` command that writes; you never edit
@@ -42,31 +42,29 @@ No run after five minutes: the merge did not touch the bundle. Report `not shipp
 and stop. Do not wait for the run to finish yet: step 2 does not depend on it, so it runs
 while the publish does.
 
-## 2. A binary from before the merge
+## 2. The production build of the merge's fingerprint
 
-The update can only be seen on a binary whose embedded JS predates it, so build `main` from
-the merge commit's parent, in a detached worktree of its own:
+An update reaches a binary only if the binary's channel is `production` and its runtime
+version (the native fingerprint) is the one the publish run published for. That is a
+`production` EAS build, not a lane binary (a lane binary asks the `lane` channel, which
+nothing publishes to). Its embedded JS is older than the merge, which is what lets the update
+be seen. Work in a detached worktree of the merge commit's parent, so the fingerprint is the
+one the publish run looked up:
 
 ```bash
 git worktree add --detach <main checkout>/.worktrees/ota-<sha first 7> <sha>^
 .agents/scripts/worktree.sh --prepare <main checkout>/.worktrees/ota-<sha first 7>
-cd <that worktree> && .agents/scripts/device-lane.sh build ios release
-cd <that worktree> && .agents/scripts/device-lane.sh lease ios
+cd <that worktree> && .agents/scripts/device-lane.sh lease ios --production
 ```
 
-Run every later lane command in that worktree. `lease` exits 0 leased, 2 still queued (run it
-again, up to four times; give the bash tool a ten-minute timeout), 75 `busy`, 69
-`unavailable`. From a 0 on, every path out goes through step 5. Wait for the build's
-`<log>.exit` as `verify-mobile` does (`sleep 20; cat "<log>.exit"`): the parent of a JS-only
-merge has the same native fingerprint, so the build reuses the cached binary (ADR 0010).
+Run every later lane command in that worktree. `lease --production` finds the finished
+`production` build with the worktree's fingerprint and starts a session on it (about a
+minute). It exits 0 leased, 75 `busy`, 69 `unavailable`, and 1 when no finished `production`
+build has the fingerprint (a native change: report `not shipped`, going through step 5). From
+a 0 on, every path out goes through step 5. `app_info` reports `channel` and `fingerprint`,
+and the publish run's summary lists the fingerprint per platform.
 
-An update reaches a binary only if the binary's channel is `production` and its runtime
-version (the native fingerprint) is the one the publish run published for. The lane's Release
-build uses `APPDUCT_ENABLED=1` like the production binary, so its fingerprint is computed the
-same way; `app_info` reports `channel` and `fingerprint`, and the publish run's summary lists
-the fingerprint per platform.
-
-Once the build's `<log>.exit` is there, wait for the publish run in one call (give the bash
+Wait for the publish run in one call (give the bash
 tool a fifteen-minute timeout); it returns the moment the run ends:
 
 ```bash
@@ -77,10 +75,9 @@ A non-zero exit: `gh run view <id> --log-failed` and quote the first error line.
 native build" (no finished `production` build has the merge's fingerprint) means the change was
 native. Report `not shipped`, going through step 5.
 
-## 3. Install, check now, apply
+## 3. Check now, apply
 
 ```bash
-.agents/scripts/device-lane.sh install
 .agents/scripts/device-lane.sh ad open com.callstack.apexfactory --foreground
 .agents/scripts/device-lane.sh appduct link
 .agents/scripts/device-lane.sh appduct call app_info          # expect embedded: true; note bundleId
@@ -130,5 +127,5 @@ PR: #M  Commit: <sha first 7>  OTA: landed | not landed | not shipped (<reason>)
 Publish run: <run id and conclusion, or "none">
 Bundle: <embedded id> -> <OTA id>, or "unchanged"
 Seen: <the expected text: seen | not seen>; screenshot <path>
-Device: <model> <os> <udid first 8> lease <lease id> | none
+Device: <platform> session <session id> build <build id> | none
 ```

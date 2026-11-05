@@ -1,95 +1,61 @@
 #!/usr/bin/env sh
-# One device lane per worktree: a simulator or emulator leased from simlock, driven with
-# agent-device, shortcut with appduct, debugged with Rozenite. Skills call only this script;
-# it calls only `simlock`, `pnpm exec {agent-device,appduct,rozenite}`, expo, xcodebuild and
-# gradle — never raw simctl or adb (ADR 0007, delivery rule 16).
+# One device lane per worktree: an Expo Simulators session (EAS) running a lane binary, driven
+# with agent-device, shortcut with appduct. Skills call only this script; it calls only
+# `npx eas-cli@27.4.1 {simulator:*, build:list, fingerprint:generate}`, lane-binary.sh and
+# `pnpm exec {agent-device,appduct}` (ADR 0028, delivery rule 16).
 #
-#   device-lane.sh lease <ios|android> [model]  lease a device for this lane (default model:
-#                                               "iPhone 17 Pro" / "Pixel 8"); waits in simlock's
-#                                               queue up to APEX_LEASE_WAIT seconds per call (540)
-#   device-lane.sh build <ios|android> <release|debug>
-#                                               detached build of this worktree's app, prints the
-#                                               log path; <log>.exit and <log>.artifact appear
-#                                               when it ends. Needs no lease. A cached binary with
-#                                               the same native fingerprint is reused (JS swapped
-#                                               in for release) instead of compiling: seconds,
-#                                               not minutes (tools/expo-build-cache). A lane
-#                                               binary takes no OTA update unless
-#                                               APEX_LANE_OTA=on (the OTA check sets it).
-#   device-lane.sh install [path]               install the last successful build on the device
-#   device-lane.sh metro <start|stop>           Metro for a debug build (WITH_ROZENITE=true,
-#                                               APPDUCT_ENABLED=1) on this lane's own port
-#   device-lane.sh ad <agent-device args...>    agent-device, pinned to the leased device and the
-#                                               lane's session (apex-<branch>)
+#   device-lane.sh build <ios|android> [release]
+#                                               detached lane-binary.sh run (the production build
+#                                               repacked on EAS, ADR 0027), prints the log path;
+#                                               <log>.exit and <log>.artifact (the build id)
+#                                               appear when it ends. Needs no session.
+#   device-lane.sh lease <ios|android> [--production | --build-id <id>]
+#                                               start an Expo Simulators session with the app
+#                                               installed. By default the lane binary of this
+#                                               checkout, built first if no `build` is done or
+#                                               running for HEAD; --production takes the finished
+#                                               production build with this checkout's native
+#                                               fingerprint (the OTA check); --build-id takes any
+#                                               build. Waits up to APEX_LEASE_WAIT seconds per
+#                                               call (540), then exits 2.
+#   device-lane.sh install                      nothing to do: lease installed the build; prints it
+#   device-lane.sh ad <agent-device args...>    agent-device on the session (name apex-<branch>)
 #   device-lane.sh appduct link | ls [args] | describe <tool> | call <tool> [json]
 #                         | events <ls|since> [args] | sessions
 #                                               appduct: link pairs the running app through
 #                                               agent-device; the rest use the lane's session id
-#   device-lane.sh rozenite targets | session | reset | <domain> <args...>
-#                                               rozenite agent against the lane's Metro port
 #   device-lane.sh screenshot <name>            <main checkout>/.worktrees/sim-shots/<name>.png
 #   device-lane.sh record start <name> | stop   a video of the app, to
 #                                               <main checkout>/.worktrees/sim-shots/<name>.mp4;
 #                                               release stops one still running
-#   device-lane.sh renew                        push the lease's deadline out by its TTL
-#   device-lane.sh status                       this lane, simlock's queue, the build slots
-#   device-lane.sh release                      metro stop, agent-device close, simlock release;
-#                                               without a lease, closes the lane's leftover
-#                                               agent-device session (frees a stale device)
+#   device-lane.sh renew                        prints when the session ends (it cannot be extended)
+#   device-lane.sh status                       this lane's session, egress tunnel and builds
+#   device-lane.sh release                      stop the session and its egress tunnel, delete
+#                                               .env.eas-simulator; safe to repeat, and after a
+#                                               lease that failed halfway
 #
-# Exit codes: 0 done; 1 failed; 2 still queued for a device (run `lease` again to keep
-# waiting); 64 usage; 69 unavailable (this machine cannot do it: no simlock, no Xcode, no
-# runtime for that model; nothing is ever installed to make it possible); 75 busy (simlock
-# found no device within APEX_LEASE_TIMEOUT, default 30m); 76 an `ad` command failed twice on the
-# device side (CoreSimulator or the XCUITest runner, not the app: retried once already).
+# Exit codes: 0 done; 1 failed; 2 still building the binary (run `lease` again to keep
+# waiting); 64 usage; 69 unavailable (this machine cannot do it: no npx, not signed in to EAS);
+# 75 busy (EAS refused the session for capacity or a concurrency limit); 76 an `ad` command
+# failed twice on the device side (the remote runner, not the app: retried once already).
 #
-# Lane identity: the worktree's branch. simlock requester `apex:<branch>` (one lease per lane),
-# agent-device session `apex-<branch>`. State lives in <worktree>/.apex/ (gitignored):
-# device.json (the lease, Metro, appduct and Rozenite sessions), logs/, artifact-<platform>.
+# Lane identity: the worktree's branch. EAS session name and agent-device session `apex-<branch>`,
+# tag `apex`. State lives in <worktree>/.apex/ (gitignored): device.json (the session, egress
+# tunnel, appduct session), logs/, build-<platform> (last binary: build id and commit).
 #
-# A lease is detached with a TTL (APEX_LEASE_TTL, default 60m), renewed by every call that uses
-# the device once half of it has passed; the TTL is the backstop when an agent dies without
-# `release`. Builds hold no lease. They wait for one of APEX_BUILD_SLOTS (default 1) machine-
-# wide build slots (/tmp/apex-build.lock.<n>), so two lanes never run xcodebuild at once
-# unless the maintainer raises it. A slot whose owner died is taken over.
+# `eas simulator:start` writes apps/mobile/.env.eas-simulator (the daemon URL and token): a
+# secret. It is read only to run agent-device and the egress client, never printed, and deleted
+# by release. Sessions end by themselves after APEX_SESSION_MAX_MINUTES (default 40, the account maximum) or
+# APEX_SESSION_IDLE_MINUTES (default 15) without a command.
 #
-# The simlock CLI: `pnpm exec simlock` when the workspace has it, else $SIMLOCK_BIN, a command
-# line such as "node /path/to/simlock/dist/cli/main.js", set in the environment OpenCode runs
-# in (`opencode run --standalone` inherits the caller's; the background service keeps the one
-# it started with). SIMLOCK_HOME, when set, moves simlock's state and devices; keep it short.
-# simlock 0.3.0 keeps its simulators in its own device set; the grant's SIMLOCK_IOS_DEVICE_SET
-# (or ANDROID_ADB_SERVER_PORT) is passed to every agent-device call. A grant without one
-# (simlock 0.2.0) uses the default set.
+# Egress: the simulator reaches only the host:port entries it was started with, through a tunnel
+# to this machine (`eas simulator:egress`, started by lease, killed by release). They are the
+# appduct daemon's advertised address and wss port (APEX_APPDUCT_ENDPOINT=host:port overrides
+# the probe) plus APEX_EGRESS_ALLOW, a space-separated list of more host:port entries.
 #
-# Known gaps it works around (agent-device 0.21.20): `replay` and `test` lose the device set,
-# so replays run inside the lane's session and `ad test` replays scripts one by one; iOS's
-# "Open in Apex Factory?" prompt for a deep link into a running app is accepted here.
+# Known gap it works around: iOS's "Open in Apex Factory?" prompt for a deep link into a
+# running app is accepted here.
 set -eu
-
-cmd_record() {
-  case ${1:-} in
-    start)
-      name=${2:?usage: device-lane.sh record start <name> | record stop}
-      case $name in *[!A-Za-z0-9._-]* | .*) die "recording name: letters, digits, . _ - only" ;; esac
-      require_lease
-      shots="$main_root/.worktrees/sim-shots"
-      mkdir -p "$shots"
-      renew_if_due
-      agent_device record start "$shots/$name.mp4" --quality medium >/dev/null
-      state_set recording "$shots/$name.mp4"
-      echo "recording: $shots/$name.mp4"
-      ;;
-    stop)
-      require_lease
-      file=$(state_get recording)
-      [ -n "$file" ] || die "no recording running in this lane"
-      agent_device record stop >/dev/null
-      state_set recording ""
-      echo "recorded: $file"
-      ;;
-    *) die "usage: device-lane.sh record start <name> | record stop" ;;
-  esac
-}
 
 usage() {
   sed -n '2,/^# Exit codes/p' "$self" | sed '$d' | sed 's/^# \{0,1\}//' >&2
@@ -114,12 +80,13 @@ cd "$root"
 branch=$(git rev-parse --abbrev-ref HEAD)
 [ "$branch" = HEAD ] && branch=$(basename "$root")
 lane=$(printf '%s' "$branch" | tr -c 'A-Za-z0-9._-' '-')
-agent_id="apex:$branch"
 session="apex-$lane"
 app_id=${APEX_APP_ID:-com.callstack.apexfactory}
 state_dir="$root/.apex"
 state="$state_dir/device.json"
 mobile="$root/apps/mobile"
+eas_env="$mobile/.env.eas-simulator"
+tab=$(printf '\t')
 
 export AGENT_DEVICE_NO_UPDATE_NOTIFIER=1
 
@@ -159,68 +126,48 @@ json_field() {
   ' "$1" "$2"
 }
 
+fmt_time() {
+  date -r "$1" +%H:%M:%S 2>/dev/null || date -d "@$1" +%H:%M:%S
+}
+
 # ---------------------------------------------------------------------------------------------
 # Tools.
 
-have_simlock() {
-  [ -x "$root/node_modules/.bin/simlock" ] || [ -n "${SIMLOCK_BIN:-}" ]
-}
+eas() { (cd "$mobile" && exec npx -y eas-cli@27.4.1 "$@"); }
 
-simlock() {
-  if [ -x "$root/node_modules/.bin/simlock" ]; then
-    pnpm exec simlock "$@"
-  elif [ -n "${SIMLOCK_BIN:-}" ]; then
-    # SIMLOCK_BIN is a command line; split it on purpose.
-    # shellcheck disable=SC2086
-    $SIMLOCK_BIN "$@"
-  else
-    unavailable "no simlock CLI: add it to the workspace, or set SIMLOCK_BIN"
-  fi
+require_tools() {
+  command -v npx >/dev/null 2>&1 || unavailable "npx not found (Node)"
 }
 
 require_lease() {
-  [ -f "$state" ] && [ -n "$(state_get leaseId)" ] \
-    || die "no lease for lane $agent_id: run .agents/scripts/device-lane.sh lease ios first"
+  [ -f "$state" ] && [ -n "$(state_get sessionId)" ] && [ -f "$eas_env" ] \
+    || die "no session for lane $session: run .agents/scripts/device-lane.sh lease ios first"
 }
 
-# Runs agent-device pinned to the leased device. Callers pass the command and its arguments.
+# Exports the daemon variables from .env.eas-simulator. It reads three names and nothing else,
+# so the file is never evaluated; call it in a subshell.
+load_eas_env() {
+  while IFS= read -r line; do
+    case $line in
+      AGENT_DEVICE_DAEMON_BASE_URL=* | AGENT_DEVICE_DAEMON_AUTH_TOKEN=* | EAS_SIMULATOR_SESSION_ID=*)
+        key=${line%%=*}
+        val=${line#*=}
+        case $val in
+          \'*\' | \"*\") val=${val#?} val=${val%?} ;;
+        esac
+        export "$key=$val"
+        ;;
+    esac
+  done <"$eas_env"
+}
+
+# Runs agent-device on the session. Callers pass the command and its arguments.
 agent_device() {
-  platform=$(state_get platform)
-  device=$(state_get device)
-  set_path=$(state_get deviceSet)
-  adb_port=$(state_get adbPort)
-  if [ "$platform" = android ]; then
-    if [ -n "$adb_port" ]; then
-      ANDROID_ADB_SERVER_PORT=$adb_port AGENT_DEVICE_STATE_DIR="${AGENT_DEVICE_SIMLOCK_STATE_DIR:-$HOME/.agent-device-simlock}" \
-        pnpm exec agent-device "$@" --platform android --serial "$device" --session "$session"
-    else
-      pnpm exec agent-device "$@" --platform android --serial "$device" --session "$session"
-    fi
-  elif [ -n "$set_path" ]; then
-    pnpm exec agent-device "$@" --platform ios --udid "$device" --ios-simulator-device-set "$set_path" --session "$session"
-  else
-    pnpm exec agent-device "$@" --platform ios --udid "$device" --session "$session"
-  fi
-}
-
-# Renews the lease once half its TTL has passed, so a long dev loop keeps its device.
-renew_if_due() {
-  deadline=$(state_get ttlDeadline)
-  ttl=$(state_get ttlMs)
-  [ -n "$deadline" ] && [ -n "$ttl" ] || return 0
-  now=$(($(date +%s) * 1000))
-  [ $((deadline - now)) -lt $((ttl / 2)) ] || return 0
-  renew_lease >/dev/null
-}
-
-renew_lease() {
-  id=$(state_get leaseId)
-  out=$(simlock lease renew "$id" 2>&1) || {
-    echo "$out" >&2
-    die "lease $id could not be renewed (expired or released); lease again"
-  }
-  state_set ttlDeadline "$(json_field "$out" ttlDeadline)"
-  echo "renewed $id until $(date -r $(($(json_field "$out" ttlDeadline) / 1000)) +%H:%M:%S)"
+  (
+    load_eas_env
+    export AGENT_DEVICE_SESSION="$session"
+    exec pnpm exec agent-device "$@" --platform "$(state_get platform)"
+  )
 }
 
 # Detaches a command from the calling shell, so no tool time limit kills it halfway:
@@ -263,464 +210,78 @@ EOF
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
 
 # ---------------------------------------------------------------------------------------------
-# lease
+# EAS sessions
 
-write_grant() {
-  grant=$1
-  platform=$2
-  id=$(json_field "$grant" lease.id)
-  [ -n "$id" ] || die "simlock answered without a lease: $grant"
-  # Until the lane's state names the lease, a failure here must not strand the device.
-  trap 'simlock release "$id" >/dev/null 2>&1 || true' EXIT
-  # What agent-device drives: the simulator's UDID (driverDeviceId) on iOS; on Android the
-  # emulator's adb serial, which simlock reports as the device's address (its driverDeviceId
-  # there is the AVD name, which no adb command accepts).
-  device=$(json_field "$grant" device.driverDeviceId)
-  if [ "$platform" = android ]; then
-    address=$(json_field "$grant" device.address)
-    [ -n "$address" ] || die "simlock granted an Android device without an adb serial: $grant"
-    device=$address
-  fi
-  state_set \
-    platform "$platform" \
-    leaseId "$id" \
-    agentId "$agent_id" \
-    session "$session" \
-    device "$device" \
-    model "$(json_field "$grant" device.spec.model)" \
-    os "$(json_field "$grant" device.spec.osVersion)" \
-    mode "$(json_field "$grant" device.mode)" \
-    deviceSet "$(json_field "$grant" environment.SIMLOCK_IOS_DEVICE_SET)" \
-    adbPort "$(json_field "$grant" environment.ANDROID_ADB_SERVER_PORT)" \
-    ttlMs "$(json_field "$grant" lease.ttlMs)" \
-    ttlDeadline "$(json_field "$grant" lease.ttlDeadline)"
-  trap - EXIT
-  # The lane's agent-device session name is reused across leases; one left over from a lease
-  # that died (or another device) would refuse this device ("owned by session"). Close it.
-  close_stale_session
-}
-
-# Closes this lane's agent-device session wherever it is, without needing a lease: the way to
-# free a device agent-device still thinks this lane holds after a crash.
-close_stale_session() {
-  pnpm exec agent-device close --session "$session" >/dev/null 2>&1 || true
-  [ -z "${AGENT_DEVICE_SIMLOCK_STATE_DIR:-}" ] \
-    || AGENT_DEVICE_STATE_DIR=$AGENT_DEVICE_SIMLOCK_STATE_DIR pnpm exec agent-device close --session "$session" >/dev/null 2>&1 || true
-}
-
-lease_summary() {
-  echo "leased: $(state_get leaseId) $(state_get model) $(state_get os) ($(state_get mode)) $(state_get device) for $agent_id until $(date -r $(($(state_get ttlDeadline) / 1000)) +%H:%M:%S)"
-}
-
-cmd_lease() {
-  platform=${1:?usage: device-lane.sh lease <ios|android> [model]}
-  case $platform in
-    ios)
-      [ "$(uname -s)" = Darwin ] || unavailable "the iOS simulator needs macOS"
-      command -v xcrun >/dev/null 2>&1 || unavailable "xcrun not found (Xcode command line tools)"
-      model=${2:-${APEX_DEVICE_MODEL:-iPhone 17 Pro}}
-      ;;
-    android) model=${2:-${APEX_DEVICE_MODEL:-Pixel 8}} ;;
-    *) usage ;;
-  esac
-  have_simlock || unavailable "no simlock CLI: add it to the workspace, or set SIMLOCK_BIN"
-
-  # Already leased: keep it when simlock still has it.
-  if [ -n "$(state_get leaseId)" ]; then
-    if renew_lease >/dev/null 2>&1; then
-      [ "$(state_get platform)" = "$platform" ] || die "this lane already holds a $(state_get platform) lease; release it first"
-      lease_summary
-      return 0
-    fi
-    echo "the lane's lease $(state_get leaseId) is gone; leasing again" >&2
-    rm -f "$state"
-  fi
-
-  req="$state_dir/lease-request"
-  pid=$(cat "$req.log.pid" 2>/dev/null || true)
-  if ! alive "$pid" && [ ! -f "$req.log.exit" ]; then
-    rm -f "$req.out" "$req.log" "$req.log.pid"
-    echo "$platform" >"$req.platform"
-    set -- lease --platform "$platform" --device "$model" --detach \
-      --ttl "${APEX_LEASE_TTL:-60m}" --timeout "${APEX_LEASE_TIMEOUT:-30m}" --agent-id "$agent_id"
-    [ -n "${APEX_DEVICE_OS:-}" ] && set -- "$@" --os "$APEX_DEVICE_OS"
-    [ -n "${APEX_DEVICE_MODE:-}" ] && set -- "$@" --mode "$APEX_DEVICE_MODE"
-    if [ -x "$root/node_modules/.bin/simlock" ]; then
-      set -- pnpm exec simlock "$@"
-    else
-      # shellcheck disable=SC2086
-      set -- $SIMLOCK_BIN "$@"
-    fi
-    detach "$req.log" --out "$req.out" env SIMLOCK_AGENT_ID="$agent_id" "$@"
-    echo "requested a $model ($platform) for $agent_id" >&2
-  fi
-  platform=$(cat "$req.platform")
-
-  waited=0
-  limit=${APEX_LEASE_WAIT:-540}
-  while [ ! -f "$req.log.exit" ]; do
-    if [ "$waited" -ge "$limit" ]; then
-      echo "queued: $(grep '"stage"' "$req.log" 2>/dev/null | tail -n 1 || echo 'waiting for simlock')" >&2
-      echo "still waiting for a device; run 'device-lane.sh lease $platform' again to keep waiting" >&2
-      exit 2
-    fi
-    sleep 3
-    waited=$((waited + 3))
-  done
-
-  code=$(cat "$req.log.exit")
-  grant=$(tail -n 1 "$req.out" 2>/dev/null || true)
-  err=$(grep '"error"' "$req.log" 2>/dev/null | tail -n 1 || true)
-  rm -f "$req.out" "$req.log.pid" "$req.log.exit" "$req.platform"
-  case $code in
-    0)
-      write_grant "$grant" "$platform"
-      rm -f "$req.log"
-      lease_summary
-      ;;
-    10 | 11)
-      echo "busy: no $platform device for $agent_id within ${APEX_LEASE_TIMEOUT:-30m} ($err)" >&2
-      exit 75
-      ;;
-    12) unavailable "simlock cannot provide that device: $err" ;;
-    13)
-      # The lane lost its state but simlock still holds a lease for its requester id, which
-      # only this worktree uses. Give it back and ask again.
-      old=$(printf '%s\n' "$err" | grep -oE 'lse_[A-Za-z0-9_-]+' | head -n 1)
-      [ -n "$old" ] || die "simlock: $err"
-      echo "releasing the lane's orphaned lease $old" >&2
-      simlock release "$old" >/dev/null
-      exec "$self" lease "$platform" "$model"
-      ;;
-    *) die "simlock lease failed (exit $code): $err" ;;
-  esac
-}
-
-# ---------------------------------------------------------------------------------------------
-# build
-
-acquire_build_slot() {
-  slots=${APEX_BUILD_SLOTS:-1}
-  base=${APEX_BUILD_LOCK:-/tmp/apex-build.lock}
-  deadline=$(($(date +%s) + ${APEX_BUILD_WAIT:-3600}))
-  said=0
-  while :; do
-    i=1
-    while [ "$i" -le "$slots" ]; do
-      lock="$base.$i"
-      if mkdir "$lock" 2>/dev/null; then
-        echo $$ >"$lock/pid"
-        echo "$root" >"$lock/root"
-        echo "$1" >"$lock/log"
-        slot=$lock
-        return 0
-      fi
-      pid=$(cat "$lock/pid" 2>/dev/null || true)
-      # No pid yet means its owner is still starting, unless that was long ago.
-      if { [ -n "$pid" ] && ! alive "$pid"; } \
-        || { [ -z "$pid" ] && [ -z "$(find "$lock" -maxdepth 0 -mmin -1)" ]; }; then
-        rm -rf "$lock"
-        continue
-      fi
-      i=$((i + 1))
-    done
-    [ "$(date +%s)" -lt "$deadline" ] || {
-      echo "busy: no build slot within ${APEX_BUILD_WAIT:-3600}s"
-      exit 75
-    }
-    if [ $((said % 20)) -eq 0 ]; then
-      echo "waiting for a build slot: $(for l in "$base".*; do printf '%s ' "$(cat "$l/root" 2>/dev/null)"; done)"
-    fi
-    said=$((said + 1))
-    sleep 3
-  done
-}
-
-# Runs detached, output in the log (see cmd_build).
-build_job() {
-  platform=$1
-  profile=$2
-  log=$3
-  started=$(date +%s)
-  # The native build cache (tools/expo-build-cache, ADR 0010), shared with `expo run`: keyed by
-  # the OTA fingerprint, so a JS-only change installs a cached binary with this checkout's JS
-  # swapped in instead of compiling native code. A miss builds and fills the cache.
-  # APEX_BUILD_CACHE=0 always builds.
-  cache_cli="$root/tools/expo-build-cache/cli.js"
-  native_fp=
-  if [ "${APEX_BUILD_CACHE:-1}" != 0 ] && [ -f "$cache_cli" ]; then
-    if native_fp=$(node "$cache_cli" fingerprint "$platform" "$mobile"); then
-      echo "native fingerprint ($platform): $native_fp"
-      if artifact=$(node "$cache_cli" resolve "$platform" "$profile" "$mobile" "$native_fp" "$state_dir/build-cache/$platform-$profile"); then
-        echo "$artifact" >"$log.artifact"
-        echo "$artifact" >"$state_dir/artifact-$platform"
-        echo "build cache: hit, no native build ($(($(date +%s) - started))s)"
-        echo "built $artifact"
-        return 0
-      fi
-      echo "build cache: miss for $platform $profile $native_fp; building"
-    else
-      native_fp=
-      echo "build cache: no fingerprint; building without the cache"
-    fi
-  fi
-  acquire_build_slot "$log"
-  trap 'rm -rf "$slot"' EXIT
-  trap 'exit 143' INT TERM
-  echo "build slot $slot; $platform $profile of $root at $(git rev-parse --short HEAD)"
-  case $profile in release) config=Release ;; debug) config=Debug ;; esac
-  cd "$mobile"
-  # One build profile for every binary (ADR 0007): appduct is linked in Debug and Release.
-  export APPDUCT_ENABLED=1 LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
-  # Precompiled Expo Modules (on by default since SDK 56) keep a cold iOS build short; nothing
-  # in a lane may turn them off.
-  unset WITH_ROZENITE EXPO_USE_PRECOMPILED_MODULES
-  # A lane binary takes no OTA update unless APEX_LANE_OTA=on (the OTA check): its embedded JS
-  # talks to an OTA URL nothing listens on, so a check always runs the JS under test.
-  if [ "${APEX_LANE_OTA:-off}" != on ] && [ "$profile" = release ]; then
-    EXPO_PUBLIC_OTA_URL=$(node -p 'require(process.argv[1]).OTA_OFF_URL' "$root/tools/expo-build-cache/lib.js")
-    export EXPO_PUBLIC_OTA_URL
-  fi
-  case $platform in
-    ios)
-      pnpm exec expo prebuild --platform ios --no-install
-      (cd ios && pod install)
-      ws=$(ls -d ios/*.xcworkspace | head -n 1)
-      name=$(basename "$ws" .xcworkspace)
-      # A generic destination fits any simulator, so the device can be leased after the build
-      # starts; ARCHS keeps it to this Mac's architecture. -quiet leaves warnings and errors.
-      xcodebuild -quiet -workspace "$ws" -scheme "$name" -configuration "$config" -sdk iphonesimulator \
-        -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ios \
-        ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO
-      artifact="$mobile/build/ios/Build/Products/$config-iphonesimulator/$name.app"
-      ;;
-    android)
-      export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
-      [ -n "${JAVA_HOME:-}" ] || JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null || true)
-      export JAVA_HOME
-      pnpm exec expo prebuild --platform android --no-install
-      (cd android && ./gradlew ":app:assemble$config")
-      artifact="$mobile/android/app/build/outputs/apk/$profile/app-$profile.apk"
-      ;;
-  esac
-  [ -e "$artifact" ] || {
-    echo "build finished but $artifact is missing"
-    exit 1
-  }
-  # Date the binary's OTA baseline, as a cache hit does (tools/expo-build-cache, laneOta).
-  if [ "$platform" = ios ] && [ "$profile" = release ] && [ -f "$cache_cli" ]; then
-    node "$cache_cli" stamp "$artifact" "$mobile" || echo "could not date the binary's OTA baseline"
-  fi
-  # Fill the cache under the fingerprint computed before the build.
-  if [ -n "$native_fp" ]; then
-    node "$cache_cli" store "$platform" "$profile" "$native_fp" "$artifact" "$(git rev-parse --short HEAD)" \
-      || echo "build cache: could not store the build (the build itself is fine)"
-  fi
-  echo "$artifact" >"$log.artifact"
-  echo "$artifact" >"$state_dir/artifact-$platform"
-  echo "built $artifact ($(($(date +%s) - started))s)"
-}
-
-cmd_build() {
-  platform=${1:-}
-  profile=${2:-}
-  case $platform in
-    ios)
-      [ "$(uname -s)" = Darwin ] || unavailable "iOS builds need macOS"
-      command -v xcodebuild >/dev/null 2>&1 || unavailable "xcodebuild not found (Xcode)"
-      command -v pod >/dev/null 2>&1 || unavailable "CocoaPods (pod) not found"
-      ;;
-    android)
-      [ -d "${ANDROID_HOME:-$HOME/Library/Android/sdk}" ] || unavailable "no Android SDK (ANDROID_HOME)"
-      ;;
-    *) usage ;;
-  esac
-  case $profile in release | debug) ;; *) usage ;; esac
-  # One build per worktree at a time. A second one would prebuild into the same ios/ and
-  # android/ directories and DerivedData as the one in flight.
-  running=$(cat "$state_dir/build.running" 2>/dev/null || true)
-  if [ -n "$running" ] && [ ! -f "$running.exit" ] && alive "$(cat "$running.pid" 2>/dev/null)"; then
-    die "a build of this worktree is still running: wait for $running.exit (cat it), then build again"
-  fi
-  log="$state_dir/logs/build-$platform-$profile-$(date +%Y%m%d-%H%M%S).log"
-  mkdir -p "$state_dir"
-  echo "$log" >"$state_dir/build.running"
-  # The detached build runs from a copy of this script: sh reads a script as it runs, so a
-  # checkout or merge that rewrites device-lane.sh mid-build would derail the build.
-  cp "$self" "$state_dir/device-lane.build.sh"
-  detach "$log" sh "$state_dir/device-lane.build.sh" __build "$platform" "$profile" "$log"
-  echo "$log"
-}
-
-cmd_install() {
-  require_lease
-  platform=$(state_get platform)
-  path=${1:-$(cat "$state_dir/artifact-$platform" 2>/dev/null || true)}
-  [ -n "$path" ] && [ -e "$path" ] || die "nothing to install: run 'device-lane.sh build $platform release' and wait for its .exit"
-  renew_if_due
-  agent_device install "$app_id" "$path"
-  case $path in
-    *Debug-iphonesimulator* | *-debug.apk) state_set installed debug ;;
-    *) state_set installed release ;;
-  esac
-}
-
-# ---------------------------------------------------------------------------------------------
-# metro
-
-port_free() {
+# One line per session: id, name, status.
+list_sessions() {
+  out=$(eas simulator:list --json --non-interactive 2>/dev/null) || return 1
   node -e '
-    const s = require("net").createServer().once("error", () => process.exit(1))
-      .once("listening", () => s.close(() => process.exit(0))).listen(Number(process.argv[1]), "127.0.0.1");
-  ' "$1"
+    let v; try { v = JSON.parse(process.argv[1]); } catch { process.exit(1); }
+    if (!Array.isArray(v)) v = v.sessions ?? v.items ?? v.data ?? [];
+    for (const s of v) console.log([s.id, s.name ?? "", s.status ?? s.state ?? ""].join("\t"));
+  ' "$out"
 }
 
-cmd_metro() {
-  case ${1:-} in
-    start)
-      require_lease
-      pid=$(state_get metroPid)
-      if alive "$pid"; then
-        echo "metro: already on port $(state_get metroPort) (pid $pid)"
-        return 0
-      fi
-      port=$((8100 + $(printf '%s' "$lane" | cksum | cut -d ' ' -f 1) % 100))
-      tries=0
-      until port_free "$port"; do
-        port=$((port + 1))
-        tries=$((tries + 1))
-        [ "$tries" -lt 100 ] || die "no free port for Metro from 8100"
-      done
-      log="$state_dir/logs/metro-$(date +%Y%m%d-%H%M%S).log"
-      detach "$log" env WITH_ROZENITE=true APPDUCT_ENABLED=1 \
-        pnpm --filter @apex/mobile exec expo start --dev-client --port "$port"
-      state_set metroPort "$port" metroPid "$(cat "$log.pid")" metroLog "$log"
-      waited=0
-      until curl -fs "http://127.0.0.1:$port/status" 2>/dev/null | grep -q running; do
-        [ ! -f "$log.exit" ] || die "metro exited: $(tail -n 5 "$log")"
-        [ "$waited" -lt 120 ] || die "metro did not answer on port $port within 120s; log $log"
-        sleep 2
-        waited=$((waited + 2))
-      done
-      echo "metro: port $port (WITH_ROZENITE=true), log $log"
-      ;;
-    stop)
-      pid=$(state_get metroPid)
-      # The runner made Metro a process group leader: stop the whole group.
-      if alive "$pid"; then kill -TERM "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true; fi
-      [ -f "$state" ] && state_set metroPid "" metroPort "" metroLog "" rozeniteSession "" rozeniteTarget ""
-      echo "metro: stopped"
-      ;;
-    *) usage ;;
+is_live() {
+  case $(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]') in
+    *stop* | *expire* | *terminat* | *ended* | *fail* | *error* | *cancel*) return 1 ;;
   esac
+}
+
+# Stops every live session named like this lane's: what a lease that died after `start` leaves.
+sweep_orphans() {
+  list_sessions | while IFS="$tab" read -r sid name st; do
+    if [ "$name" = "$session" ] && is_live "$st"; then
+      eas simulator:stop --id "$sid" --non-interactive >/dev/null 2>&1 || true
+    fi
+  done
+}
+
+session_live() {
+  st=$(list_sessions | awk -F"$tab" -v id="$1" '$1 == id { print $3 }') || return 1
+  [ -n "$st" ] || return 1
+  is_live "$st"
 }
 
 # ---------------------------------------------------------------------------------------------
-# ad
+# egress
 
-cmd_ad() {
-  [ $# -gt 0 ] || usage
-  require_lease
-  for a in "$@"; do
-    case $a in
-      --udid | --udid=* | --serial | --serial=* | --device | --device=* | --session | --session=* | --platform | --platform=* | --ios-simulator-device-set*)
-        die "device-lane.sh pins the device and session itself; drop $a" ;;
-      --shutdown) die "the leased device stays up; simlock reclaims it on release" ;;
-    esac
-  done
-  case $1 in
-    install-from-source | react-devtools | daemon | connect | disconnect | prepare)
-      die "agent-device $1 is not part of a lane (it downloads, or changes the host)" ;;
-  esac
-  renew_if_due
-  case $1 in
-    replay)
-      # replay starts a private daemon by default, and its steps lose the device set
-      # (agent-device 0.21.20). Run it in the shared daemon, inside the lane's session, which
-      # already carries the set: open the app first, so the session exists.
-      agent_device open "$app_id" >/dev/null
-      [ "$(state_get platform)" = android ] || {
-        AGENT_DEVICE_STATE_DIR=${AGENT_DEVICE_STATE_DIR:-$HOME/.agent-device}
-        export AGENT_DEVICE_STATE_DIR
-      }
-      ;;
-    test)
-      # `agent-device test` gives each script a session of its own, which loses the device
-      # set too; run the scripts one by one with replay instead.
-      shift
-      [ $# -gt 0 ] || die "usage: device-lane.sh ad test <script.ad|glob>..."
-      passed=0
-      failed=
-      for pattern in "$@"; do
-        # shellcheck disable=SC2086
-        for f in $pattern; do
-          [ -f "$f" ] || die "no such script: $f"
-          if "$self" ad replay "$f"; then
-            passed=$((passed + 1))
-          else
-            failed="$failed $f"
-          fi
-        done
-      done
-      echo "e2e: $passed passed${failed:+, failed:$failed}"
-      [ -z "$failed" ]
-      return
-      ;;
-  esac
-  port=$(state_get metroPort)
-  if [ "$1" = open ] && [ -n "$port" ]; then
-    # A debug build is an Expo dev client: opened bare it shows its launcher. Hand it the
-    # lane's Metro through the dev-client link, unless the caller opens a URL of their own.
-    if [ "$(state_get installed)" = debug ] && [ "${2:-}" = "$app_id" ] && { [ $# -eq 2 ] || case ${3:-} in -*) true ;; *) false ;; esac; }; then
-      host=127.0.0.1
-      [ "$(state_get platform)" = android ] && host=10.0.2.2
-      # On a fresh device iOS asks "Open in Apex Factory?" and agent-device leaves that
-      # prompt up for this link (seen with 0.21.20): accept it, then open as asked, which
-      # returns the snapshot. The first load bundles over Metro; wait for text after it.
-      agent_device open "$2" "apexfactory://expo-development-client/?url=http%3A%2F%2F$host%3A$port" >/dev/null 2>&1 || true
-      agent_device alert accept >/dev/null 2>&1 || true
-    fi
-    case " $* " in *" --metro-port"*) ;; *) set -- "$@" --metro-host 127.0.0.1 --metro-port "$port" ;; esac
-  fi
-  ad_with_retry "$@"
+start_egress() {
+  log="$state_dir/logs/egress-$(date +%Y%m%d-%H%M%S).log"
+  # shellcheck disable=SC2016
+  detach "$log" sh -c 'cd "$1" && exec npx -y eas-cli@27.4.1 simulator:egress' _ "$mobile"
+  state_set egressPid "$(cat "$log.pid")" egressLog "$log"
+  sleep 3
+  alive "$(state_get egressPid)" || die "the egress tunnel exited: $(tail -n 3 "$log")"
 }
 
-# Runs an agent-device command once more when it failed in a way that is about the host, not
-# the app: CoreSimulator answering late, the XCUITest runner lost or restarted (another lane's
-# client timeout can make agent-device recycle runners), the daemon connection dropped. A
-# check that fails on the app's state fails the same way twice, so a retry never hides it.
-# Exit 76 after the retry: the device side is unhealthy, which is not the app's failure.
-ad_with_retry() {
-  out="$state_dir/logs/ad-last.out"
-  mkdir -p "$state_dir/logs"
-  if agent_device "$@" >"$out" 2>&1; then rc=0; else rc=$?; fi
-  cat "$out"
-  [ "$rc" -ne 0 ] || return 0
-  if grep -qiE 'did not answer within|runner (exited|crashed|disconnected|not running|lost)|xctest|ECONNRESET|ECONNREFUSED|socket hang up|daemon (restarted|unavailable)|session .*(closed|not found)|SESSION_NOT_FOUND|DEVICE_NOT_READY' "$out"; then
-    echo "device-lane: agent-device $1 hit a device-side failure; retrying once" >&2
-    renew_if_due
-    if agent_device "$@"; then return 0; fi
-    echo "device-lane: agent-device $1 failed twice on the device side (see above); the device or its runner is unhealthy — release, lease again, and retry once; report unavailable if it repeats" >&2
-    exit 76
-  fi
-  exit "$rc"
-}
-
-cmd_screenshot() {
-  name=${1:?usage: device-lane.sh screenshot <name>}
-  case $name in *[!A-Za-z0-9._-]* | .*) die "screenshot name: letters, digits, . _ - only" ;; esac
-  require_lease
-  shots="$main_root/.worktrees/sim-shots"
-  mkdir -p "$shots"
-  renew_if_due
-  agent_device screenshot "$shots/$name.png"
-  echo "screenshot: $shots/$name.png"
+stop_egress() {
+  pid=$(state_get egressPid)
+  # The runner made the client a process group leader: stop the whole group.
+  if alive "$pid"; then kill -TERM "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true; fi
+  [ ! -f "$state" ] || state_set egressPid "" egressLog ""
 }
 
 # ---------------------------------------------------------------------------------------------
 # appduct
 
 appduct() { (cd "$mobile" && pnpm exec appduct "$@"); }
+
+# The address and port the app will be told to reach the appduct daemon on: they must be in the
+# session's egress allow-list before it starts. A link is minted to read them, then revoked.
+appduct_endpoint() {
+  if [ -n "${APEX_APPDUCT_ENDPOINT:-}" ]; then
+    echo "$APEX_APPDUCT_ENDPOINT"
+    return 0
+  fi
+  out=$(appduct sessions link --json) || die "appduct sessions link failed (the endpoint is needed for egress): $out"
+  addr=$(json_field "$out" data.endpoint.address)
+  port=$(json_field "$out" data.endpoint.port)
+  [ -n "$addr" ] && [ -n "$port" ] || die "appduct answered without an endpoint: set APEX_APPDUCT_ENDPOINT=host:port"
+  probe=$(json_field "$out" data.sessionId)
+  [ -z "$probe" ] || appduct sessions revoke "$probe" >/dev/null 2>&1 || true
+  echo "$addr:$port"
+}
 
 appduct_session() {
   sid=$(state_get appductSession)
@@ -734,14 +295,18 @@ cmd_appduct() {
   case $sub in
     link)
       require_lease
-      renew_if_due
+      alive "$(state_get egressPid)" || {
+        echo "the egress tunnel was down; starting it again" >&2
+        start_egress
+      }
       out=$(appduct sessions link --json) || die "appduct sessions link failed: $out"
       url=$(json_field "$out" data.deepLink)
       sid=$(json_field "$out" data.sessionId)
       [ -n "$url" ] && [ -n "$sid" ] || die "appduct answered without a link: $out"
-      # agent-device delivers the link inside the leased device set (appduct's own --open
-      # only sees the default set). It accepts iOS's "Open in Apex Factory?" prompt only when
-      # the app was not already in front; otherwise the prompt stays up, so accept it here.
+      advertised="$(json_field "$out" data.endpoint.address):$(json_field "$out" data.endpoint.port)"
+      [ "$advertised" = "$(state_get appductEndpoint)" ] \
+        || die "the link advertises $advertised but the session only reaches $(state_get appductEndpoint): release and lease again"
+      # The XCUITest prompt "Open in Apex Factory?" stays up for a link into a running app: accept it.
       agent_device open "$app_id" "$url" >/dev/null
       waited=0
       until appduct tools ls "$sid" --limit 1 >/dev/null 2>&1; do
@@ -773,120 +338,340 @@ cmd_appduct() {
 }
 
 # ---------------------------------------------------------------------------------------------
-# rozenite
+# build
 
-rozenite() {
-  port=$(state_get metroPort)
-  [ -n "$port" ] || die "no Metro for this lane: build debug, install, 'metro start', then open the app"
-  (cd "$mobile" && pnpm exec rozenite agent --port "$port" "$@")
+# Runs detached, output in the log (see cmd_build).
+build_job() {
+  platform=$1
+  log=$2
+  started=$(date +%s)
+  echo "lane binary ($platform) of $root at $(git rev-parse --short HEAD)"
+  id=$("$root/.agents/scripts/lane-binary.sh" "$platform") || exit 1
+  echo "$id" >"$log.artifact"
+  echo "$id $(git rev-parse HEAD)" >"$state_dir/build-$platform"
+  echo "built $id ($(($(date +%s) - started))s)"
 }
 
-rozenite_session() {
-  sid=$(state_get rozeniteSession)
-  if [ -n "$sid" ]; then
-    echo "$sid"
+# A build of this platform running now, if any: its log.
+build_in_flight() {
+  running=$(cat "$state_dir/build.running" 2>/dev/null || true)
+  [ -n "$running" ] && [ ! -f "$running.exit" ] && alive "$(cat "$running.pid" 2>/dev/null)" || return 1
+  case $running in *"/build-$1-"*) echo "$running" ;; *) return 1 ;; esac
+}
+
+cmd_build() {
+  platform=${1:-}
+  profile=${2:-release}
+  case $platform in ios | android) ;; *) usage ;; esac
+  case $profile in
+    release) ;;
+    debug) die "there are no debug builds: a lane binary is a release build (ADR 0028)" ;;
+    *) usage ;;
+  esac
+  require_tools
+  # One build per worktree at a time.
+  running=$(cat "$state_dir/build.running" 2>/dev/null || true)
+  if [ -n "$running" ] && [ ! -f "$running.exit" ] && alive "$(cat "$running.pid" 2>/dev/null)"; then
+    die "a build of this worktree is still running: wait for $running.exit (cat it), then build again"
+  fi
+  log="$state_dir/logs/build-$platform-$(date +%Y%m%d-%H%M%S).log"
+  mkdir -p "$state_dir"
+  echo "$log" >"$state_dir/build.running"
+  # The detached build runs from a copy of this script: sh reads a script as it runs, so a
+  # checkout or merge that rewrites device-lane.sh mid-build would derail the build.
+  cp "$self" "$state_dir/device-lane.build.sh"
+  detach "$log" sh "$state_dir/device-lane.build.sh" __build "$platform" "$log"
+  echo "$log"
+}
+
+# ---------------------------------------------------------------------------------------------
+# lease
+
+# The build id of the lane binary for HEAD, building it first when needed; exits 2 while it runs.
+lane_build_id() {
+  rec=$(cat "$state_dir/build-$platform" 2>/dev/null || true)
+  if [ -n "$rec" ] && [ "${rec#* }" = "$(git rev-parse HEAD)" ]; then
+    echo "${rec%% *}"
     return 0
   fi
-  # The lane's Metro has its own port, so normally only the lane's app is connected to it; a
-  # target is named after the device. With more than one, APEX_ROZENITE_TARGET picks by name.
-  targets=$(rozenite targets)
-  want=${APEX_ROZENITE_TARGET:-}
-  target=$(node -e '
-    let t; try { t = JSON.parse(process.argv[1]); } catch { process.exit(1); }
-    t = Array.isArray(t) ? t : (t.items ?? t.targets ?? t.data ?? []);
-    const hits = process.argv[2] ? t.filter((x) => String(x.name ?? "").includes(process.argv[2])) : t;
-    if (hits.length !== 1) process.exit(1);
-    console.log(hits[0].id ?? hits[0].deviceId);
-  ' "$targets" "$want") || die "need exactly one Rozenite target${want:+ named '$want'} (is the debug app open on this lane's Metro? APEX_ROZENITE_TARGET picks one): $targets"
-  out=$(rozenite session create --deviceId "$target") || die "rozenite session create failed: $out"
-  sid=$(json_field "$out" id)
-  [ -n "$sid" ] || sid=$(json_field "$out" sessionId)
-  [ -n "$sid" ] || sid=$(json_field "$out" session.id)
-  [ -n "$sid" ] || die "rozenite answered without a session id: $out"
-  state_set rozeniteSession "$sid" rozeniteTarget "$target"
-  echo "$sid"
+  if ! log=$(build_in_flight "$platform"); then
+    log=$(cmd_build "$platform")
+    echo "building the lane binary for $platform (log $log)" >&2
+  fi
+  waited=0
+  limit=${APEX_LEASE_WAIT:-540}
+  while [ ! -f "$log.exit" ]; do
+    if [ "$waited" -ge "$limit" ]; then
+      echo "still building the lane binary; run 'device-lane.sh lease $platform' again to keep waiting" >&2
+      exit 2
+    fi
+    sleep 3
+    waited=$((waited + 3))
+  done
+  [ "$(cat "$log.exit")" = 0 ] || die "the lane binary build failed: $(tail -n 5 "$log")"
+  cat "$log.artifact"
 }
 
-cmd_rozenite() {
+# The finished production build with this checkout's native fingerprint.
+production_build_id() {
+  out=$(export APPDUCT_ENABLED=1 WITH_ROZENITE=; eas fingerprint:generate --platform "$platform" \
+    --build-profile production --json --non-interactive) || die "eas fingerprint:generate failed"
+  hash=$(json_field "$out" hash)
+  case $hash in
+    *[!0-9a-f]* | "") die "eas fingerprint:generate returned no hash" ;;
+  esac
+  found=$(eas build:list --platform "$platform" --build-profile production --status finished \
+    --fingerprint-hash "$hash" --limit 1 --json --non-interactive) || die "eas build:list failed"
+  id=$(json_field "$found" 0.id)
+  [ -n "$id" ] || die "no finished production build has fingerprint $hash (a native change?)"
+  echo "$id"
+}
+
+lease_summary() {
+  echo "leased: $(state_get sessionId) $(state_get platform) build $(state_get buildId) ($(state_get buildKind)) for $session until $(fmt_time "$(state_get expiresAt)")"
+}
+
+cmd_lease() {
+  platform=${1:-}
+  case $platform in ios | android) shift ;; *) usage ;; esac
+  kind=lane
+  given=
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --production) kind=production ;;
+      --build-id)
+        kind=given
+        given=${2:?usage: device-lane.sh lease <ios|android> [--production | --build-id <id>]}
+        shift
+        ;;
+      -*) usage ;;
+      *) echo "ignoring '$1': Expo Simulators pick the device model" >&2 ;;
+    esac
+    shift
+  done
+  require_tools
+
+  # Already leased: keep it while EAS still has it.
+  if [ -n "$(state_get sessionId)" ]; then
+    if [ -f "$eas_env" ] && session_live "$(state_get sessionId)"; then
+      [ "$(state_get platform)" = "$platform" ] || die "this lane already holds a $(state_get platform) session; release it first"
+      lease_summary
+      return 0
+    fi
+    echo "the lane's session $(state_get sessionId) is gone; leasing again" >&2
+    cmd_release >/dev/null
+  fi
+
+  case $kind in
+    lane) build_id=$(lane_build_id) ;;
+    production) build_id=$(production_build_id) ;;
+    given) build_id=$given ;;
+  esac
+  [ -n "$build_id" ] || die "no build to install"
+
+  endpoint=$(appduct_endpoint)
+
+  # Until the state names the session, a failure must not strand it.
+  trap 'cmd_release >/dev/null 2>&1 || true' EXIT
+  sweep_orphans
+  max=${APEX_SESSION_MAX_MINUTES:-40}
+  idle=${APEX_SESSION_IDLE_MINUTES:-15}
+  set -- simulator:start -p "$platform" --type agent-device --build-id "$build_id" \
+    --max-duration-minutes "$max" --max-idle-time-minutes "$idle" --name "$session" --tag apex \
+    --json --non-interactive --egress local --egress-allow "$endpoint"
+  for extra in ${APEX_EGRESS_ALLOW:-}; do set -- "$@" --egress-allow "$extra"; done
+  mkdir -p "$state_dir/logs"
+  echo "starting a $platform simulator with build $build_id (about a minute)" >&2
+  if ! out=$(eas "$@" 2>"$state_dir/logs/start.err"); then
+    err=$(tail -n 5 "$state_dir/logs/start.err")
+    trap - EXIT
+    cmd_release >/dev/null 2>&1 || true
+    case $err in
+      *[Nn]ot\ logged\ in* | *EXPO_TOKEN* | *uthenticat*) unavailable "not signed in to EAS: $err" ;;
+      *oncurren* | *apacity* | *[Ll]imit*) echo "busy: EAS refused the session: $err" >&2; exit 75 ;;
+    esac
+    die "eas simulator:start failed: $err"
+  fi
+  sid=$(json_field "$out" id)
+  [ -n "$sid" ] || die "eas simulator:start answered without a session id"
+  now=$(date +%s)
+  state_set \
+    platform "$platform" \
+    sessionId "$sid" \
+    session "$session" \
+    buildId "$build_id" \
+    buildKind "$kind" \
+    appductEndpoint "$endpoint" \
+    startedAt "$now" \
+    expiresAt "$((now + max * 60))"
+  [ -f "$eas_env" ] || die "eas simulator:start wrote no .env.eas-simulator"
+  start_egress
+  trap - EXIT
+  lease_summary
+}
+
+cmd_install() {
   require_lease
+  echo "installed by lease: build $(state_get buildId) ($(state_get buildKind))"
+}
+
+# ---------------------------------------------------------------------------------------------
+# ad
+
+cmd_ad() {
+  [ $# -gt 0 ] || usage
+  require_lease
+  for a in "$@"; do
+    case $a in
+      --udid | --udid=* | --serial | --serial=* | --device | --device=* | --session | --session=* | --platform | --platform=* | --ios-simulator-device-set*)
+        die "device-lane.sh pins the platform and session itself; drop $a" ;;
+      --shutdown) die "the session stays up; release stops it" ;;
+    esac
+  done
+  case $1 in
+    install-from-source | react-devtools | daemon | connect | disconnect | prepare)
+      die "agent-device $1 is not part of a lane (it downloads, or changes the host)" ;;
+  esac
+  case $1 in
+    replay)
+      # Run inside the lane's session, which must exist: open the app first.
+      agent_device open "$app_id" >/dev/null
+      ;;
+    test)
+      # Run the scripts one by one with replay, each in the lane's session.
+      shift
+      [ $# -gt 0 ] || die "usage: device-lane.sh ad test <script.ad|glob>..."
+      passed=0
+      failed=
+      for pattern in "$@"; do
+        # shellcheck disable=SC2086
+        for f in $pattern; do
+          [ -f "$f" ] || die "no such script: $f"
+          if "$self" ad replay "$f"; then
+            passed=$((passed + 1))
+          else
+            failed="$failed $f"
+          fi
+        done
+      done
+      echo "e2e: $passed passed${failed:+, failed:$failed}"
+      [ -z "$failed" ]
+      return
+      ;;
+  esac
+  ad_with_retry "$@"
+}
+
+# Runs an agent-device command once more when it failed in a way that is about the device side,
+# not the app: the remote runner lost or restarted, the daemon connection dropped. A check that
+# fails on the app's state fails the same way twice, so a retry never hides it. A command run
+# before `open` fails with SESSION_NOT_FOUND, which is not retried: open the app first.
+# Exit 76 after the retry: the device side is unhealthy, which is not the app's failure.
+ad_with_retry() {
+  out="$state_dir/logs/ad-last.out"
+  mkdir -p "$state_dir/logs"
+  if agent_device "$@" >"$out" 2>&1; then rc=0; else rc=$?; fi
+  cat "$out"
+  [ "$rc" -ne 0 ] || return 0
+  if grep -qiE 'did not answer within|runner (exited|crashed|disconnected|not running|lost)|xctest|ECONNRESET|ECONNREFUSED|socket hang up|daemon (restarted|unavailable)|DEVICE_NOT_READY' "$out"; then
+    echo "device-lane: agent-device $1 hit a device-side failure; retrying once" >&2
+    if agent_device "$@"; then return 0; fi
+    echo "device-lane: agent-device $1 failed twice on the device side (see above); the session or its runner is unhealthy — release, lease again, and retry once; report unavailable if it repeats" >&2
+    exit 76
+  fi
+  exit "$rc"
+}
+
+cmd_screenshot() {
+  name=${1:?usage: device-lane.sh screenshot <name>}
+  case $name in *[!A-Za-z0-9._-]* | .*) die "screenshot name: letters, digits, . _ - only" ;; esac
+  require_lease
+  shots="$main_root/.worktrees/sim-shots"
+  mkdir -p "$shots"
+  agent_device screenshot "$shots/$name.png"
+  echo "screenshot: $shots/$name.png"
+}
+
+cmd_record() {
   case ${1:-} in
-    targets) rozenite targets ;;
-    session) rozenite_session ;;
-    reset)
-      # `session stop` can hang on 2.4.0; a session also ends with Metro or the app.
-      state_set rozeniteSession "" rozeniteTarget ""
-      echo "rozenite: session forgotten"
+    start)
+      name=${2:?usage: device-lane.sh record start <name> | record stop}
+      case $name in *[!A-Za-z0-9._-]* | .*) die "recording name: letters, digits, . _ - only" ;; esac
+      require_lease
+      shots="$main_root/.worktrees/sim-shots"
+      mkdir -p "$shots"
+      agent_device record start "$shots/$name.mp4" --quality medium >/dev/null
+      state_set recording "$shots/$name.mp4"
+      echo "recording: $shots/$name.mp4"
       ;;
-    "") usage ;;
-    *)
-      sid=$(rozenite_session)
-      rozenite "$@" --session "$sid"
+    stop)
+      require_lease
+      file=$(state_get recording)
+      [ -n "$file" ] || die "no recording running in this lane"
+      agent_device record stop >/dev/null
+      state_set recording ""
+      echo "recorded: $file"
       ;;
+    *) die "usage: device-lane.sh record start <name> | record stop" ;;
   esac
 }
 
 # ---------------------------------------------------------------------------------------------
-# status, release
+# renew, status, release
+
+cmd_renew() {
+  require_lease
+  echo "no renewal on Expo Simulators: session $(state_get sessionId) ends at $(fmt_time "$(state_get expiresAt)"), or after ${APEX_SESSION_IDLE_MINUTES:-15} idle minutes"
+}
 
 cmd_status() {
-  echo "lane: $agent_id (agent-device session $session)"
-  if [ -n "$(state_get leaseId)" ]; then
+  require_tools
+  echo "lane: $session"
+  if [ -n "$(state_get sessionId)" ]; then
     lease_summary
-  elif [ -f "$state_dir/lease-request.log.pid" ] && alive "$(cat "$state_dir/lease-request.log.pid")"; then
-    echo "lease: queued ($(grep '"stage"' "$state_dir/lease-request.log" 2>/dev/null | tail -n 1))"
+    st=$(list_sessions 2>/dev/null | awk -F"$tab" -v id="$(state_get sessionId)" '$1 == id { print $3 }' || true)
+    echo "eas: session $(state_get sessionId) ${st:-not listed}"
+    if alive "$(state_get egressPid)"; then
+      echo "egress: pid $(state_get egressPid) allows $(state_get appductEndpoint)${APEX_EGRESS_ALLOW:+ $APEX_EGRESS_ALLOW}"
+    else
+      echo "egress: not running"
+    fi
   else
     echo "lease: none"
   fi
-  [ -n "$(state_get metroPort)" ] && echo "metro: port $(state_get metroPort) pid $(state_get metroPid)"
   [ -n "$(state_get appductSession)" ] && echo "appduct: session $(state_get appductSession)"
-  [ -n "$(state_get rozeniteSession)" ] && echo "rozenite: session $(state_get rozeniteSession)"
   for p in ios android; do
-    [ -f "$state_dir/artifact-$p" ] && echo "last build ($p): $(cat "$state_dir/artifact-$p")"
+    [ -f "$state_dir/build-$p" ] && echo "last binary ($p): $(cat "$state_dir/build-$p")"
+    if log=$(build_in_flight "$p"); then echo "building ($p): $log"; fi
   done
-  base=${APEX_BUILD_LOCK:-/tmp/apex-build.lock}
-  busy=0
-  for l in "$base".*; do
-    [ -d "$l" ] || continue
-    busy=$((busy + 1))
-    echo "build slot $(basename "$l"): $(cat "$l/root" 2>/dev/null) log $(cat "$l/log" 2>/dev/null)"
-  done
-  echo "build slots: $busy of ${APEX_BUILD_SLOTS:-1} busy"
-  if ! have_simlock; then
-    unavailable "no simlock CLI: add it to the workspace, or set SIMLOCK_BIN"
-  fi
-  if [ "$(uname -s)" = Darwin ] && ! command -v xcrun >/dev/null 2>&1; then
-    unavailable "xcrun not found (Xcode command line tools)"
-  fi
-  simlock status 2>&1 | grep -E '^(Daemon|Capacity|Queue|RAM)' || echo "simlock: no status (the daemon starts on the first lease)"
 }
 
 cmd_release() {
-  pid=$(cat "$state_dir/lease-request.log.pid" 2>/dev/null || true)
-  if alive "$pid"; then
-    # A queued request: stopping the waiting CLI withdraws it.
-    kill -TERM "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
-    rm -f "$state_dir"/lease-request.*
-    echo "withdrew the queued lease request"
+  require_tools
+  id=$(state_get sessionId)
+  if [ -n "$id" ] && [ -f "$eas_env" ]; then
+    # A recorder left running holds the session's recording; the agent-device session closes with it.
+    [ -z "$(state_get recording)" ] || agent_device record stop >/dev/null 2>&1 || true
+    sid=$(state_get appductSession)
+    [ -z "$sid" ] || appduct sessions revoke "$sid" >/dev/null 2>&1 || true
+    agent_device close >/dev/null 2>&1 || true
   fi
-  id=$(state_get leaseId)
-  if [ -z "$id" ]; then
-    # No lease, but agent-device may still hold this lane's session from a lease that died.
-    close_stale_session
-    echo "released: no lease held by $agent_id; closed its agent-device session ($session) if any"
-    return 0
+  stop_egress
+  failed=
+  if [ -n "$id" ]; then
+    out=$(eas simulator:stop --id "$id" --non-interactive 2>&1) || case $out in
+      *"not found"* | *"already"* | *stopped* | *ended* | *expired*) ;;
+      *) echo "$out" >&2; failed=1 ;;
+    esac
   fi
-  cmd_metro stop >/dev/null
-  # A recorder left running holds the simulator host's recording lock.
-  [ -z "$(state_get recording)" ] || agent_device record stop >/dev/null 2>&1 || true
-  sid=$(state_get appductSession)
-  [ -z "$sid" ] || appduct sessions revoke "$sid" >/dev/null 2>&1 || true
-  agent_device close >/dev/null 2>&1 || true
-  out=$(simlock release "$id" 2>&1) || case $out in
-    *UNKNOWN_LEASE* | *"not found"*) ;;
-    *) echo "$out" >&2 ;;
-  esac
+  rm -f "$eas_env"
+  sweep_orphans
+  if [ -n "$failed" ]; then
+    echo "could not stop session $id: run release again (it ends by itself within ${APEX_SESSION_IDLE_MINUTES:-15} idle minutes)" >&2
+    return 1
+  fi
   rm -f "$state"
-  echo "released: $id"
+  if [ -n "$id" ]; then echo "released: $id"; else echo "released: no session held by $session; stopped any leftover named like it"; fi
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -897,14 +682,12 @@ case $cmd in
   lease) cmd_lease "$@" ;;
   build) cmd_build "$@" ;;
   __build) build_job "$@" ;;
-  install) cmd_install "$@" ;;
-  metro) cmd_metro "$@" ;;
+  install) cmd_install ;;
   ad) cmd_ad "$@" ;;
   appduct) cmd_appduct "$@" ;;
-  rozenite) cmd_rozenite "$@" ;;
   screenshot) cmd_screenshot "$@" ;;
   record) cmd_record "$@" ;;
-  renew) require_lease && renew_lease ;;
+  renew) cmd_renew ;;
   status) cmd_status ;;
   release) cmd_release ;;
   *) usage ;;

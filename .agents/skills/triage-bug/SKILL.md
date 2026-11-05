@@ -75,22 +75,16 @@ Read-only inspection — reading a file, `git log`, calling the local API's
 `/openapi.json` — is fine and often the fastest evidence. Say what you read.
 
 **When only a running app reproduces it.** Try the cheaper levels first. If
-none can show the bug, lease one device and reproduce it there, through the
-lane script only (load the `agent-device` skill, and `appduct` and
-`rozenite` as you need them). A debug build gives you Metro, Rozenite's
-evidence and appduct's shortcuts:
+none can show the bug, start one simulator session and reproduce it there,
+through the lane script only (load the `agent-device` skill, and `appduct` as
+you need it). The lane binary gives you appduct's shortcuts:
 
 ```bash
-.agents/scripts/device-lane.sh build ios debug     # detached: prints <log>; poll <log>.exit
-.agents/scripts/device-lane.sh lease ios           # 0 leased; 2 queued (run again); 75 busy; 69 unavailable
-.agents/scripts/device-lane.sh install
-.agents/scripts/device-lane.sh metro start
+.agents/scripts/device-lane.sh lease ios           # 0 leased; 2 binary still building (run again); 75 busy; 69 unavailable
 .agents/scripts/device-lane.sh ad open com.callstack.apexfactory --foreground
 .agents/scripts/device-lane.sh appduct link                       # then appduct call open_route / a seed tool
-.agents/scripts/device-lane.sh rozenite network call --tool startRecording
 # reproduce with device-lane.sh ad …, then collect:
-.agents/scripts/device-lane.sh rozenite network call --tool listRequests
-.agents/scripts/device-lane.sh rozenite console call --tool getMessages
+.agents/scripts/device-lane.sh appduct events ls
 .agents/scripts/device-lane.sh screenshot bug<N>-1
 .agents/scripts/device-lane.sh release             # always, before the report
 ```
@@ -99,10 +93,10 @@ The deliverable is still a failing test: an agent-device replay script
 `apps/mobile/e2e/bug-<N>.ad` whose title is the claim (first comment line)
 and whose failing step is a named check (`is`, `wait`, `get`), not a crash or
 a timeout. Run it with `device-lane.sh ad replay apps/mobile/e2e/bug-<N>.ad`
-and keep the divergence it prints. Network, console and React evidence goes
-in the report's Reproduction section, in a code block. If a Release build is
-what shows the bug (an OTA or bundling problem), build `release` instead and
-skip Metro and Rozenite.
+and keep the divergence it prints. Events and snapshots go
+in the report's Reproduction section, in a code block. There is no Metro or
+Rozenite in a lane, so network and console evidence from the device is out
+of reach.
 
 `lease` exit 75 (busy) or 69 (unavailable): stop and hand off (Stopping
 early) with Blocked on: "a simulator run of apps/mobile/e2e/bug-<N>.ad",

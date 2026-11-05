@@ -1,8 +1,8 @@
 ---
 description: >-
   Proves a PR's simulator Done when lines and e2e replay scripts on a
-  simlock-leased iOS simulator — Release build of the PR's worktree,
-  agent-device checks, appduct shortcuts, Rozenite evidence on a failure — all
+  Expo Simulators iOS session — the lane binary of the PR's worktree,
+  agent-device checks and appduct shortcuts — all
   through .agents/scripts/device-lane.sh, and reports pass, fail, busy or
   unavailable. Posts the screenshots and a recording of the checks on the PR.
   Always releases the device. Never edits the app or installs
@@ -28,11 +28,10 @@ Load the `verify-mobile` skill with the `skill` tool and follow it exactly.
 Your task prompt carries the PR number, its branch, the Done when lines to
 check, any `e2e:` replay scripts, and the spec's Agent hooks.
 
-Every lease, build, install, device action, appduct call and Rozenite call
-goes through `.agents/scripts/device-lane.sh`, which leases the simulator
-from simlock and pins agent-device to it. You never call `xcodebuild`,
-`expo`, `simctl`, `adb`, `simlock`, `agent-device`, `appduct` or `rozenite`
-directly. If the machine lacks something, report `unavailable` — never
+Every lease, build, device action and appduct call goes through
+`.agents/scripts/device-lane.sh`, which starts the simulator session on EAS
+and pins agent-device to it. You never call `eas`, `xcodebuild`, `expo`,
+`simctl`, `adb`, `agent-device` or `appduct` directly. If the machine lacks something, report `unavailable` — never
 install anything. You build, look and report; you do not fix.
 
 Once `device-lane.sh lease` succeeds, `device-lane.sh release` runs before

@@ -1,8 +1,8 @@
 ---
 description: >-
-  After a delivery PR merges, checks on a simlock-leased iOS simulator that its
-  OTA update landed — waits for the OTA publish run, installs a Release build
-  of main from before the merge, runs appduct's ota_check_now, applies the
+  After a delivery PR merges, checks on an Expo Simulators iOS session that its
+  OTA update landed — waits for the OTA publish run, starts a session on
+  the production build of the merge's fingerprint, runs appduct's ota_check_now, applies the
   update through the banner with agent-device, and confirms the bundle id and
   the feature on screen. Always releases the device. Never deploys, rolls back
   or edits anything. Started with "PR #M, merge commit <sha>, expect: <text>".
