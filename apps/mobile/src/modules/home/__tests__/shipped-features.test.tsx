@@ -20,12 +20,6 @@ describe("ShippedFeatures", () => {
     expect(screen.getByLabelText("0 shipped")).toBeOnTheScreen();
   });
 
-  it("starts empty: the registry ships with no features", async () => {
-    await render(<ShippedFeatures />);
-
-    expect(screen.getByText("Nothing shipped yet.")).toBeOnTheScreen();
-  });
-
   it("lists shipped features newest first and drops the empty state", async () => {
     await render(
       <ShippedFeatures

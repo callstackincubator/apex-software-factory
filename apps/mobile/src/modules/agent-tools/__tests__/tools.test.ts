@@ -29,6 +29,15 @@ jest.mock("@appduct/react-native", () => {
 jest.mock("@/modules/registry", () => ({
   shippedFeatures: [
     { id: "confetti", title: "Confetti", summary: "", issue: 7, shippedAt: "2026-10-07" },
+    // The real registry's features are in featureAgentTools, which installAgentTools registers.
+    {
+      id: "coin-flip",
+      title: "Coin flip",
+      summary: "Settle it fairly: tap to toss a coin.",
+      issue: 58,
+      shippedAt: "2026-11-06",
+      href: "/coin-flip",
+    },
   ],
 }));
 
@@ -331,7 +340,27 @@ describe("installAgentTools", () => {
     events.emit("ota/update-staged", { id: OTA, message: null, rollback: false });
     expect(postEvent).toHaveBeenCalledTimes(1);
   });
+
+  it("hands each shipped feature's own tools to its features/<id> group, so agents can reach them", () => {
+    const registration = installAgentTools(makeDeps());
+
+    // Reverting features.ts to an empty list, or registering a feature outside its group,
+    // strands its tool: no agent can call it.
+    expect(registrationsByGroup("coin-flip")).toEqual(["open_coin_flip"]);
+
+    registration.remove();
+  });
 });
+
+function registrationsByGroup(featureId: string): string[] {
+  const groups = jest.mocked(createToolGroup);
+  const index = groups.mock.calls.findIndex(([name]) => name === `features/${featureId}`);
+  if (index < 0) return [];
+  const registrar = groups.mock.results[index]?.value as unknown as jest.Mock | undefined;
+  return (registrar?.mock.calls ?? []).map(
+    ([registration]) => (registration as { name: string }).name,
+  );
+}
 
 describe("registerFeatureTools", () => {
   it("hands a shipped feature a registrar bound to its features/<id> group", () => {

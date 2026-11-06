@@ -1,0 +1,142 @@
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
+
+import { CoinFlipScreen } from "..";
+import { createCoinFlipTools } from "../agent-tools";
+
+type FocusControl = { blur: () => void; refocus: () => void };
+
+jest.mock(
+  "react-native-safe-area-context",
+  () => require("react-native-safe-area-context/jest/mock").default,
+);
+
+// expo-router's useFocusEffect needs a navigator. This fake keeps its contract — the
+// effect runs when the screen gains focus, its cleanup when it loses it — and hands
+// the test the blur/refocus a back button causes. A module factory may only touch
+// globals, so the control it installs is read back off globalThis.
+jest.mock("expo-router", () => {
+  const React = require("react");
+  const entries = new Set<{ effect: () => (() => void) | undefined; cleanup?: () => void }>();
+  const blur = () => {
+    for (const entry of entries) {
+      entry.cleanup?.();
+      entry.cleanup = undefined;
+    }
+  };
+  (
+    globalThis as unknown as {
+      apexCoinFlipFocus?: { blur: () => void; refocus: () => void };
+    }
+  ).apexCoinFlipFocus = {
+    blur,
+    refocus: () => {
+      blur();
+      for (const entry of entries) entry.cleanup = entry.effect();
+    },
+  };
+  return {
+    useFocusEffect: (effect: () => (() => void) | undefined) => {
+      React.useEffect(() => {
+        const entry = { effect, cleanup: undefined as (() => void) | undefined };
+        entries.add(entry);
+        entry.cleanup = effect();
+        return () => {
+          entry.cleanup?.();
+          entries.delete(entry);
+        };
+      }, [effect]);
+    },
+  };
+});
+
+const mockFocus = () => {
+  const control = (globalThis as unknown as { apexCoinFlipFocus?: FocusControl }).apexCoinFlipFocus;
+  if (!control) throw new Error("the expo-router fake did not install its focus control");
+  return control;
+};
+
+// What expo-router's navigate does to the screen under test: a navigate to the route already
+// showing fires no focus event at all, while a navigate anywhere else takes the screen through
+// its blur and refocus — the cycle that starts a fresh visit. So a tool that reset the screen on
+// arrival, or handed back a path the router treats as another route, turns this test red.
+const navigateLikeRouter = (showing: string) =>
+  jest.fn((path: string) => {
+    if (path === showing) return;
+    mockFocus().blur();
+    mockFocus().refocus();
+  });
+
+const randomOf = (...values: number[]) => {
+  let next = 0;
+  return () => values[Math.min(next++, values.length - 1)] ?? 0;
+};
+
+const pressFlip = async () => {
+  await fireEvent.press(screen.getByTestId("coin-flip-button"));
+};
+
+describe("CoinFlipScreen", () => {
+  it('starts with "Tap Flip to toss the coin." and no count', async () => {
+    await render(<CoinFlipScreen random={randomOf()} />);
+
+    expect(screen.getByTestId("coin-result")).toHaveAccessibleName("Tap Flip to toss the coin.");
+    expect(screen.getByText("Tap Flip to toss the coin.")).toBeOnTheScreen();
+    expect(screen.queryByTestId("coin-count")).toBeNull();
+  });
+
+  it('tapping Flip shows Heads with "Flip 1", then Tails with "Flip 2"', async () => {
+    await render(<CoinFlipScreen random={randomOf(0.2, 0.8)} />);
+
+    await pressFlip();
+    expect(screen.getByTestId("coin-result")).toHaveAccessibleName("Heads");
+    expect(screen.getByTestId("coin-count")).toHaveAccessibleName("Flip 1");
+
+    await pressFlip();
+    expect(screen.getByTestId("coin-result")).toHaveAccessibleName("Tails");
+    expect(screen.getByTestId("coin-count")).toHaveAccessibleName("Flip 2");
+  });
+
+  it('losing and regaining focus after a flip shows "Tap Flip to toss the coin." and no count', async () => {
+    await render(<CoinFlipScreen random={randomOf(0.2)} />);
+    await pressFlip();
+    expect(screen.getByTestId("coin-count")).toHaveAccessibleName("Flip 1");
+
+    await act(async () => {
+      mockFocus().blur();
+      mockFocus().refocus();
+    });
+
+    expect(screen.getByTestId("coin-result")).toHaveAccessibleName("Tap Flip to toss the coin.");
+    expect(screen.queryByTestId("coin-count")).toBeNull();
+  });
+
+  it('after 1,000 flips the count reads "Flip 999+"', async () => {
+    await render(<CoinFlipScreen random={randomOf(0.2)} />);
+
+    for (let tosses = 0; tosses < 1_000; tosses += 1) {
+      await pressFlip();
+    }
+
+    expect(screen.getByTestId("coin-count")).toHaveAccessibleName("Flip 999+");
+  });
+
+  it("calling open_coin_flip while the screen is already showing leaves the result and the count unchanged", async () => {
+    await render(<CoinFlipScreen random={randomOf(0.2)} />);
+    await pressFlip();
+
+    // The route this screen is showing, so the fake navigate below can tell a no-op from a move.
+    const showing = "/coin-flip";
+    const navigate = navigateLikeRouter(showing);
+    const tool = createCoinFlipTools({ navigate });
+    let arrived: unknown;
+
+    await act(async () => {
+      arrived = tool.handler({} as never, undefined as never);
+    });
+
+    expect(navigate).toHaveBeenCalledWith(showing);
+    expect(arrived).toEqual({ pathname: showing });
+    expect(screen.getByTestId("coin-result")).toHaveAccessibleName("Heads");
+    expect(screen.getByTestId("coin-count")).toHaveAccessibleName("Flip 1");
+  });
+});

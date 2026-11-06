@@ -8,14 +8,20 @@ jest.mock(
 );
 
 describe("HomeScreen", () => {
-  it("presents the blank canvas: headline, event, empty shipped list and status", async () => {
+  it("presents the headline, the event and the status footer", async () => {
     await render(<HomeScreen />);
 
     expect(
       screen.getByRole("header", { name: "This app is empty. On purpose." }),
     ).toBeOnTheScreen();
     expect(screen.getByText("reactCon Berlin · Oct 7–9, 2026")).toBeOnTheScreen();
-    expect(screen.getByText("Nothing shipped yet.")).toBeOnTheScreen();
     expect(await screen.findByText("offline")).toBeOnTheScreen();
+  });
+
+  it("lists Coin flip under Shipped at the booth, and the empty state is gone", async () => {
+    await render(<HomeScreen />);
+
+    expect(screen.getByTestId("shipped-feature-coin-flip")).toBeOnTheScreen();
+    expect(screen.queryByTestId("shipped-empty")).toBeNull();
   });
 });
