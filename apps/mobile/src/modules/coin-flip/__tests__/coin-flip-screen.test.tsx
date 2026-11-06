@@ -3,29 +3,36 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { CoinFlipScreen } from "..";
 import { createCoinFlipTools } from "../agent-tools";
 
+type FocusControl = { blur: () => void; refocus: () => void };
+
 jest.mock(
   "react-native-safe-area-context",
   () => require("react-native-safe-area-context/jest/mock").default,
 );
 
-// expo-router's useFocusEffect needs a navigator; this fake keeps its contract —
-// the effect runs when the screen gains focus, its cleanup when it loses it — and
-// hands the test the blur/refocus a back button causes.
-const mockFocus = { blur: () => {}, refocus: () => {} };
-
+// expo-router's useFocusEffect needs a navigator. This fake keeps its contract — the
+// effect runs when the screen gains focus, its cleanup when it loses it — and hands
+// the test the blur/refocus a back button causes. A module factory may only touch
+// globals, so the control it installs is read back off globalThis.
 jest.mock("expo-router", () => {
   const React = require("react");
   const entries = new Set<{ effect: () => (() => void) | undefined; cleanup?: () => void }>();
-  const blurAll = () => {
+  const blur = () => {
     for (const entry of entries) {
       entry.cleanup?.();
       entry.cleanup = undefined;
     }
   };
-  mockFocus.blur = () => blurAll();
-  mockFocus.refocus = () => {
-    blurAll();
-    for (const entry of entries) entry.cleanup = entry.effect();
+  (
+    globalThis as unknown as {
+      apexCoinFlipFocus?: { blur: () => void; refocus: () => void };
+    }
+  ).apexCoinFlipFocus = {
+    blur,
+    refocus: () => {
+      blur();
+      for (const entry of entries) entry.cleanup = entry.effect();
+    },
   };
   return {
     useFocusEffect: (effect: () => (() => void) | undefined) => {
@@ -41,6 +48,12 @@ jest.mock("expo-router", () => {
     },
   };
 });
+
+const mockFocus = () => {
+  const control = (globalThis as unknown as { apexCoinFlipFocus?: FocusControl }).apexCoinFlipFocus;
+  if (!control) throw new Error("the expo-router fake did not install its focus control");
+  return control;
+};
 
 const randomOf = (...values: number[]) => {
   let next = 0;
@@ -78,8 +91,8 @@ describe("CoinFlipScreen", () => {
     expect(screen.getByTestId("coin-count")).toHaveAccessibleName("Flip 1");
 
     await act(async () => {
-      mockFocus.blur();
-      mockFocus.refocus();
+      mockFocus().blur();
+      mockFocus().refocus();
     });
 
     expect(screen.getByTestId("coin-result")).toHaveAccessibleName("Tap Flip to toss the coin.");
