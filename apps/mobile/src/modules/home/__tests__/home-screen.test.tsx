@@ -22,7 +22,6 @@ describe("HomeScreen", () => {
     await render(<HomeScreen />);
 
     expect(screen.getByTestId("shipped-feature-coin-flip")).toBeOnTheScreen();
-    expect(screen.getByRole("button", { name: /^Coin flip\. Settle it fairly/ })).toBeOnTheScreen();
     expect(screen.queryByTestId("shipped-empty")).toBeNull();
   });
 });

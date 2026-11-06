@@ -36,6 +36,7 @@ export default function RootLayout() {
           <StatusBar style={scheme === "light" ? "dark" : "light"} />
           <Stack screenOptions={{ contentStyle: { backgroundColor: theme.background } }}>
             <Stack.Screen name="index" options={{ headerShown: false, title: "Apex Factory" }} />
+            <Stack.Screen name="coin-flip" options={{ title: "Coin flip" }} />
           </Stack>
           <UpdateBanner />
           <DevTools />

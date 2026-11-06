@@ -29,6 +29,15 @@ jest.mock("@appduct/react-native", () => {
 jest.mock("@/modules/registry", () => ({
   shippedFeatures: [
     { id: "confetti", title: "Confetti", summary: "", issue: 7, shippedAt: "2026-10-07" },
+    // The real registry's features are in featureAgentTools, which installAgentTools registers.
+    {
+      id: "coin-flip",
+      title: "Coin flip",
+      summary: "Settle it fairly: tap to toss a coin.",
+      issue: 58,
+      shippedAt: "2026-11-06",
+      href: "/coin-flip",
+    },
   ],
 }));
 

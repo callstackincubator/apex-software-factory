@@ -9,4 +9,13 @@ export type ShippedFeature = {
   href?: Href;
 };
 
-export const shippedFeatures: readonly ShippedFeature[] = [];
+export const shippedFeatures: readonly ShippedFeature[] = [
+  {
+    id: "coin-flip",
+    title: "Coin flip",
+    summary: "Settle it fairly: tap to toss a coin.",
+    issue: 58,
+    shippedAt: "2026-11-06",
+    href: "/coin-flip",
+  },
+];
