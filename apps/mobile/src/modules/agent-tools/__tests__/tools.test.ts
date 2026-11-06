@@ -340,7 +340,27 @@ describe("installAgentTools", () => {
     events.emit("ota/update-staged", { id: OTA, message: null, rollback: false });
     expect(postEvent).toHaveBeenCalledTimes(1);
   });
+
+  it("hands each shipped feature's own tools to its features/<id> group, so agents can reach them", () => {
+    const registration = installAgentTools(makeDeps());
+
+    // Reverting features.ts to an empty list, or registering a feature outside its group,
+    // strands its tool: no agent can call it.
+    expect(registrationsByGroup("coin-flip")).toEqual(["open_coin_flip"]);
+
+    registration.remove();
+  });
 });
+
+function registrationsByGroup(featureId: string): string[] {
+  const groups = jest.mocked(createToolGroup);
+  const index = groups.mock.calls.findIndex(([name]) => name === `features/${featureId}`);
+  if (index < 0) return [];
+  const registrar = groups.mock.results[index]?.value as unknown as jest.Mock | undefined;
+  return (registrar?.mock.calls ?? []).map(
+    ([registration]) => (registration as { name: string }).name,
+  );
+}
 
 describe("registerFeatureTools", () => {
   it("hands a shipped feature a registrar bound to its features/<id> group", () => {

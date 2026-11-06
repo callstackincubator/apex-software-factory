@@ -55,6 +55,17 @@ const mockFocus = () => {
   return control;
 };
 
+// What expo-router's navigate does to the screen under test: a navigate to the route already
+// showing fires no focus event at all, while a navigate anywhere else takes the screen through
+// its blur and refocus — the cycle that starts a fresh visit. So a tool that reset the screen on
+// arrival, or handed back a path the router treats as another route, turns this test red.
+const navigateLikeRouter = (showing: string) =>
+  jest.fn((path: string) => {
+    if (path === showing) return;
+    mockFocus().blur();
+    mockFocus().refocus();
+  });
+
 const randomOf = (...values: number[]) => {
   let next = 0;
   return () => values[Math.min(next++, values.length - 1)] ?? 0;
@@ -113,13 +124,18 @@ describe("CoinFlipScreen", () => {
     await render(<CoinFlipScreen random={randomOf(0.2)} />);
     await pressFlip();
 
-    // expo-router's navigate to the route already showing fires no focus event.
-    const openCoinFlip = createCoinFlipTools({ navigate: jest.fn() }).handler(
-      {} as never,
-      undefined as never,
-    );
+    // The route this screen is showing, so the fake navigate below can tell a no-op from a move.
+    const showing = "/coin-flip";
+    const navigate = navigateLikeRouter(showing);
+    const tool = createCoinFlipTools({ navigate });
+    let arrived: unknown;
 
-    expect(openCoinFlip).toEqual({ pathname: "/coin-flip" });
+    await act(async () => {
+      arrived = tool.handler({} as never, undefined as never);
+    });
+
+    expect(navigate).toHaveBeenCalledWith(showing);
+    expect(arrived).toEqual({ pathname: showing });
     expect(screen.getByTestId("coin-result")).toHaveAccessibleName("Heads");
     expect(screen.getByTestId("coin-count")).toHaveAccessibleName("Flip 1");
   });
