@@ -1,0 +1,28 @@
+# from the home screen, tapping shipped-feature-coin-flip and then Flip twice leaves
+# coin-result no longer reading "Tap Flip to toss the coin.", and coin-count reads
+# "Flip 2". On a device the coin is really random, so the script never asserts Heads
+# or Tails specifically. Opening apexfactory:/// and then tapping the row again shows
+# the prompt again, with no count: the flip count does not survive leaving the screen.
+# The exact "Flip 1"/"Flip 999+" wording and the Heads/Tails boundary are pinned in
+# the Jest screen tests.
+#
+#   .agents/scripts/device-lane.sh ad replay apps/mobile/e2e/coin-flip.ad
+context platform=ios timeout=120000
+env APP_ID=com.callstack.apexfactory
+open ${APP_ID} --relaunch
+wait id="home-headline" 60000
+is exists id="shipped-feature-coin-flip"
+press id="shipped-feature-coin-flip"
+wait "id=\"coin-result\" label=\"Tap Flip to toss the coin.\"" 15000
+wait absent id="coin-count" 5000
+press id="coin-flip-button"
+wait "id=\"coin-count\" label=\"Flip 1\"" 15000
+press id="coin-flip-button"
+wait "id=\"coin-count\" label=\"Flip 2\"" 15000
+is absent "id=\"coin-result\" label=\"Tap Flip to toss the coin.\""
+open ${APP_ID} "apexfactory:///"
+wait id="home-headline" 15000
+press id="shipped-feature-coin-flip"
+wait "id=\"coin-result\" label=\"Tap Flip to toss the coin.\"" 15000
+wait absent id="coin-count" 5000
+close
